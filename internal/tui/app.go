@@ -24,6 +24,9 @@ type loadedSkillsUpdatedMsg struct {
 	loaded map[string]*SkillStatus
 }
 
+// eventsUpdatedMsg is pushed when events.log changes.
+type eventsUpdatedMsg struct{}
+
 // viewState identifies which view is currently active in the TUI.
 type viewState int
 
@@ -102,12 +105,25 @@ func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loaded
 	}
 }
 
-// Init returns the initial command — starts watching the state directory.
+// Init returns the initial command — starts watchers and loads event log.
 func (a App) Init() tea.Cmd {
-	if a.stateDir != "" {
-		return watchStateDir(a.stateDir)
+	// Load event log on startup
+	if a.configPath != "" {
+		projectRoot := filepath.Dir(filepath.Dir(a.configPath))
+		a.dashboard.LoadEventLog(projectRoot)
 	}
-	return nil
+
+	var cmds []tea.Cmd
+	if a.stateDir != "" {
+		cmds = append(cmds, watchStateDir(a.stateDir))
+		// Also watch events.log for real-time updates
+		eventsLog := filepath.Join(filepath.Dir(a.stateDir), "events.log")
+		cmds = append(cmds, watchEventsLog(eventsLog))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // watchStateDir starts an fsnotify watcher on the state directory and sends
@@ -148,6 +164,39 @@ func watchStateDir(stateDir string) tea.Cmd {
 // SkillStatus tracks which agents have loaded a skill.
 type SkillStatus struct {
 	Agents []string // e.g. ["claude", "cursor"]
+}
+
+// watchEventsLog watches the events.log file and sends eventsUpdatedMsg on changes.
+func watchEventsLog(logPath string) tea.Cmd {
+	return func() tea.Msg {
+		// Watch the parent directory since the file may not exist yet
+		dir := filepath.Dir(logPath)
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			return nil
+		}
+		if err := watcher.Add(dir); err != nil {
+			watcher.Close()
+			return nil
+		}
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return nil
+				}
+				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 &&
+					strings.HasSuffix(event.Name, "events.log") {
+					watcher.Close()
+					return eventsUpdatedMsg{}
+				}
+			case _, ok := <-watcher.Errors:
+				if !ok {
+					return nil
+				}
+			}
+		}
+	}
 }
 
 // readLoadedSkills reads all session state files and returns loaded skills
@@ -203,6 +252,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.loadedSkills = msg.loaded
 		a.dashboard.loadedSkills = msg.loaded
 		return a, watchStateDir(a.stateDir)
+
+	case eventsUpdatedMsg:
+		// Events log changed — reload and restart watcher
+		if a.configPath != "" {
+			projectRoot := filepath.Dir(filepath.Dir(a.configPath))
+			a.dashboard.LoadEventLog(projectRoot)
+		}
+		eventsLog := filepath.Join(filepath.Dir(a.stateDir), "events.log")
+		return a, watchEventsLog(eventsLog)
 
 	case tea.WindowSizeMsg:
 		a.width = msg.Width

@@ -4,6 +4,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,17 +15,19 @@ import (
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
 )
 
-// Dashboard is a split-pane view: skills on the left, rules on the right.
+// Dashboard is a split-pane view: skills (left), rules+logs (right).
 type Dashboard struct {
 	skills       []scanner.Skill
 	config       engine.Config
-	loadedSkills map[string]*SkillStatus // Skills loaded with agent info
+	loadedSkills map[string]*SkillStatus
+	eventLines   []string // Recent event log lines
+	projectRoot  string   // For reading events.log
 	skillCursor  int
 	ruleCursor   int
 	focusPanel   int // 0=left (skills), 1=right (rules)
-	editingPath  bool   // true when inline-editing a path
-	pathBuffer   string // text being edited
-	pathCurPos   int    // cursor position in path edit
+	editingPath  bool
+	pathBuffer   string
+	pathCurPos   int
 	width        int
 	height       int
 	styles       Styles
@@ -313,8 +317,13 @@ func (d Dashboard) View() string {
 		panelHeight = 20
 	}
 
+	// Split right panel: top = rules (60%), bottom = event log (40%)
+	rulesHeight := panelHeight * 55 / 100
+	logsHeight := panelHeight - rulesHeight - 3 // account for borders
+
 	left := d.renderSkillList(leftWidth, panelHeight)
-	right := d.renderRulePanel(rightWidth, panelHeight)
+	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)
+	logsContent := d.renderEventLog(rightWidth, logsHeight)
 
 	activeBorder := lipgloss.Color("#7C3AED")
 	dimBorder := lipgloss.Color("#374151")
@@ -334,14 +343,23 @@ func (d Dashboard) View() string {
 		Height(panelHeight).
 		Render(left)
 
-	rightPanel := lipgloss.NewStyle().
+	rulesPanel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(rightBorderColor).
 		Width(rightWidth).
-		Height(panelHeight).
-		Render(right)
+		Height(rulesHeight).
+		Render(rulesContent)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightPanel)
+	logsPanel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		Width(rightWidth).
+		Height(logsHeight).
+		Render(logsContent)
+
+	rightCombined := lipgloss.JoinVertical(lipgloss.Left, rulesPanel, logsPanel)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightCombined)
 }
 
 // renderSkillList renders the left panel.
@@ -552,6 +570,103 @@ func wordWrap(text string, width int) string {
 	}
 	lines = append(lines, line)
 	return strings.Join(lines, "\n")
+}
+
+// renderEventLog renders the bottom-right panel showing recent hook events.
+func (d Dashboard) renderEventLog(width, height int) string {
+	title := d.styles.RuleHeader.Render("EVENT LOG") + "\n"
+
+	if len(d.eventLines) == 0 {
+		return title + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
+	}
+
+	// Column header
+	header := fmt.Sprintf("  %-5s %-6s %-8s %-30s %-5s %s", "SESS", "AGENT", "TOOL", "PATH", "ACT", "SKILL")
+	title += d.styles.Description.Render(header) + "\n"
+
+	var b strings.Builder
+
+	// Show last N lines that fit
+	visible := height - 3
+	if visible < 1 {
+		visible = 5
+	}
+	start := len(d.eventLines) - visible
+	if start < 0 {
+		start = 0
+	}
+
+	blockStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")) // red
+	allowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")) // green
+	skillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")) // cyan
+
+	for _, line := range d.eventLines[start:] {
+		parsed := parseEventLine(line, width)
+		if parsed == "" {
+			continue
+		}
+
+		// Color based on action
+		if strings.Contains(line, "| BLOCK") {
+			b.WriteString(blockStyle.Render(parsed) + "\n")
+		} else if strings.Contains(line, "SKILL-LOAD") {
+			b.WriteString(skillStyle.Render(parsed) + "\n")
+		} else {
+			b.WriteString(allowStyle.Render(parsed) + "\n")
+		}
+	}
+
+	return title + b.String()
+}
+
+// parseEventLine formats a raw event log line into display columns.
+// Input: "2026-04-12T11:57:01Z | cursor | Write | console/src/app/layout.tsx | BLOCK | git"
+// Output: "e0a3. cursor Write    console/src/app/layout.tsx  BLOCK git"
+func parseEventLine(line string, maxWidth int) string {
+	parts := strings.Split(line, " | ")
+	if len(parts) < 5 {
+		return ""
+	}
+
+	// Trim whitespace from each part
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	agent := parts[1]
+	tool := parts[2]
+	path := parts[3]
+	action := parts[4]
+	skill := ""
+	if len(parts) > 5 {
+		skill = parts[5]
+	}
+
+	// Truncate path
+	maxPath := 30
+	if len(path) > maxPath {
+		path = "..." + path[len(path)-maxPath+3:]
+	}
+
+	return fmt.Sprintf("  %-6s %-8s %-30s %-5s %s", agent, tool, path, action, skill)
+}
+
+// LoadEventLog reads the event log file and stores recent lines.
+func (d *Dashboard) LoadEventLog(projectRoot string) {
+	d.projectRoot = projectRoot
+	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		d.eventLines = nil
+		return
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	// Keep last 100 lines max
+	if len(lines) > 100 {
+		lines = lines[len(lines)-100:]
+	}
+	d.eventLines = lines
 }
 
 // stripAnsi removes ANSI escape sequences.

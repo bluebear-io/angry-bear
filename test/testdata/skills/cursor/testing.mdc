@@ -1,0 +1,8 @@
+---
+name: testing
+description: Testing rules for Cursor agent
+---
+
+# Testing Rules
+
+Always write tests before implementation.

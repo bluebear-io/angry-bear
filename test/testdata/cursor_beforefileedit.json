@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "beforeFileEdit",
+  "conversation_id": "conv-abc-123",
+  "generation_id": "gen-456",
+  "cursor_version": "0.48.1",
+  "workspace_roots": ["/home/user/project"],
+  "user_email": "user@example.com",
+  "tool_name": "edit_file",
+  "file_path": "internal/engine/types.go"
+}

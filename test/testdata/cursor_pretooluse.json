@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "preToolUse",
+  "conversation_id": "conv-ghi-789",
+  "generation_id": "gen-012",
+  "cursor_version": "0.48.1",
+  "workspace_roots": ["/home/user/project"],
+  "tool_name": "read_file",
+  "file_path": "README.md"
+}

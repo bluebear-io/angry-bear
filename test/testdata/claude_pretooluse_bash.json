@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "sess-ghi-789",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "go test ./..."
+  },
+  "cwd": "/home/user/project"
+}

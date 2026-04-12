@@ -1,0 +1,8 @@
+---
+name: security
+description: Security rules for Cursor agent
+---
+
+# Security Rules
+
+Apply security best practices when reviewing code.

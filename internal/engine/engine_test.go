@@ -1,0 +1,955 @@
+// engine_test.go contains comprehensive table-driven tests for the care-bare
+// enforcement engine. Tests cover config loading, rule matching, glob
+// normalization, file path normalization, and project root resolution.
+package engine
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+)
+
+// ---------------------------------------------------------------------------
+// NormalizeGlob tests
+// ---------------------------------------------------------------------------
+
+func TestNormalizeGlob(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{
+			name:    "empty string unchanged",
+			pattern: "",
+			want:    "",
+		},
+		{
+			name:    "wildcard star unchanged",
+			pattern: "*",
+			want:    "*",
+		},
+		{
+			name:    "absolute path unchanged",
+			pattern: "/usr/local/bin/*.go",
+			want:    "/usr/local/bin/*.go",
+		},
+		{
+			name:    "already prefixed with doublestar unchanged",
+			pattern: "**/handler/**",
+			want:    "**/handler/**",
+		},
+		{
+			name:    "relative pattern gets doublestar prefix",
+			pattern: "handler/**",
+			want:    "**/handler/**",
+		},
+		{
+			name:    "extension pattern gets doublestar prefix",
+			pattern: "*.go",
+			want:    "**/*.go",
+		},
+		{
+			name:    "nested relative pattern gets doublestar prefix",
+			pattern: "internal/engine/*.go",
+			want:    "**/internal/engine/*.go",
+		},
+		{
+			name:    "double star without slash unchanged",
+			pattern: "**",
+			want:    "**",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := NormalizeGlob(tt.pattern)
+			if got != tt.want {
+				t.Errorf("NormalizeGlob(%q) = %q, want %q", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NormalizeFilePath tests
+// ---------------------------------------------------------------------------
+
+func TestNormalizeFilePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		filePath    string
+		projectRoot string
+		want        string
+	}{
+		{
+			name:        "backslashes converted to forward slashes",
+			filePath:    `internal\engine\types.go`,
+			projectRoot: "/project",
+			want:        "internal/engine/types.go",
+		},
+		{
+			name:        "dot-dot segments cleaned",
+			filePath:    "internal/engine/../engine/types.go",
+			projectRoot: "/project",
+			want:        "internal/engine/types.go",
+		},
+		{
+			name:        "project root prefix stripped from absolute path",
+			filePath:    "/project/internal/engine/types.go",
+			projectRoot: "/project",
+			want:        "internal/engine/types.go",
+		},
+		{
+			name:        "relative path returned unchanged",
+			filePath:    "internal/engine/types.go",
+			projectRoot: "/project",
+			want:        "internal/engine/types.go",
+		},
+		{
+			name:        "project root with trailing slash handled",
+			filePath:    "/project/internal/engine/types.go",
+			projectRoot: "/project/",
+			want:        "internal/engine/types.go",
+		},
+		{
+			name:        "empty file path returns empty",
+			filePath:    "",
+			projectRoot: "/project",
+			want:        "",
+		},
+	}
+
+	// Windows-specific test
+	if runtime.GOOS == "windows" {
+		tests = append(tests, struct {
+			name        string
+			filePath    string
+			projectRoot string
+			want        string
+		}{
+			name:        "Windows-style absolute paths",
+			filePath:    `C:\Users\dev\project\main.go`,
+			projectRoot: `C:\Users\dev\project`,
+			want:        "main.go",
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := NormalizeFilePath(tt.filePath, tt.projectRoot)
+			if got != tt.want {
+				t.Errorf("NormalizeFilePath(%q, %q) = %q, want %q", tt.filePath, tt.projectRoot, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MatchPath tests
+// ---------------------------------------------------------------------------
+
+func TestMatchPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		pattern  string
+		filePath string
+		want     bool
+		wantErr  bool
+	}{
+		{
+			name:     "exact file match",
+			pattern:  "internal/engine/types.go",
+			filePath: "internal/engine/types.go",
+			want:     true,
+		},
+		{
+			name:     "doublestar matches nested path",
+			pattern:  "**/engine/*.go",
+			filePath: "internal/engine/types.go",
+			want:     true,
+		},
+		{
+			name:     "extension glob matches",
+			pattern:  "**/*.go",
+			filePath: "internal/engine/types.go",
+			want:     true,
+		},
+		{
+			name:     "no match returns false",
+			pattern:  "**/*.py",
+			filePath: "internal/engine/types.go",
+			want:     false,
+		},
+		{
+			name:     "star matches all",
+			pattern:  "*",
+			filePath: "anything.go",
+			want:     true,
+		},
+		{
+			name:     "empty pattern matches empty path",
+			pattern:  "",
+			filePath: "",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := MatchPath(tt.pattern, tt.filePath)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MatchPath(%q, %q) error = %v, wantErr %v", tt.pattern, tt.filePath, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("MatchPath(%q, %q) = %v, want %v", tt.pattern, tt.filePath, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ResolveProjectRoot tests
+// ---------------------------------------------------------------------------
+
+func TestResolveProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	t.Run("finds nearest care-bare directory", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		root := filepath.Join(tmp, "project")
+		sub := filepath.Join(root, "a", "b", "c")
+		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, sub)
+
+		got := ResolveProjectRoot(sub)
+		if got != root {
+			t.Errorf("ResolveProjectRoot(%q) = %q, want %q", sub, got, root)
+		}
+	})
+
+	t.Run("falls back to nearest git directory", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		root := filepath.Join(tmp, "project")
+		sub := filepath.Join(root, "a", "b")
+		mustMkdirAll(t, filepath.Join(root, ".git"))
+		mustMkdirAll(t, sub)
+
+		got := ResolveProjectRoot(sub)
+		if got != root {
+			t.Errorf("ResolveProjectRoot(%q) = %q, want %q", sub, got, root)
+		}
+	})
+
+	t.Run("care-bare takes priority over git", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		root := filepath.Join(tmp, "project")
+		sub := filepath.Join(root, "a", "b")
+		mustMkdirAll(t, filepath.Join(root, ".git"))
+		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, sub)
+
+		got := ResolveProjectRoot(sub)
+		if got != root {
+			t.Errorf("ResolveProjectRoot(%q) = %q, want %q", sub, got, root)
+		}
+	})
+
+	t.Run("falls back to startDir when neither found", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sub := filepath.Join(tmp, "bare", "dir")
+		mustMkdirAll(t, sub)
+
+		got := ResolveProjectRoot(sub)
+		if got != sub {
+			t.Errorf("ResolveProjectRoot(%q) = %q, want %q", sub, got, sub)
+		}
+	})
+
+	t.Run("works from subdirectory", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		root := filepath.Join(tmp, "project")
+		deep := filepath.Join(root, "a", "b", "c", "d", "e")
+		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, deep)
+
+		got := ResolveProjectRoot(deep)
+		if got != root {
+			t.Errorf("ResolveProjectRoot(%q) = %q, want %q", deep, got, root)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// LoadConfig tests
+// ---------------------------------------------------------------------------
+
+func TestLoadConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty config when no files exist", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+		mustMkdirAll(t, startDir)
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 0 {
+			t.Errorf("expected 0 rules, got %d", len(rules))
+		}
+	})
+
+	t.Run("reads user-level config", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		startDir := filepath.Join(tmp, "project")
+		mustMkdirAll(t, startDir)
+
+		writeConfig(t, fakeHome, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Path: "*.go", Skill: "go-coding-standards", Agent: "claude"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Rule.Skill != "go-coding-standards" {
+			t.Errorf("expected skill 'go-coding-standards', got %q", rules[0].Rule.Skill)
+		}
+		if rules[0].Source == "" {
+			t.Error("expected Source to be set")
+		}
+	})
+
+	t.Run("reads project-level config", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, startDir, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Bash", Skill: "backend-standards"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Rule.Skill != "backend-standards" {
+			t.Errorf("expected skill 'backend-standards', got %q", rules[0].Rule.Skill)
+		}
+	})
+
+	t.Run("merges rules from both levels", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, fakeHome, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "user-skill"},
+			},
+		})
+		writeConfig(t, startDir, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Bash", Skill: "project-skill"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 2 {
+			t.Fatalf("expected 2 rules, got %d", len(rules))
+		}
+
+		skills := map[string]bool{}
+		for _, r := range rules {
+			skills[r.Rule.Skill] = true
+		}
+		if !skills["user-skill"] || !skills["project-skill"] {
+			t.Errorf("expected both user-skill and project-skill, got %v", skills)
+		}
+	})
+
+	t.Run("walks up directories collecting project-level configs", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+
+		// Create nested project structure
+		root := filepath.Join(tmp, "project")
+		sub := filepath.Join(root, "a", "b")
+		mustMkdirAll(t, sub)
+
+		// Config at root level
+		writeConfig(t, root, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "root-skill"},
+			},
+		})
+
+		// Config at intermediate level
+		writeConfig(t, filepath.Join(root, "a"), Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Bash", Skill: "mid-skill"},
+			},
+		})
+
+		rules, err := LoadConfig(sub, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+
+		skills := map[string]bool{}
+		for _, r := range rules {
+			skills[r.Rule.Skill] = true
+		}
+		if !skills["root-skill"] {
+			t.Error("expected root-skill from walk-up")
+		}
+		if !skills["mid-skill"] {
+			t.Error("expected mid-skill from walk-up")
+		}
+	})
+
+	t.Run("returns error on malformed JSON", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+
+		// Write malformed JSON
+		dir := filepath.Join(startDir, ".care-bare")
+		mustMkdirAll(t, dir)
+		err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte("{bad json"), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err == nil {
+			t.Fatal("expected error on malformed JSON, got nil")
+		}
+	})
+
+	t.Run("returns error on unsupported config version", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, startDir, Config{
+			Version: 2,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "some-skill"},
+			},
+		})
+
+		_, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err == nil {
+			t.Fatal("expected error on version 2, got nil")
+		}
+	})
+
+	t.Run("accepts version 1 configs", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, startDir, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "valid-skill"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+	})
+
+	t.Run("tracks Source field on each MatchedRule", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, fakeHome, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "user-skill"},
+			},
+		})
+		writeConfig(t, startDir, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Bash", Skill: "project-skill"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+
+		for _, r := range rules {
+			if r.Source == "" {
+				t.Errorf("rule %q has empty Source", r.Rule.Skill)
+			}
+		}
+	})
+
+	t.Run("uses os.Stat before reading does not error on missing", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+		mustMkdirAll(t, startDir)
+
+		// No config files anywhere -- should not error
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 0 {
+			t.Errorf("expected 0 rules, got %d", len(rules))
+		}
+	})
+
+	t.Run("stops walking at home dir", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+
+		// Put a config above the home dir -- should NOT be picked up
+		writeConfig(t, tmp, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Skill: "above-home-skill"},
+			},
+		})
+
+		startDir := filepath.Join(fakeHome, "project")
+		mustMkdirAll(t, startDir)
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+
+		for _, r := range rules {
+			if r.Rule.Skill == "above-home-skill" {
+				t.Error("should not have loaded config above home dir")
+			}
+		}
+	})
+
+	t.Run("normalizes glob paths on loaded rules", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		fakeHome := filepath.Join(tmp, "home")
+		mustMkdirAll(t, fakeHome)
+		startDir := filepath.Join(tmp, "project")
+
+		writeConfig(t, startDir, Config{
+			Version: 1,
+			Tools: []Rule{
+				{Tool: "Edit", Path: "*.go", Skill: "go-skill"},
+			},
+		})
+
+		rules, err := LoadConfig(startDir, WithHomeDir(fakeHome))
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		// *.go should have been normalized to **/*.go
+		if rules[0].Rule.Path != "**/*.go" {
+			t.Errorf("expected path '**/*.go', got %q", rules[0].Rule.Path)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// ShouldBlock tests
+// ---------------------------------------------------------------------------
+
+func TestShouldBlock(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		rules          []MatchedRule
+		toolName       string
+		filePath       string
+		agent          string
+		invokedSkills  map[string]bool
+		wantBlocked    bool
+		wantMissing    []string
+		wantReasonHas  string
+	}{
+		{
+			name:        "no rules returns not blocked",
+			rules:       nil,
+			toolName:    "Edit",
+			filePath:    "main.go",
+			agent:       "claude",
+			wantBlocked: false,
+		},
+		{
+			name: "blocks when required skill not invoked",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"go-standards"},
+		},
+		{
+			name: "allows when required skill already invoked",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{"go-standards": true},
+			wantBlocked:   false,
+		},
+		{
+			name: "matches tool name exactly",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "edit-skill"}, Source: "src1"},
+				{Rule: Rule{Tool: "Bash", Skill: "bash-skill"}, Source: "src2"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"edit-skill"},
+		},
+		{
+			name: "matches tool wildcard star",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "*", Skill: "universal-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"universal-skill"},
+		},
+		{
+			name: "matches empty tool field",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "", Skill: "all-tool-skill"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"all-tool-skill"},
+		},
+		{
+			name: "matches agent name exactly",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Agent: "claude", Skill: "claude-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"claude-skill"},
+		},
+		{
+			name: "matches agent wildcard star",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Agent: "*", Skill: "any-agent-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "cursor",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"any-agent-skill"},
+		},
+		{
+			name: "matches empty agent field",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Agent: "", Skill: "no-agent-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "codex",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"no-agent-skill"},
+		},
+		{
+			name: "skips rule when agent does not match",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Agent: "claude", Skill: "claude-only"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "cursor",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   false,
+		},
+		{
+			name: "matches path with doublestar glob",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Path: "**/engine/*.go", Skill: "engine-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "internal/engine/types.go",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"engine-skill"},
+		},
+		{
+			name: "matches wildcard path star",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Path: "*", Skill: "all-path-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "anything.go",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"all-path-skill"},
+		},
+		{
+			name: "matches empty path for all files",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Path: "", Skill: "no-path-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "any/file.go",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"no-path-skill"},
+		},
+		{
+			name: "skips path match when filePath is empty",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Path: "**/*.go", Skill: "go-skill"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   false,
+		},
+		{
+			name: "deduplicates matched rules by skill name",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "same-skill"}, Source: "src1"},
+				{Rule: Rule{Tool: "Edit", Skill: "same-skill"}, Source: "src2"},
+				{Rule: Rule{Tool: "Edit", Skill: "same-skill"}, Source: "src3"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"same-skill"},
+		},
+		{
+			name: "returns all missing skills in BlockResult",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "skill-a"}, Source: "src"},
+				{Rule: Rule{Tool: "Edit", Skill: "skill-b"}, Source: "src"},
+				{Rule: Rule{Tool: "Edit", Skill: "skill-c"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{"skill-b": true},
+			wantBlocked:   true,
+			wantMissing:   []string{"skill-a", "skill-c"},
+		},
+		{
+			name: "returns specific reason with skill names and sources",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "linear"}, Source: "/home/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"linear", "go-standards"},
+			wantReasonHas: "care-bare",
+		},
+		{
+			name: "handles multiple rules requiring different skills for same file",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Path: "**/*.go", Skill: "go-skill"}, Source: "src1"},
+				{Rule: Rule{Tool: "Edit", Path: "**/*.go", Skill: "lint-skill"}, Source: "src2"},
+			},
+			toolName:      "Edit",
+			filePath:      "main.go",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"go-skill", "lint-skill"},
+		},
+		{
+			name: "handles rules from multiple config sources",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Edit", Skill: "user-skill"}, Source: "/home/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "project-skill"}, Source: "/project/.care-bare/skill_enforcement.json"},
+			},
+			toolName:      "Edit",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"user-skill", "project-skill"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ShouldBlock(tt.rules, tt.toolName, tt.filePath, tt.agent, tt.invokedSkills)
+
+			if got.Blocked != tt.wantBlocked {
+				t.Errorf("Blocked = %v, want %v", got.Blocked, tt.wantBlocked)
+			}
+
+			if tt.wantMissing != nil {
+				if len(got.Missing) != len(tt.wantMissing) {
+					t.Errorf("Missing = %v, want %v", got.Missing, tt.wantMissing)
+				} else {
+					gotSet := map[string]bool{}
+					for _, s := range got.Missing {
+						gotSet[s] = true
+					}
+					for _, want := range tt.wantMissing {
+						if !gotSet[want] {
+							t.Errorf("Missing does not contain %q, got %v", want, got.Missing)
+						}
+					}
+				}
+			}
+
+			if tt.wantReasonHas != "" {
+				if got.Reason == "" {
+					t.Error("expected non-empty Reason")
+				} else if !containsString(got.Reason, tt.wantReasonHas) {
+					t.Errorf("Reason %q does not contain %q", got.Reason, tt.wantReasonHas)
+				}
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+// mustMkdirAll creates a directory tree, failing the test if it cannot.
+func mustMkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("failed to create directory %q: %v", path, err)
+	}
+}
+
+// writeConfig writes a skill_enforcement.json config file into
+// dir/.care-bare/skill_enforcement.json.
+func writeConfig(t *testing.T, dir string, cfg Config) {
+	t.Helper()
+	configDir := filepath.Join(dir, ".care-bare")
+	mustMkdirAll(t, configDir)
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("failed to marshal config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "skill_enforcement.json"), data, 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+}
+
+// containsString checks if substr is found within s.
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+// searchString is a simple substring search.
+func searchString(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

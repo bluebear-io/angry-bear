@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "sess-jkl-012",
+  "tool_name": "Skill",
+  "tool_input": {
+    "skill": "linear"
+  },
+  "cwd": "/home/user/project"
+}

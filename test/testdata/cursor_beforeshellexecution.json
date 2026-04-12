@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "beforeShellExecution",
+  "conversation_id": "conv-def-456",
+  "generation_id": "gen-789",
+  "cursor_version": "0.48.1",
+  "workspace_roots": ["/home/user/project"],
+  "command": "go test ./..."
+}

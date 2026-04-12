@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -574,84 +575,96 @@ func wordWrap(text string, width int) string {
 
 // renderEventLog renders the bottom-right panel showing recent hook events.
 func (d Dashboard) renderEventLog(width, height int) string {
-	title := d.styles.RuleHeader.Render("EVENT LOG") + "\n"
+	title := d.styles.RuleHeader.Render("  EVENT LOG") + "\n"
 
 	if len(d.eventLines) == 0 {
-		return title + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
+		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	// Column header
-	header := fmt.Sprintf("  %-5s %-6s %-8s %-30s %-5s %s", "SESS", "AGENT", "TOOL", "PATH", "ACT", "SKILL")
+	// Responsive column widths based on panel width
+	pathWidth := width - 45 // leave room for other columns
+	if pathWidth < 20 {
+		pathWidth = 20
+	}
+
+	header := fmt.Sprintf("  %-7s %-12s %-*s %-7s %-15s",
+		"AGENT", "TOOL", pathWidth, "PATH", "ACTION", "SKILL")
 	title += d.styles.Description.Render(header) + "\n"
+	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
 	var b strings.Builder
 
-	// Show last N lines that fit
-	visible := height - 3
-	if visible < 1 {
-		visible = 5
+	visible := height - 4
+	if visible < 3 {
+		visible = 3
 	}
 	start := len(d.eventLines) - visible
 	if start < 0 {
 		start = 0
 	}
 
-	blockStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")) // red
-	allowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")) // green
-	skillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE")) // cyan
+	blockStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
+	allowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	skillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
+	blockBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#EF4444")).Padding(0, 1).Render("BLOCK")
+	allowBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render("allow")
+	loadBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#22D3EE")).Padding(0, 1).Render("LOAD")
 
 	for _, line := range d.eventLines[start:] {
-		parsed := parseEventLine(line, width)
-		if parsed == "" {
+		parts := strings.Split(line, " | ")
+		if len(parts) < 5 {
 			continue
 		}
-
-		// Color based on action
-		if strings.Contains(line, "| BLOCK") {
-			b.WriteString(blockStyle.Render(parsed) + "\n")
-		} else if strings.Contains(line, "SKILL-LOAD") {
-			b.WriteString(skillStyle.Render(parsed) + "\n")
-		} else {
-			b.WriteString(allowStyle.Render(parsed) + "\n")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
 		}
+
+		agent := parts[1]
+		tool := parts[2]
+		path := parts[3]
+		_ = parts[4] // action — used via string matching below
+		skill := ""
+		if len(parts) > 5 {
+			skill = parts[5]
+		}
+
+		// Truncate path from left to show the relevant end
+		if len(path) > pathWidth {
+			path = "…" + path[len(path)-pathWidth+1:]
+		}
+
+		// Format the action badge
+		var badge string
+		var lineStyle lipgloss.Style
+		if strings.Contains(line, "| BLOCK") {
+			badge = blockBadge
+			lineStyle = blockStyle
+		} else if strings.Contains(line, "SKILL-LOAD") {
+			badge = loadBadge
+			tool = "skill"
+			path = skill
+			skill = ""
+			lineStyle = skillStyle
+		} else {
+			badge = allowBadge
+			lineStyle = allowStyle
+		}
+
+		row := fmt.Sprintf("  %-7s %-12s %-*s %s  %s",
+			lineStyle.Render(agent),
+			lineStyle.Render(tool),
+			pathWidth, lineStyle.Render(path),
+			badge,
+			lineStyle.Render(skill))
+
+		b.WriteString(row + "\n")
 	}
 
 	return title + b.String()
 }
 
-// parseEventLine formats a raw event log line into display columns.
-// Input: "2026-04-12T11:57:01Z | cursor | Write | console/src/app/layout.tsx | BLOCK | git"
-// Output: "e0a3. cursor Write    console/src/app/layout.tsx  BLOCK git"
-func parseEventLine(line string, maxWidth int) string {
-	parts := strings.Split(line, " | ")
-	if len(parts) < 5 {
-		return ""
-	}
-
-	// Trim whitespace from each part
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-
-	agent := parts[1]
-	tool := parts[2]
-	path := parts[3]
-	action := parts[4]
-	skill := ""
-	if len(parts) > 5 {
-		skill = parts[5]
-	}
-
-	// Truncate path
-	maxPath := 30
-	if len(path) > maxPath {
-		path = "..." + path[len(path)-maxPath+3:]
-	}
-
-	return fmt.Sprintf("  %-6s %-8s %-30s %-5s %s", agent, tool, path, action, skill)
-}
-
-// LoadEventLog reads the event log file and stores recent lines.
+// LoadEventLog reads the event log file and stores lines from the last 7 days.
+// Older lines are pruned from the file to keep it manageable.
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
 	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
@@ -661,12 +674,29 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	// Keep last 100 lines max
-	if len(lines) > 100 {
-		lines = lines[len(lines)-100:]
+	allLines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	cutoff := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
+
+	// Keep only lines from the last 7 days
+	var recent []string
+	for _, line := range allLines {
+		// Each line starts with ISO timestamp: 2026-04-12T11:57:01Z
+		if len(line) >= 10 && line[:10] >= cutoff {
+			recent = append(recent, line)
+		}
 	}
-	d.eventLines = lines
+
+	// Prune the file if we removed old lines
+	if len(recent) < len(allLines) && len(recent) > 0 {
+		pruned := strings.Join(recent, "\n") + "\n"
+		_ = os.WriteFile(logPath, []byte(pruned), 0644)
+	}
+
+	// Keep last 200 lines for display
+	if len(recent) > 200 {
+		recent = recent[len(recent)-200:]
+	}
+	d.eventLines = recent
 }
 
 // stripAnsi removes ANSI escape sequences.

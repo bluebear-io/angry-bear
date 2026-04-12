@@ -110,3 +110,35 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 		Missing: missing,
 	}
 }
+
+// MatchedSkills returns the list of skill names that have matching rules for
+// the given tool/path/agent combination. Used to determine if an event is
+// enforcement-relevant (has rules that apply) even when the skills are loaded.
+func MatchedSkills(rules []MatchedRule, toolName, filePath, agent string) []string {
+	seenSkills := make(map[string]bool)
+	var matched []string
+
+	for _, mr := range rules {
+		rule := mr.Rule
+		if rule.Tool != "" && rule.Tool != "*" && rule.Tool != toolName {
+			continue
+		}
+		if rule.Agent != "" && rule.Agent != "*" && rule.Agent != agent {
+			continue
+		}
+		if rule.Path != "" && rule.Path != "*" {
+			if filePath == "" {
+				continue
+			}
+			match, err := MatchPath(rule.Path, filePath)
+			if err != nil || !match {
+				continue
+			}
+		}
+		if !seenSkills[rule.Skill] {
+			seenSkills[rule.Skill] = true
+			matched = append(matched, rule.Skill)
+		}
+	}
+	return matched
+}

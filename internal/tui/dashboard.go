@@ -25,7 +25,8 @@ type Dashboard struct {
 	projectRoot  string   // For reading events.log
 	skillCursor  int
 	ruleCursor   int
-	focusPanel   int // 0=left (skills), 1=right (rules)
+	logCursor    int
+	focusPanel   int // 0=skills, 1=rules, 2=event log
 	editingPath  bool
 	pathBuffer   string
 	pathCurPos   int
@@ -83,54 +84,73 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		// Navigation
+		// Navigation — up/down within current panel
 		case "up", "k":
-			if d.focusPanel == 0 {
+			switch d.focusPanel {
+			case 0:
 				if d.skillCursor > 0 {
 					d.skillCursor--
 					d.ruleCursor = 0
 				}
-			} else {
+			case 1:
 				if d.ruleCursor > 0 {
 					d.ruleCursor--
+				}
+			case 2:
+				if d.logCursor > 0 {
+					d.logCursor--
 				}
 			}
 			return d, nil
 
 		case "down", "j":
-			if d.focusPanel == 0 {
+			switch d.focusPanel {
+			case 0:
 				if d.skillCursor < len(d.skills)-1 {
 					d.skillCursor++
 					d.ruleCursor = 0
 				}
-			} else {
+			case 1:
 				rules := d.rulesForSkill()
 				if d.ruleCursor < len(rules)-1 {
 					d.ruleCursor++
 				}
-			}
-			return d, nil
-
-		case "tab", "right", "l":
-			if d.focusPanel == 0 {
-				rules := d.rulesForSkill()
-				if len(rules) > 0 {
-					d.focusPanel = 1
-					d.ruleCursor = 0
+			case 2:
+				if d.logCursor < len(d.eventLines)-1 {
+					d.logCursor++
 				}
 			}
 			return d, nil
 
-		case "shift+tab", "left", "h":
-			if d.focusPanel == 1 {
+		// Tab cycles: skills(0) → rules(1) → logs(2) → skills(0)
+		case "tab":
+			d.focusPanel = (d.focusPanel + 1) % 3
+			return d, nil
+
+		case "shift+tab":
+			d.focusPanel = (d.focusPanel + 2) % 3
+			return d, nil
+
+		// Right arrow: skills → rules or logs
+		case "right", "l":
+			if d.focusPanel == 0 {
+				d.focusPanel = 1
+				d.ruleCursor = 0
+			}
+			return d, nil
+
+		// Left arrow: rules/logs → skills
+		case "left", "h":
+			if d.focusPanel == 1 || d.focusPanel == 2 {
 				d.focusPanel = 0
 			}
 			return d, nil
 
-		// Actions on left panel (skills)
+		// Enter — context-dependent
 		case "enter":
-			if d.focusPanel == 0 {
-				// Open rule editor for this skill
+			switch d.focusPanel {
+			case 0:
+				// Skills panel: open rule editor
 				if d.skillCursor < len(d.skills) {
 					return d, func() tea.Msg {
 						return openRuleEditorMsg{
@@ -140,6 +160,9 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+			case 2:
+				// Log panel: jump to the skill/rule that caused this event
+				d.jumpToLogEntry()
 			}
 			return d, nil
 
@@ -351,9 +374,13 @@ func (d Dashboard) View() string {
 		Height(rulesHeight).
 		Render(rulesContent)
 
+	logsBorderColor := lipgloss.Color("#374151")
+	if d.focusPanel == 2 {
+		logsBorderColor = activeBorder
+	}
 	logsPanel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
+		BorderForeground(logsBorderColor).
 		Width(rightWidth).
 		Height(logsHeight).
 		Render(logsContent)
@@ -581,15 +608,10 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	// Responsive column widths based on panel width
-	pathWidth := width - 45 // leave room for other columns
-	if pathWidth < 20 {
-		pathWidth = 20
-	}
+	// Column format — plain text first, color the whole row after
+	colFmt := "  %-7s  %-8s  %-8s  %-16s  %s"
 
-	header := fmt.Sprintf("  %-7s %-12s %-*s %-7s %-15s",
-		"AGENT", "TOOL", pathWidth, "PATH", "ACTION", "SKILL")
-	title += d.styles.Description.Render(header) + "\n"
+	title += d.styles.Description.Render(fmt.Sprintf(colFmt, "ACTION", "AGENT", "TOOL", "SKILL", "PATH")) + "\n"
 	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
 	var b strings.Builder
@@ -598,19 +620,35 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	if visible < 3 {
 		visible = 3
 	}
+
 	start := len(d.eventLines) - visible
 	if start < 0 {
 		start = 0
 	}
+	if d.focusPanel == 2 {
+		if d.logCursor < start {
+			start = d.logCursor
+		}
+		if d.logCursor >= start+visible {
+			start = d.logCursor - visible + 1
+		}
+	}
+	end := start + visible
+	if end > len(d.eventLines) {
+		end = len(d.eventLines)
+	}
 
-	blockStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-	allowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
-	skillStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
-	blockBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#EF4444")).Padding(0, 1).Render("BLOCK")
-	allowBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render("allow")
-	loadBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#22D3EE")).Padding(0, 1).Render("LOAD")
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
 
-	for _, line := range d.eventLines[start:] {
+	pathWidth := width - 50
+	if pathWidth < 10 {
+		pathWidth = 10
+	}
+
+	for idx := start; idx < end; idx++ {
+		line := d.eventLines[idx]
 		parts := strings.Split(line, " | ")
 		if len(parts) < 5 {
 			continue
@@ -622,45 +660,82 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		agent := parts[1]
 		tool := parts[2]
 		path := parts[3]
-		_ = parts[4] // action — used via string matching below
 		skill := ""
 		if len(parts) > 5 {
 			skill = parts[5]
 		}
 
-		// Truncate path from left to show the relevant end
 		if len(path) > pathWidth {
 			path = "…" + path[len(path)-pathWidth+1:]
 		}
 
-		// Format the action badge
-		var badge string
-		var lineStyle lipgloss.Style
+		// Build plain text row with consistent widths
+		var act string
+		var sty lipgloss.Style
 		if strings.Contains(line, "| BLOCK") {
-			badge = blockBadge
-			lineStyle = blockStyle
+			act = "BLOCK"
+			sty = red
 		} else if strings.Contains(line, "SKILL-LOAD") {
-			badge = loadBadge
-			tool = "skill"
-			path = skill
-			skill = ""
-			lineStyle = skillStyle
+			act = "LOAD"
+			tool = "—"
+			path = ""
+			sty = cyan
 		} else {
-			badge = allowBadge
-			lineStyle = allowStyle
+			act = "allow"
+			sty = dim
 		}
 
-		row := fmt.Sprintf("  %-7s %-12s %-*s %s  %s",
-			lineStyle.Render(agent),
-			lineStyle.Render(tool),
-			pathWidth, lineStyle.Render(path),
-			badge,
-			lineStyle.Render(skill))
+		plainRow := fmt.Sprintf(colFmt, act, agent, tool, skill, path)
 
-		b.WriteString(row + "\n")
+		focused := idx == d.logCursor && d.focusPanel == 2
+		if focused {
+			b.WriteString(d.styles.Selected.Render("▸" + plainRow[1:]) + "\n")
+		} else {
+			b.WriteString(sty.Render(plainRow) + "\n")
+		}
 	}
 
 	return title + b.String()
+}
+
+// jumpToLogEntry parses the focused log line and navigates to the skill/rule.
+func (d *Dashboard) jumpToLogEntry() {
+	if d.logCursor < 0 || d.logCursor >= len(d.eventLines) {
+		return
+	}
+
+	line := d.eventLines[d.logCursor]
+	parts := strings.Split(line, " | ")
+	if len(parts) < 5 {
+		return
+	}
+
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	skill := ""
+	if len(parts) > 5 {
+		skill = parts[5]
+	}
+	// For SKILL-LOAD events, the skill name is in parts[2] (tool column)
+	if strings.Contains(line, "SKILL-LOAD") {
+		skill = parts[2]
+	}
+
+	if skill == "" {
+		return
+	}
+
+	// Find the skill in the skills list
+	for i, s := range d.skills {
+		if s.Name == skill {
+			d.skillCursor = i
+			d.focusPanel = 1
+			d.ruleCursor = 0
+			return
+		}
+	}
 }
 
 // LoadEventLog reads the event log file and stores lines from the last 7 days.
@@ -677,11 +752,21 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 	allLines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	cutoff := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
 
-	// Keep only lines from the last 7 days
+	// Keep only lines from the last 7 days that have a skill attached
 	var recent []string
 	for _, line := range allLines {
-		// Each line starts with ISO timestamp: 2026-04-12T11:57:01Z
-		if len(line) >= 10 && line[:10] >= cutoff {
+		if len(line) < 10 || line[:10] < cutoff {
+			continue
+		}
+		// Only keep events with a skill (BLOCK with skill, SKILL-LOAD, or ALLOW with skill)
+		parts := strings.Split(line, " | ")
+		hasSkill := false
+		if strings.Contains(line, "SKILL-LOAD") {
+			hasSkill = true
+		} else if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" {
+			hasSkill = true
+		}
+		if hasSkill {
 			recent = append(recent, line)
 		}
 	}

@@ -130,8 +130,9 @@ func tuiRunE(cmd *cobra.Command, args []string) error {
 	// 6. Collect loaded skills from all active sessions.
 	loadedSkills := collectLoadedSkills(filepath.Join(projectRoot, ".care-bare", "state"))
 
-	// 7. Create TUI model and run the Bubble Tea program.
+	// 7. Create TUI model and load event log.
 	model := tui.NewApp(cfg, configPath, skills, loadedSkills)
+	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()
 	return err

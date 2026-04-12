@@ -173,8 +173,16 @@ func runHook(cmd *cobra.Command, args []string) error {
 	blockResult := engine.ShouldBlock(rules, hookInput.ToolName, normalizedPath, hookInput.Agent, invokedSkills)
 	logger.Debug("enforcement decision", "blocked", blockResult.Blocked, "missing", blockResult.Missing)
 
-	// Step 10: Log event to file (if --verbose or events.log exists).
-	logEvent(projectRoot, hookInput, normalizedPath, blockResult)
+	// Step 10: Log only enforcement-relevant events (BLOCK or ALLOW with matched rules).
+	// Only log enforcement-relevant events — skip actions with no matching rules.
+	matched := engine.MatchedSkills(rules, hookInput.ToolName, normalizedPath, hookInput.Agent)
+	if len(matched) > 0 {
+		// For ALLOW events, include which skills were required (and satisfied)
+		if !blockResult.Blocked {
+			blockResult.Missing = matched // reuse Missing field for "matched" skills on allow
+		}
+		logEvent(projectRoot, hookInput, normalizedPath, blockResult)
+	}
 
 	// Step 11: Output response.
 	if blockResult.Blocked {

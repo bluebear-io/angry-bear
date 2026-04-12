@@ -105,14 +105,15 @@ func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loaded
 	}
 }
 
-// Init returns the initial command — starts watchers and loads event log.
-func (a App) Init() tea.Cmd {
-	// Load event log on startup
-	if a.configPath != "" {
-		projectRoot := filepath.Dir(filepath.Dir(a.configPath))
-		a.dashboard.LoadEventLog(projectRoot)
-	}
+// LoadEvents loads the event log from disk. Must be called before Init()
+// because Init() runs on a value receiver and mutations don't persist.
+func (a *App) LoadEvents(projectRoot string) {
+	a.dashboard.LoadEventLog(projectRoot)
+}
 
+// Init returns the initial command — starts watchers.
+// because Init runs on a value receiver and mutations don't persist.
+func (a App) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	if a.stateDir != "" {
 		cmds = append(cmds, watchStateDir(a.stateDir))
@@ -414,13 +415,17 @@ func (a App) helpBar() string {
 	var text string
 	switch a.view {
 	case viewDashboard:
-		if a.dashboard.focusPanel == 0 {
-			text = key("↑↓", "navigate") + sep + key("→", "rules panel") + sep +
+		switch a.dashboard.focusPanel {
+		case 0:
+			text = key("↑↓", "navigate") + sep + key("tab/→", "rules") + sep +
 				key("enter/a", "add rules") + sep + key("s", "save") + sep + key("q", "quit")
-		} else {
-			text = key("↑↓", "navigate") + sep + key("←", "skills panel") + sep +
+		case 1:
+			text = key("↑↓", "navigate") + sep + key("tab", "logs") + sep + key("←", "skills") + sep +
 				key("t", "tool") + sep + key("p", "path") + sep + key("g", "agent") + sep +
-				key("y", "dup") + sep + key("d", "del") + sep + key("s", "save") + sep + key("q", "quit")
+				key("d", "del") + sep + key("s", "save") + sep + key("q", "quit")
+		case 2:
+			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
+				key("enter", "jump to rule") + sep + key("s", "save") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help

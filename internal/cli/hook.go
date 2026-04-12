@@ -176,6 +176,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	// Step 10: Log only enforcement-relevant events (BLOCK or ALLOW with matched rules).
 	// Only log enforcement-relevant events — skip actions with no matching rules.
 	matched := engine.MatchedSkills(rules, hookInput.ToolName, normalizedPath, hookInput.Agent)
+	logger.Debug("matched skills for logging", "matched", matched, "tool", hookInput.ToolName, "path", normalizedPath)
 	if len(matched) > 0 {
 		// For ALLOW events, include which skills were required (and satisfied)
 		if !blockResult.Blocked {
@@ -264,14 +265,14 @@ func detectSkillFromPath(filePath string) string {
 }
 
 // logSkillEvent logs a skill load event.
+// Format matches logEvent: timestamp | agent | tool | path | action | skill
 func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, method string) {
 	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
-	line := fmt.Sprintf("%s | %-6s | SKILL-LOAD | %-50s | %s | %s\n",
+	line := fmt.Sprintf("%s | %-6s | SKILL-LOAD | %-50s | LOAD  | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		input.Agent,
+		"",  // no path for skill loads
 		skillName,
-		method,
-		input.SessionID,
 	)
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -288,11 +289,10 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
 
 	decision := "ALLOW"
-	missing := ""
 	if result.Blocked {
 		decision = "BLOCK"
-		missing = strings.Join(result.Missing, ",")
 	}
+	missing := strings.Join(result.Missing, ",")
 
 	line := fmt.Sprintf("%s | %-6s | %-10s | %-50s | %-5s | %s\n",
 		time.Now().UTC().Format(time.RFC3339),

@@ -1,17 +1,19 @@
 # Architecture
 
-This document describes the internal architecture of care-bare for contributors and advanced users who want to understand how the tool works.
+This document describes the internal architecture of care-bare for contributors and advanced users.
 
 ## Overview
 
 care-bare is a single Go binary with no runtime dependencies. It operates in two modes:
 
-1. **Interactive TUI** -- A terminal dashboard (launched with `care-bare` and no subcommand) for visually configuring enforcement rules.
-2. **Headless hook** -- A pre-tool-use hook (launched with `care-bare hook`) that reads JSON from stdin, evaluates enforcement rules, and writes allow/deny JSON to stdout.
+1. **Interactive TUI** — a machine-level terminal dashboard (launched with `care-bare`) that discovers all projects across all AI agents, lets you pick one, and configure enforcement rules.
+2. **Headless hook** — a pre-tool-use hook (launched with `care-bare hook`) that reads JSON from stdin, evaluates enforcement rules, and writes allow/deny JSON to stdout.
+
+The CLI is an **observability and configuration tool**. All enforcement work is done by the hooks.
 
 ### Trust Model
 
-care-bare is a developer productivity tool, not a security perimeter. It assumes a trusted local environment where the goal is team discipline -- ensuring that agents load the right context before modifying files. An agent with file modification access can also modify care-bare's configuration; care-bare does not attempt to prevent this.
+care-bare is a developer productivity tool, not a security perimeter. It assumes a trusted local environment where the goal is team discipline — ensuring agents load the right context before modifying files.
 
 ## Project Structure
 
@@ -19,270 +21,207 @@ care-bare is a developer productivity tool, not a security perimeter. It assumes
 care-bare/
   cmd/
     care-bare/
-      main.go              # Entry point: sets version info, calls cli.Execute()
+      main.go              # Entry point: sets version info + binary path, calls cli.Execute()
   internal/
-    adapter/               # Agent-specific hook adapters
-      adapter.go           #   HookAdapter interface definition
-      types.go             #   HookInput struct (normalized adapter-agnostic input)
-      claude.go            #   Claude Code adapter (parse, format, detect, install)
-      cursor.go            #   Cursor adapter (parse, format, detect, install)
-      registry.go          #   Adapter registry with auto-detection
-    cli/                   # Cobra command definitions
-      root.go              #   Root command (launches TUI when no subcommand)
-      hook.go              #   hook subcommand (pre-tool-use enforcement)
+    adapter/               # Agent-specific logic (ALL agent knowledge lives here)
+      adapter.go           #   HookAdapter interface + AgentProject types
+      types.go             #   HookInput struct (normalized agent-agnostic input)
+      claude.go            #   Claude Code adapter + project scanner
+      cursor.go            #   Cursor adapter + tool name normalization + project scanner
+      registry.go          #   Adapter registry, auto-detection, ScanAllProjects()
+    cli/                   # Cobra commands
+      root.go              #   Root command (project picker → TUI)
+      hook.go              #   hook subcommand (enforcement + event logging)
       init_cmd.go          #   init subcommand (project bootstrapping)
-      status.go            #   status subcommand (display rules, sessions, skills)
-      clean.go             #   clean subcommand (state file cleanup)
-      doctor.go            #   doctor subcommand (installation diagnostics)
-      version.go           #   version subcommand (print build info)
-    engine/                # Core enforcement logic
+      status.go            #   status subcommand
+      clean.go             #   clean subcommand
+      doctor.go            #   doctor subcommand
+      version.go           #   version subcommand
+    engine/                # Core enforcement logic (agent-agnostic)
       types.go             #   Rule, Config, GlobalConfig, MatchedRule, BlockResult
       config.go            #   Two-level config loading and merging
       engine.go            #   ShouldBlock algorithm (pure function)
-      glob.go              #   Glob normalization, path normalization, project root resolution
+      glob.go              #   Glob/path normalization, project root resolution
     scanner/               # Skill discovery
-      types.go             #   Skill struct and frontmatter types
-      scanner.go           #   Directory walking, file detection, deduplication
-      parser.go            #   YAML frontmatter parsing for SKILL.md and .mdc files
+      types.go             #   Skill struct
+      scanner.go           #   Directory walking, skill file detection
+      parser.go            #   YAML frontmatter parsing
+      projects.go          #   (legacy, being replaced by adapter.ScanProjects)
     state/                 # Session state management
-      types.go             #   SessionState struct
-      manager.go           #   StateManager: RecordSkill, HasSkill, GetInvokedSkills, Clean
-      lock.go              #   FileLock wrapper around gofrs/flock
-      prune.go             #   TTL-based pruning with throttle mechanism
-      validate.go          #   Session ID sanitization and validation
+      types.go             #   SessionState + LoadedSkill types
+      manager.go           #   StateManager: RecordSkillWithAgent, HasSkill, etc.
+      lock.go              #   FileLock wrapper (gofrs/flock)
+      prune.go             #   TTL-based pruning with throttle
+      validate.go          #   Session ID sanitization
     tui/                   # Interactive terminal UI
-      app.go               #   Root Bubble Tea model, view state machine
-      dashboard.go         #   Skills + rules dashboard view
-      rule_editor.go       #   Huh form for adding/editing rules
-      tree_picker.go       #   File browser for path selection
+      app.go               #   Root Bubble Tea model, fsnotify watchers, view routing
+      dashboard.go         #   Split-pane: skills list (left) + rules/description (right)
+      rule_editor.go       #   Multi-select rule builder (tools, paths tree, agents)
+      tree_picker.go       #   File tree browser with smart filtering
       styles.go            #   Lip Gloss style definitions
-  demo/                    # VHS tape scripts for generating demo GIFs
-  docs/                    # Documentation
-  test/                    # Integration and E2E tests
 ```
 
-## Core Components
+## Adapter Architecture (Extensibility)
 
-### Enforcement Engine (`internal/engine/`)
-
-The engine is the heart of care-bare. It is responsible for loading configuration, normalizing patterns, and making the block/allow decision.
-
-**`ShouldBlock` Algorithm:**
-
-The `ShouldBlock` function is a pure function with no side effects. For each rule in the loaded config:
-
-1. Check **tool match**: empty or `*` matches all tools; otherwise exact string match.
-2. Check **agent match**: empty or `*` matches all agents; otherwise exact string match.
-3. Check **path match**: empty or `*` matches all files; otherwise glob match using `doublestar`.
-
-All three conditions must be true (AND logic) for a rule to match. Matched rules are deduplicated by skill name (first match per skill wins). The function then checks which matched skills have NOT been invoked in the current session.
-
-If any required skills are missing, the function returns `BlockResult{Blocked: true}` with the list of missing skill names and a human-readable reason string.
-
-**Two-Level Config Loading:**
-
-1. User-level rules from `~/.care-bare/skill_enforcement.json`.
-2. Project-level rules collected by walking up from the current directory, loading `.care-bare/skill_enforcement.json` at each level.
-
-All rules accumulate. There is no override or shadowing. Each rule tracks its source file path.
-
-**Glob Normalization:**
-
-Relative patterns (not starting with `/` or `**/`) are automatically prefixed with `**/` so they match at any depth. File paths from agent input are normalized to repo-relative, forward-slash format before matching.
-
-**Project Root Resolution:**
-
-care-bare resolves the project root by walking up from the current directory:
-
-1. First directory containing `.care-bare/` (highest priority).
-2. First directory containing `.git/` (fallback).
-3. The starting directory itself (final fallback).
-
-### State Manager (`internal/state/`)
-
-The state manager tracks which skills have been invoked in each session using JSON files on disk.
-
-**Storage:**
-
-Each session gets a JSON file at `.care-bare/state/{session_id}.json` containing the session ID, creation timestamp, and list of invoked skill names.
-
-**Cross-Process Safety:**
-
-- Advisory file locks via `gofrs/flock` prevent concurrent writes to the same session file.
-- Atomic writes via `natefinch/atomic` prevent partial/corrupt state files on crash.
-- Read operations use shared (read) locks; write operations use exclusive locks.
-
-**TTL-Based Pruning:**
-
-State files expire after a configurable number of hours (default 24). Expiry is checked by file modification time (mtime) to avoid parsing JSON. A `.last-prune` sentinel file throttles automatic pruning to at most once per hour during hook invocations. The `care-bare clean` command bypasses the throttle.
-
-**Session ID Validation:**
-
-Session IDs are sanitized to prevent path traversal: only `[A-Za-z0-9._-]` characters are allowed, maximum 128 characters, no `..` sequences.
-
-### Hook Adapters (`internal/adapter/`)
-
-Adapters translate between agent-specific JSON formats and care-bare's internal representation.
-
-**`HookAdapter` Interface:**
+**All agent-specific logic lives in adapters.** To add support for a new agent (e.g., Codex, Gemini), implement the `HookAdapter` interface:
 
 ```go
 type HookAdapter interface {
-    Name() string
-    ParseInput(stdin io.Reader) (*HookInput, error)
-    FormatAllow() ([]byte, error)
-    FormatDeny(reason string) ([]byte, error)
-    ConfigPath() string
-    InstallHook(projectDir string) error
-    DetectSkillInvocation(input *HookInput) (skillName string, isSkill bool)
+    Name() string                                              // "claude", "cursor", "codex"
+    ParseInput(stdin io.Reader) (*HookInput, error)            // Normalize agent JSON → HookInput
+    FormatAllow() ([]byte, error)                              // Agent-specific allow response
+    FormatDeny(reason string) ([]byte, error)                  // Agent-specific deny response
+    ConfigPath() string                                        // Where to detect agent presence
+    InstallHook(projectDir string) error                       // Install hooks in agent's global config
+    DetectSkillInvocation(input *HookInput) (string, bool)     // Detect native skill loading
+    ScanProjects() ([]AgentProject, error)                     // Discover projects for this agent
 }
 ```
 
-**Adapter Registry:**
+Register it in `registry.go`. Everything else — engine, TUI, commands, state — works automatically.
 
-The registry maps adapter names to implementations and supports auto-detection from raw JSON:
+### What Each Adapter Handles
 
-1. If JSON contains `cursor_version` -> Cursor adapter.
-2. If JSON contains `hook_event_name` -> Claude Code adapter.
-3. Otherwise -> error.
+| Concern | Claude Code | Cursor |
+|---------|------------|--------|
+| Hook JSON format | `session_id`, nested `tool_input.file_path` | `conversation_id`, top-level or nested `file_path` |
+| Tool name normalization | Native names (Edit, Write, etc.) | Maps `edit_file`→Edit, `write_file`→Write, etc. |
+| Allow response | Empty stdout, exit 0 | `{"continue":true}`, exit 0 |
+| Deny response | `hookSpecificOutput` JSON, exit 0 | `{"continue":false,"permission":"deny"}`, exit 2 |
+| Skill detection | Native Skill tool (`tool_name: "Skill"`) | Auto-detect SKILL.md reads |
+| Hook config location | `~/.claude/settings.json` | `~/.cursor/hooks.json` |
+| Project discovery | `~/.claude/projects/` (sessions-index.json + greedy decode) | `~/.cursor/projects/` (greedy path decode) |
 
-**Claude Code Adapter:**
+### Adapter Registry
 
-- Reads `session_id`, `tool_name`, `tool_input.file_path` from nested JSON.
-- Detects skill invocations when `tool_name` is `"Skill"` and extracts the skill name from `tool_input.skill`.
-- Allow response: empty stdout (exit 0 with no output).
-- Deny response: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}}`.
-- Installs hooks into `.claude/settings.json` under `hooks.PreToolUse`.
+The registry provides:
+- `Get(name)` — lookup by name
+- `AutoDetect(rawJSON)` — detect agent from JSON markers (`cursor_version` → Cursor, `hook_event_name` → Claude)
+- `ScanAllProjects()` — discovers projects from ALL adapters, merges duplicates (same project used by multiple agents)
 
-**Cursor Adapter:**
+## Enforcement Engine (`internal/engine/`)
 
-- Reads `conversation_id` (as session ID), top-level `tool_name` and `file_path`, and `workspace_roots[0]` (as cwd).
-- Allow response: `{"continue": true}`.
-- Deny response: `{"continue": false, "userMessage": "..."}`.
-- Installs hooks into `.cursor/hooks.json` under multiple hook types: `preToolUse`, `beforeFileEdit`, `beforeShellExecution`, `beforeReadFile`, `beforeMCPExecution`.
+The engine is agent-agnostic. It only knows about rules, paths, and skills.
 
-### Skill Scanner (`internal/scanner/`)
+### ShouldBlock Algorithm
 
-The scanner discovers skill definitions from configured directory paths.
+Pure function with no side effects:
 
-**File Detection:**
+1. For each rule, check: **tool match** AND **agent match** AND **path match**
+2. Deduplicate by skill name (first match per skill wins)
+3. Check which matched skills are NOT in the session's invoked skills
+4. Return `BlockResult{Blocked, Reason, Missing}`
 
-- `SKILL.md` files are identified as Claude Code skills.
-- `.mdc` files are identified as Cursor rules.
+The deny message includes load instructions: `/skill-name (or read .claude/skills/skill-name/SKILL.md)`
 
-**Metadata Extraction:**
+### Config Loading
 
-The parser reads YAML frontmatter (delimited by `---`) from skill files to extract `name` and `description` fields. If no frontmatter is present or the name field is empty, the scanner falls back to the parent directory name.
+Two levels, both accumulate (no override):
+1. User-level: `~/.care-bare/skill_enforcement.json`
+2. Project-level: walk up from cwd, collect all `.care-bare/skill_enforcement.json`
 
-**Deduplication:**
+### Path Handling
 
-When the same skill name is discovered in multiple locations, the first occurrence wins. Results are returned sorted alphabetically by name.
+- Relative globs auto-prefix with `**/` 
+- File paths from agents normalized to repo-relative, forward-slash format
+- Project root: walk up looking for `.care-bare/`, fall back to `.git/`, fall back to cwd
 
-### Interactive TUI (`internal/tui/`)
+## State Manager (`internal/state/`)
 
-The TUI is built on the Charmbracelet v2 stack: Bubble Tea for the application framework, Lip Gloss for styling.
+Tracks which skills are loaded per session per agent.
 
-**View State Machine:**
+### State File Format
 
-The TUI uses three views managed by a central App model:
+```json
+{
+  "session_id": "abc123",
+  "agent": "cursor",
+  "created_at": "2026-04-12T09:30:00Z",
+  "invoked_skills": ["git", "run-migration"]
+}
+```
+
+### Safety
+- File locks (`gofrs/flock`) for concurrent access
+- Atomic writes (`natefinch/atomic`) to prevent corruption
+- Session ID sanitization: `[A-Za-z0-9._-]`, max 128 chars
+
+### Pruning
+- TTL-based (default 24h) using file mtime
+- Throttled to max once per hour during hook calls
+- `care-bare clean` bypasses throttle
+
+## Event Logging
+
+Every hook invocation is logged to `.care-bare/events.log`:
 
 ```
-Dashboard <-> Rule Editor <-> Tree Picker
+2026-04-12T11:57:01Z | cursor | Write      | console/src/app/layout.tsx  | BLOCK | git
+2026-04-12T11:57:04Z | cursor | SKILL-LOAD | git                         | read  | e0a31eac
+2026-04-12T11:57:07Z | cursor | Write      | console/src/app/layout.tsx  | ALLOW |
 ```
-
-- **Dashboard** -- Displays all discovered skills with their associated enforcement rules in a scrollable vertical list. Supports navigation (up/down/j/k), editing rules (enter), deleting rules (d), and saving (s).
-- **Rule Editor** -- A form for adding or editing a rule. Fields: tool name, path pattern, agent. The skill name is pre-filled from the dashboard context. Supports opening the tree picker (ctrl+t) for path selection.
-- **Tree Picker** -- A file browser for selecting path patterns. Filters out directories matching the configured ignore patterns.
-
-Config changes accumulate in memory. The user must explicitly save with the `s` key to write changes to disk.
 
 ## Hook Data Flow
 
-Step-by-step walkthrough of a `care-bare hook` invocation:
-
 ```
-Agent (Claude Code / Cursor)
+AI Agent fires PreToolUse
     |
-    | PreToolUse event (JSON via stdin)
     v
-care-bare hook
+care-bare hook --agent <name>
     |
-    +-- 1. Read stdin (size-limited to 5MB)
-    +-- 2. Select adapter (--agent flag or auto-detect from JSON)
-    +-- 3. Parse input via adapter.ParseInput()
-    +-- 4. Resolve project root (walk up from cwd)
-    +-- 5. Check for skill invocation via adapter.DetectSkillInvocation()
-    |       |
-    |       +-- If skill: RecordSkill() -> FormatAllow() -> exit
-    |
-    +-- 6. Load enforcement rules via engine.LoadConfig()
-    +-- 7. Load session state via state.GetInvokedSkills()
-    +-- 8. Normalize file path to project-relative form
-    +-- 9. Evaluate rules via engine.ShouldBlock()
-    |       |
-    |       +-- Allowed: FormatAllow() -> stdout (empty or JSON)
-    |       +-- Blocked: FormatDeny() -> stdout (deny JSON)
-    |
-    +-- 10. Trigger throttled state pruning
+    +-- 1. Read stdin (5MB limit)
+    +-- 2. Select adapter (--agent flag or auto-detect)
+    +-- 3. Parse + normalize input (tool names, file paths)
+    +-- 4. Resolve project root
+    +-- 5a. Skill tool invocation? → Record skill + allow
+    +-- 5b. SKILL.md file read? → Auto-record skill (Cursor support)
+    +-- 6. Load enforcement rules
+    +-- 7. Load session state (invoked skills)
+    +-- 8. Normalize file path
+    +-- 9. ShouldBlock()
+    +-- 10. Log event to events.log
+    +-- 11. Output allow/deny response
+    +-- 12. Throttled state pruning
 ```
 
-### Sequence Diagram
+## TUI Architecture
 
-```
-Agent -> Hook: stdin JSON
-Hook -> Adapter: ParseInput()
-Hook -> Adapter: DetectSkillInvocation()
-alt Skill invocation
-    Hook -> StateManager: RecordSkill()
-    Hook -> Adapter: FormatAllow()
-    Hook -> Agent: stdout (allow)
-else Normal tool use
-    Hook -> Engine: LoadConfig()
-    Hook -> StateManager: GetInvokedSkills()
-    Hook -> Engine: ShouldBlock()
-    alt Blocked
-        Hook -> Adapter: FormatDeny()
-        Hook -> Agent: stdout (deny JSON)
-    else Allowed
-        Hook -> Adapter: FormatAllow()
-        Hook -> Agent: stdout (allow)
-    end
-end
-Hook -> StateManager: PruneIfDue() (throttled)
-```
+### Project Picker
+On startup, the TUI calls `registry.ScanAllProjects()` to discover all projects across all agents. Shows a `huh` Select form with project paths and which agents use them.
 
-## Config Merge Strategy
+### Split-Pane Dashboard
+After selecting a project:
+- **Left panel**: Scrollable skills list with rule counts and loaded-skill badges (`claude`, `cursor`)
+- **Right panel**: Selected skill's full description, rules table, inline edit actions
 
-Rules from all config sources accumulate (user-level + all project-level configs found by walking up from the current directory). Each rule tracks its source file. There is no override or shadowing -- all rules apply simultaneously. If two rules from different config files match the same tool+path+agent with different skills, both skills must be loaded.
+### Rule Editor
+Multi-select rule builder with one continuous scrollable list:
+- TOOLS section (checkboxes)
+- PATHS section (tree walker with expand/collapse)
+- AGENTS section (checkboxes)
+- `ctrl+s` saves, `esc` cancels
 
-This design favors explicitness: you can always see all active rules and their sources via `care-bare status`.
+### Real-time Updates
+- **fsnotify** watches `.care-bare/state/` for skill load changes
+- Badges update live when agents load skills in other sessions
 
-## Error Handling Philosophy
+## Hooks Installation
 
-care-bare follows a **fail-open** strategy for most errors and a **fail-hard** strategy for user mistakes:
+Hooks are installed **globally** for each agent:
+- Claude Code: `~/.claude/settings.json` → `hooks.PreToolUse`
+- Cursor: `~/.cursor/hooks.json` → `preToolUse`, `beforeShellExecution`, `beforeReadFile`, `beforeMCPExecution`
+
+Uses absolute path to the binary so it works regardless of PATH. Idempotent — safe to run multiple times.
+
+## Error Handling
 
 | Scenario | Behavior |
 |----------|----------|
-| Config file missing | Silently skip (no rules enforced) |
-| Config file permission denied | Log warning, skip |
-| Config file malformed JSON | Return error (surface to user) |
-| Config version unsupported | Return error (surface to user) |
-| State directory missing | Treat as no skills invoked |
-| State file read error | Log warning, treat as no skills invoked |
-| State file write error | Log warning, allow the operation |
+| Config missing | No rules = allow all |
+| Config malformed JSON | Error (surface to user) |
+| State dir missing | No skills invoked |
+| State read/write error | Log warning, fail-open |
+| Lock acquisition failure | Log warning, fail-open |
 | Glob pattern error | Skip the rule |
 
-The hook command never exits with a non-zero code for a deny. Deny decisions are communicated via stdout JSON. A non-zero exit code indicates an actual error (malformed input, fatal I/O failure).
-
-## Trust Model
-
-care-bare assumes a trusted local environment. It is a productivity tool for team discipline, not a security boundary.
-
-Key implications:
-
-- An agent that can modify files can also modify care-bare's configuration.
-- State files use advisory (not mandatory) locks.
-- Session IDs come from the agent and are trusted after sanitization.
-- The enforcement is cooperative: agents opt in by having hooks installed.
-
-The goal is to prevent accidental context-free modifications, not to enforce a security policy against a malicious actor.
+The hook exits 0 for both allow and deny (Claude Code). For Cursor, deny exits with code 2. Non-zero exit codes indicate actual errors (malformed input, fatal I/O).

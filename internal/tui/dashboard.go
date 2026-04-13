@@ -377,13 +377,18 @@ func (d Dashboard) View() string {
 		panelHeight = 20
 	}
 
-	// Split right panel: top = rules (60%), bottom = event log (40%)
+	// Split right panel: top = rules (50%), divider (1 line), bottom = event log
 	rulesHeight := panelHeight * 50 / 100
-	logsHeight := panelHeight - rulesHeight
+	logsHeight := panelHeight - rulesHeight - 1 // -1 for divider line
 
 	left := d.renderSkillList(leftWidth, panelHeight)
 	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)
 	logsContent := d.renderEventLog(rightWidth, logsHeight)
+
+	// Pad each section to its exact allocated height so the divider
+	// stays at the correct position and logs fill their box.
+	rulesContent = padToHeight(rulesContent, rulesHeight)
+	logsContent = padToHeight(logsContent, logsHeight)
 
 	// Combine rules + divider + logs into one right panel
 	divider := d.styles.Divider.Render(strings.Repeat("─", rightWidth))
@@ -602,6 +607,23 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	}
 
 	return b.String()
+}
+
+// padToHeight ensures content has exactly `height` lines.
+// Shorter content is padded with empty lines; longer content is truncated.
+func padToHeight(content string, height int) string {
+	lines := strings.Split(content, "\n")
+	// Trim trailing empty line from a trailing newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // wordWrap wraps text to the given width.

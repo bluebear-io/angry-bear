@@ -639,10 +639,15 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
 
-	pathWidth := width - 50
+	colAct := 7
+	colAgent := 8
+	colTool := 8
+	colSkill := 16
+
+	pathWidth := width - 55
 	if pathWidth < 10 {
 		pathWidth = 10
 	}
@@ -650,7 +655,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	for idx := start; idx < end; idx++ {
 		line := d.eventLines[idx]
 		parts := strings.Split(line, " | ")
-		if len(parts) < 5 {
+		if len(parts) < 6 {
 			continue
 		}
 		for i := range parts {
@@ -658,10 +663,18 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 
 		agent := parts[1]
-		tool := parts[2]
-		path := parts[3]
+		sess := parts[2]
+		tool := parts[3]
+		path := parts[4]
 		skill := ""
-		if len(parts) > 5 {
+		if len(parts) > 6 {
+			skill = parts[6]
+		}
+		// Fallback for old 6-column format
+		if len(parts) == 6 {
+			sess = ""
+			tool = parts[2]
+			path = parts[3]
 			skill = parts[5]
 		}
 
@@ -681,11 +694,11 @@ func (d Dashboard) renderEventLog(width, height int) string {
 			path = ""
 			sty = cyan
 		} else {
-			act = "allow"
-			sty = dim
+			act = "ALLOW"
+			sty = green
 		}
 
-		plainRow := fmt.Sprintf(colFmt, act, agent, tool, skill, path)
+		plainRow := fmt.Sprintf("  %-*s %-6s %-*s %-*s %-*s %-*s", colAct, act, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
 
 		focused := idx == d.logCursor && d.focusPanel == 2
 		if focused {
@@ -706,7 +719,7 @@ func (d *Dashboard) jumpToLogEntry() {
 
 	line := d.eventLines[d.logCursor]
 	parts := strings.Split(line, " | ")
-	if len(parts) < 5 {
+	if len(parts) < 6 {
 		return
 	}
 
@@ -763,7 +776,7 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		hasSkill := false
 		if strings.Contains(line, "SKILL-LOAD") {
 			hasSkill = true
-		} else if len(parts) > 5 && strings.TrimSpace(parts[5]) != "" {
+		} else if len(parts) > 6 && strings.TrimSpace(parts[6]) != "" {
 			hasSkill = true
 		}
 		if hasSkill {

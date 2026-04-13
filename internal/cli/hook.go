@@ -268,10 +268,11 @@ func detectSkillFromPath(filePath string) string {
 // Format matches logEvent: timestamp | agent | tool | path | action | skill
 func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, method string) {
 	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
-	line := fmt.Sprintf("%s | %-6s | SKILL-LOAD | %-50s | LOAD  | %s\n",
+	line := fmt.Sprintf("%s | %-6s | %-5s | SKILL-LOAD | %-50s | LOAD  | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		input.Agent,
-		"",  // no path for skill loads
+		truncateSessionID(input.SessionID),
+		"",
 		skillName,
 	)
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -294,9 +295,10 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	}
 	missing := strings.Join(result.Missing, ",")
 
-	line := fmt.Sprintf("%s | %-6s | %-10s | %-50s | %-5s | %s\n",
+	line := fmt.Sprintf("%s | %-6s | %-5s | %-10s | %-50s | %-5s | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		input.Agent,
+		truncateSessionID(input.SessionID),
 		input.ToolName,
 		normalizedPath,
 		decision,
@@ -309,4 +311,12 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	}
 	defer f.Close()
 	f.WriteString(line)
+}
+
+// truncateSessionID returns the first 5 characters of a session ID.
+func truncateSessionID(id string) string {
+	if len(id) > 5 {
+		return id[:5]
+	}
+	return id
 }

@@ -435,7 +435,7 @@ func (a App) helpBar() string {
 				key("d", "del") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
 			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
-				key("enter", "jump to rule") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+				key("enter", "jump to rule") + sep + key("f", "filter project") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help

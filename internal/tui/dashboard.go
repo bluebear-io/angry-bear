@@ -25,8 +25,9 @@ type Dashboard struct {
 	projectRoot  string   // For reading events.log
 	skillCursor  int
 	ruleCursor   int
-	logCursor    int
-	focusPanel   int // 0=skills, 1=rules, 2=event log
+	logCursor        int
+	logProjectFilter string // "" = all projects, or specific project name
+	focusPanel       int    // 0=skills, 1=rules, 2=event log
 	editingPath  bool
 	pathBuffer   string
 	pathCurPos   int
@@ -244,6 +245,21 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "s":
 			return d, func() tea.Msg { return saveRequestMsg{} }
+
+		case "f":
+			// Toggle project filter in event log
+			if d.focusPanel == 2 {
+				if d.logProjectFilter == "" {
+					// Set filter to current project
+					if d.skillCursor < len(d.skills) {
+						d.logProjectFilter = filepath.Base(d.projectRoot)
+					}
+				} else {
+					d.logProjectFilter = "" // Clear filter
+				}
+				d.logCursor = 0
+			}
+			return d, nil
 
 		case "P":
 			// Switch project — return to project picker
@@ -606,7 +622,11 @@ func wordWrap(text string, width int) string {
 
 // renderEventLog renders the bottom-right panel showing recent hook events.
 func (d Dashboard) renderEventLog(width, height int) string {
-	title := d.styles.RuleHeader.Render("  EVENT LOG") + "\n"
+	filterLabel := ""
+	if d.logProjectFilter != "" {
+		filterLabel = " [" + d.logProjectFilter + "]"
+	}
+	title := d.styles.RuleHeader.Render("  EVENT LOG" + filterLabel) + "\n"
 
 	if len(d.eventLines) == 0 {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
@@ -655,7 +675,41 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
 
-	for idx := start; idx < end; idx++ {
+	// Apply project filter
+	var filtered []int
+	for i, line := range d.eventLines {
+		if d.logProjectFilter != "" {
+			parts := strings.Split(line, " | ")
+			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
+				continue
+			}
+		}
+		filtered = append(filtered, i)
+	}
+
+	// Recalculate scroll on filtered list
+	if d.logCursor >= len(filtered) && len(filtered) > 0 {
+		d.logCursor = len(filtered) - 1
+	}
+	fStart := len(filtered) - visible
+	if fStart < 0 {
+		fStart = 0
+	}
+	if d.focusPanel == 2 && len(filtered) > 0 {
+		if d.logCursor < fStart {
+			fStart = d.logCursor
+		}
+		if d.logCursor >= fStart+visible {
+			fStart = d.logCursor - visible + 1
+		}
+	}
+	fEnd := fStart + visible
+	if fEnd > len(filtered) {
+		fEnd = len(filtered)
+	}
+
+	for fi := fStart; fi < fEnd; fi++ {
+		idx := filtered[fi]
 		line := d.eventLines[idx]
 		parts := strings.Split(line, " | ")
 		if len(parts) < 6 {
@@ -716,7 +770,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 
 		plainRow := fmt.Sprintf("  %-*s %-13s %-6s %-*s %-*s %-*s %-*s", colAct, act, project, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
 
-		focused := idx == d.logCursor && d.focusPanel == 2
+		focused := fi == d.logCursor && d.focusPanel == 2
 		if focused {
 			b.WriteString(d.styles.Selected.Render("▸" + plainRow[1:]) + "\n")
 		} else {

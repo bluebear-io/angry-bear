@@ -117,8 +117,9 @@ func (a App) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	if a.stateDir != "" {
 		cmds = append(cmds, watchStateDir(a.stateDir))
-		// Also watch events.log for real-time updates
-		eventsLog := filepath.Join(filepath.Dir(a.stateDir), "events.log")
+		// Watch global events.log for real-time updates
+		home, _ := os.UserHomeDir()
+		eventsLog := filepath.Join(home, ".care-bare", "events.log")
 		cmds = append(cmds, watchEventsLog(eventsLog))
 	}
 	if len(cmds) == 0 {
@@ -256,11 +257,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case eventsUpdatedMsg:
 		// Events log changed — reload and restart watcher
-		if a.configPath != "" {
-			projectRoot := filepath.Dir(filepath.Dir(a.configPath))
-			a.dashboard.LoadEventLog(projectRoot)
-		}
-		eventsLog := filepath.Join(filepath.Dir(a.stateDir), "events.log")
+		a.dashboard.LoadEventLog("")
+		home, _ := os.UserHomeDir()
+		eventsLog := filepath.Join(home, ".care-bare", "events.log")
 		return a, watchEventsLog(eventsLog)
 
 	case tea.WindowSizeMsg:

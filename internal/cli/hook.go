@@ -267,9 +267,17 @@ func detectSkillFromPath(filePath string) string {
 // logSkillEvent logs a skill load event.
 // Format matches logEvent: timestamp | agent | tool | path | action | skill
 func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, method string) {
-	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
-	line := fmt.Sprintf("%s | %-6s | %-5s | SKILL-LOAD | %-50s | LOAD  | %s\n",
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	logDir := filepath.Join(home, ".care-bare")
+	os.MkdirAll(logDir, 0755)
+	logPath := filepath.Join(logDir, "events.log")
+	projectName := filepath.Base(projectRoot)
+	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | SKILL-LOAD | %-40s | LOAD  | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
+		projectName,
 		input.Agent,
 		truncateSessionID(input.SessionID),
 		"",
@@ -287,7 +295,14 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 // Log format: timestamp | agent | tool | path | decision | missing skills
 // Events older than 7 days are pruned on each write.
 func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath string, result engine.BlockResult) {
-	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	logDir := filepath.Join(home, ".care-bare")
+	os.MkdirAll(logDir, 0755)
+	logPath := filepath.Join(logDir, "events.log")
+	projectName := filepath.Base(projectRoot)
 
 	decision := "ALLOW"
 	if result.Blocked {
@@ -295,8 +310,9 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	}
 	missing := strings.Join(result.Missing, ",")
 
-	line := fmt.Sprintf("%s | %-6s | %-5s | %-10s | %-50s | %-5s | %s\n",
+	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | %-10s | %-40s | %-5s | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
+		projectName,
 		input.Agent,
 		truncateSessionID(input.SessionID),
 		input.ToolName,

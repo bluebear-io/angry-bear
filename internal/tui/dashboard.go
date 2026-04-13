@@ -661,21 +661,34 @@ func (d Dashboard) renderEventLog(width, height int) string {
 			parts[i] = strings.TrimSpace(parts[i])
 		}
 
-		agent := parts[1]
-		sess := parts[2]
-		tool := parts[3]
-		path := parts[4]
+		// 8-column format: timestamp|project|agent|session|tool|path|action|skill
+		project := ""
+		agent := ""
+		sess := ""
+		tool := ""
+		path := ""
 		skill := ""
-		if len(parts) > 6 {
+		if len(parts) >= 8 {
+			project = parts[1]
+			agent = parts[2]
+			sess = parts[3]
+			tool = parts[4]
+			path = parts[5]
+			skill = parts[7]
+		} else if len(parts) >= 7 {
+			// 7-column (old): timestamp|agent|session|tool|path|action|skill
+			agent = parts[1]
+			sess = parts[2]
+			tool = parts[3]
+			path = parts[4]
 			skill = parts[6]
-		}
-		// Fallback for old 6-column format
-		if len(parts) == 6 {
-			sess = ""
+		} else if len(parts) >= 6 {
+			agent = parts[1]
 			tool = parts[2]
 			path = parts[3]
 			skill = parts[5]
 		}
+		_ = project // TODO: add project column to display
 
 		if len(path) > pathWidth {
 			path = "…" + path[len(path)-pathWidth+1:]
@@ -754,7 +767,11 @@ func (d *Dashboard) jumpToLogEntry() {
 // Older lines are pruned from the file to keep it manageable.
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
-	logPath := filepath.Join(projectRoot, ".care-bare", "events.log")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	logPath := filepath.Join(home, ".care-bare", "events.log")
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		d.eventLines = nil
@@ -775,7 +792,7 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		hasSkill := false
 		if strings.Contains(line, "SKILL-LOAD") {
 			hasSkill = true
-		} else if len(parts) > 6 && strings.TrimSpace(parts[6]) != "" {
+		} else if len(parts) >= 8 && strings.TrimSpace(parts[7]) != "" {
 			hasSkill = true
 		}
 		if hasSkill {
@@ -794,6 +811,7 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		recent = recent[len(recent)-200:]
 	}
 	d.eventLines = recent
+
 }
 
 // stripAnsi removes ANSI escape sequences.

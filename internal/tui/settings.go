@@ -22,6 +22,7 @@ type settingItem struct {
 	description string
 	value       string
 	kind        settingKind
+	level       string   // "project", "global", or "both" — controls visibility per config level
 	readonly    bool     // true for display-only items like project root
 	options     []string // for cycle-able items (e.g., checkout paths)
 	optionIdx   int      // current index in options
@@ -70,9 +71,8 @@ func NewSettings(
 ) Settings {
 	var items []settingItem
 
-	// Project Root item (first, always present).
+	// Project-only: Project Root item.
 	if len(availablePaths) > 1 {
-		// Find current index.
 		currentIdx := 0
 		for i, p := range availablePaths {
 			if p == projectRoot {
@@ -83,11 +83,12 @@ func NewSettings(
 		items = append(items, settingItem{
 			key:         "project_root",
 			label:       "Project Root",
-			description: "Current checkout path. Use up/down to switch between local copies.",
+			description: "Current checkout path. Use left/right to switch between local copies.",
 			value:       projectRoot,
 			kind:        settingCycle,
 			options:     availablePaths,
 			optionIdx:   currentIdx,
+			level:       "project",
 		})
 	} else {
 		items = append(items, settingItem{
@@ -97,10 +98,11 @@ func NewSettings(
 			value:       projectRoot,
 			kind:        settingString,
 			readonly:    true,
+			level:       "project",
 		})
 	}
 
-	// Config settings.
+	// Settings available at both levels.
 	items = append(items,
 		settingItem{
 			key:         "skill_ttl_minutes",
@@ -108,6 +110,7 @@ func NewSettings(
 			description: "How long a loaded skill stays valid. 0 = no expiry.",
 			value:       strconv.Itoa(cfg.SkillTTLMinutes),
 			kind:        settingInt,
+			level:       "both",
 		},
 		settingItem{
 			key:         "state_ttl_hours",
@@ -115,6 +118,7 @@ func NewSettings(
 			description: "How long session state files are kept before pruning.",
 			value:       strconv.Itoa(cfg.StateTTLHours),
 			kind:        settingInt,
+			level:       "both",
 		},
 		settingItem{
 			key:         "default_agent",
@@ -122,6 +126,7 @@ func NewSettings(
 			description: "Default agent scope for new rules: claude, cursor, or * (all).",
 			value:       cfg.DefaultAgent,
 			kind:        settingString,
+			level:       "both",
 		},
 	)
 
@@ -146,6 +151,31 @@ func NewSettings(
 	}
 }
 
+// visibleItems returns items that should be shown for the current config level.
+func (s *Settings) visibleItems() []settingItem {
+	var visible []settingItem
+	for _, item := range s.items {
+		if item.level == "both" || item.level == s.configLevel {
+			visible = append(visible, item)
+		}
+	}
+	return visible
+}
+
+// visibleToRealIndex maps a visible index to the real index in s.items.
+func (s *Settings) visibleToRealIndex(visIdx int) int {
+	count := 0
+	for i, item := range s.items {
+		if item.level == "both" || item.level == s.configLevel {
+			if count == visIdx {
+				return i
+			}
+			count++
+		}
+	}
+	return 0
+}
+
 // Init returns nil -- no initial command needed.
 func (s Settings) Init() tea.Cmd { return nil }
 
@@ -162,33 +192,43 @@ func (s Settings) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return s.updateEditing(msg)
 		}
 
+		visible := s.visibleItems()
+		realIdx := s.visibleToRealIndex(s.cursor)
+
 		switch msg.String() {
 		case "up", "k":
 			if s.cursor > 0 {
 				s.cursor--
-			} else if s.items[s.cursor].kind == settingCycle {
-				// Cycle through options when on a cycle item.
-				s.cycleSetting(-1)
 			}
 			return s, nil
 
 		case "down", "j":
-			if s.items[s.cursor].kind == settingCycle {
-				// Cycle through options when on a cycle item.
-				s.cycleSetting(1)
-			} else if s.cursor < len(s.items)-1 {
+			if s.cursor < len(visible)-1 {
 				s.cursor++
 			}
 			return s, nil
 
+		case "left":
+			// Cycle backward on cycle items
+			if s.items[realIdx].kind == settingCycle {
+				s.cycleSetting(realIdx, -1)
+			}
+			return s, nil
+
+		case "right":
+			// Cycle forward on cycle items
+			if s.items[realIdx].kind == settingCycle {
+				s.cycleSetting(realIdx, 1)
+			}
+			return s, nil
+
 		case "enter":
-			item := s.items[s.cursor]
+			item := s.items[realIdx]
 			if item.readonly {
 				return s, nil
 			}
 			if item.kind == settingCycle {
-				// Cycle forward on enter.
-				s.cycleSetting(1)
+				s.cycleSetting(realIdx, 1)
 				return s, nil
 			}
 			s.editing = true
@@ -198,10 +238,12 @@ func (s Settings) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "g":
 			s.configLevel = "global"
+			s.cursor = 0 // Reset cursor when switching levels
 			return s, nil
 
 		case "p":
 			s.configLevel = "project"
+			s.cursor = 0 // Reset cursor when switching levels
 			return s, nil
 
 		case "esc", "q":
@@ -212,8 +254,8 @@ func (s Settings) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // cycleSetting moves through the options of a settingCycle item.
-func (s *Settings) cycleSetting(delta int) {
-	item := &s.items[s.cursor]
+func (s *Settings) cycleSetting(realIdx, delta int) {
+	item := &s.items[realIdx]
 	if item.kind != settingCycle || len(item.options) == 0 {
 		return
 	}
@@ -226,7 +268,8 @@ func (s Settings) updateEditing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		// Validate and commit
-		item := s.items[s.cursor]
+		realIdx := s.visibleToRealIndex(s.cursor)
+		item := s.items[realIdx]
 		if item.kind == settingInt {
 			_, err := strconv.Atoi(s.editBuffer)
 			if err != nil {
@@ -235,7 +278,7 @@ func (s Settings) updateEditing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return s, nil
 			}
 		}
-		s.items[s.cursor].value = s.editBuffer
+		s.items[realIdx].value = s.editBuffer
 		s.editing = false
 		return s, nil
 
@@ -334,7 +377,8 @@ func (s Settings) View() string {
 	descStyle := s.styles.Description
 	readonlyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
-	for i, item := range s.items {
+	visible := s.visibleItems()
+	for i, item := range visible {
 		focused := i == s.cursor
 
 		// Value display

@@ -465,7 +465,7 @@ func (a App) helpBar() string {
 		text = key("j/k", "navigate") + sep + key("enter", "select/open") + sep +
 			key("backspace", "up dir") + sep + key("esc", "cancel")
 	case viewSettings:
-		text = key("↑↓", "navigate") + sep + key("enter", "edit") + sep +
+		text = key("↑↓", "navigate") + sep + key("←→", "cycle") + sep + key("enter", "edit") + sep +
 			key("g", "global") + sep + key("p", "project") + sep + key("esc/q", "save & exit")
 	}
 	return "\n" + text

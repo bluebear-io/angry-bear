@@ -52,7 +52,9 @@ func runRules(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting working directory: %w", err)
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
+
 	configPath, err := ResolveConfigForProject(projectRoot)
+
 	if err != nil {
 		return err
 	}

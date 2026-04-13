@@ -771,10 +771,7 @@ func (d *Dashboard) jumpToLogEntry() {
 // Older lines are pruned from the file to keep it manageable.
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
+	home, _ := os.UserHomeDir()
 	logPath := filepath.Join(home, ".care-bare", "events.log")
 	data, err := os.ReadFile(logPath)
 	if err != nil {

@@ -326,6 +326,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Editor is done (cancel or finished adding rules) — return to dashboard
 		a.view = viewDashboard
 		a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
+		a.dashboard.LoadEventLog("")
 		a.dashboard.width = a.width
 		a.dashboard.height = a.height
 		a.statusMsg = "Rules updated (press s to save)"

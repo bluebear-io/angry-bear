@@ -288,28 +288,33 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.ruleEditor.Init()
 
 	case ruleSubmittedMsg:
-		// Single rule submitted (edit mode)
+		// Single rule submitted (edit mode) — save and return to dashboard
 		if msg.rule != nil {
 			if msg.ruleIndex >= 0 && msg.ruleIndex < len(a.config.Tools) {
 				a.config.Tools[msg.ruleIndex] = *msg.rule
 			} else {
 				a.config.Tools = append(a.config.Tools, *msg.rule)
 			}
-			a.ruleEditor.SetExistingRules(a.config.Tools)
-			return a, a.ruleEditor.SwitchToConfirm()
+			a.view = viewDashboard
+			a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
+			a.dashboard.LoadEventLog("")
+			a.dashboard.width = a.width
+			a.dashboard.height = a.height
+			a.statusMsg = "Rule saved!"
+			return a, saveConfig(a.config, a.configPath)
 		}
 		return a, nil
 
 	case rulesSubmittedMsg:
-		// Multiple rules submitted — add to config AND save to disk immediately
-		for _, rule := range msg.rules {
-			r := rule
-			a.config.Tools = append(a.config.Tools, r)
-		}
-		a.ruleEditor.SetExistingRules(a.config.Tools)
-		// Save to disk right away, then switch to confirm
-		confirmCmd := a.ruleEditor.SwitchToConfirm()
-		return a, tea.Batch(saveConfig(a.config, a.configPath), confirmCmd)
+		// Multiple rules submitted — save and return to dashboard
+		a.config.Tools = append(a.config.Tools, msg.rules...)
+		a.view = viewDashboard
+		a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
+		a.dashboard.LoadEventLog("")
+		a.dashboard.width = a.width
+		a.dashboard.height = a.height
+		a.statusMsg = fmt.Sprintf("%d rules saved!", len(msg.rules))
+		return a, saveConfig(a.config, a.configPath)
 
 	case ruleEditorDoneMsg:
 		// Editor is done (cancel or finished adding rules) — return to dashboard

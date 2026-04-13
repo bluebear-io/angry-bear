@@ -1083,6 +1083,10 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		recent = recent[len(recent)-200:]
 	}
 	d.eventLines = recent
+	// Auto-scroll to latest event
+	if len(d.eventLines) > 0 {
+		d.logScroll.Cursor = len(d.eventLines) - 1
+	}
 }
 
 // stripAnsi removes ANSI escape sequences.

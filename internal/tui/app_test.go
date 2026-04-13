@@ -939,11 +939,11 @@ func TestApp_RulesSubmittedMultipleRules(t *testing.T) {
 	if len(app.config.Tools) != 3 {
 		t.Errorf("expected 3 rules, got %d", len(app.config.Tools))
 	}
-	// rulesSubmittedMsg triggers SwitchToConfirm + saveConfig, stays in rule editor view
-	if app.view != viewRuleEditor {
-		t.Errorf("view = %d, want %d (should stay in rule editor for confirm)", app.view, viewRuleEditor)
+	// rulesSubmittedMsg saves and returns to dashboard immediately (no confirm screen)
+	if app.view != viewDashboard {
+		t.Errorf("view = %d, want %d (should return to dashboard)", app.view, viewDashboard)
 	}
 	if cmd == nil {
-		t.Error("expected batch command (save + confirm)")
+		t.Error("expected save command")
 	}
 }

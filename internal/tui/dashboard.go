@@ -672,7 +672,27 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	header := fmt.Sprintf("  %-10s %-28s %s", "TOOL", "PATH", "AGENT")
 	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
 
-	for i, ir := range rules {
+	// Scrolling for rules list — reserve lines for header (name+desc+blank+colheader = ~4) and help (~3)
+	visibleRules := height - 7
+	if visibleRules < 3 {
+		visibleRules = 3
+	}
+	ruleStart := 0
+	if len(rules) > visibleRules {
+		if d.ruleCursor >= ruleStart+visibleRules {
+			ruleStart = d.ruleCursor - visibleRules + 1
+		}
+		if d.ruleCursor < ruleStart {
+			ruleStart = d.ruleCursor
+		}
+	}
+	ruleEnd := ruleStart + visibleRules
+	if ruleEnd > len(rules) {
+		ruleEnd = len(rules)
+	}
+
+	for i := ruleStart; i < ruleEnd; i++ {
+		ir := rules[i]
 		focused := i == d.ruleCursor && d.focusPanel == 1
 
 		toolStr := ir.rule.Tool
@@ -706,6 +726,19 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 			agent := d.styles.Agent.Render(agentStr)
 			b.WriteString("  " + tool + " " + path + " " + agent + "\n")
 		}
+	}
+
+	// Scroll indicator for rules
+	if len(rules) > visibleRules {
+		indicator := d.styles.Description.Render(
+			fmt.Sprintf("  [%d/%d]", d.ruleCursor+1, len(rules)))
+		if ruleStart > 0 {
+			indicator += d.styles.Description.Render(" ↑")
+		}
+		if ruleEnd < len(rules) {
+			indicator += d.styles.Description.Render(" ↓")
+		}
+		b.WriteString(indicator + "\n")
 	}
 
 	// Context help for right panel when focused

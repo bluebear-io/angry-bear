@@ -121,7 +121,8 @@ func (re *RuleEditor) buildSections() {
 	for _, r := range re.existingRules {
 		if r.Skill == re.skillName {
 			existingTools[r.Tool] = true
-			existingPaths[r.Path] = true
+			// Strip **/ prefix from NormalizeGlob — tree items use relative paths
+			existingPaths[strings.TrimPrefix(r.Path, "**/")] = true
 			existingAgents[r.Agent] = true
 		}
 	}
@@ -555,10 +556,14 @@ func (re *RuleEditor) collapsePathDir(idx int) {
 // autoExpandSelectedPaths expands directories to reveal pre-selected paths.
 // Called after buildSections to ensure existing rules are visible.
 func (re *RuleEditor) autoExpandSelectedPaths() {
+	// Collect existing paths, stripping the **/ prefix that NormalizeGlob adds.
+	// Rules store "**/tests/**" but tree items use "tests/**".
 	existingPaths := make(map[string]bool)
 	for _, r := range re.existingRules {
 		if r.Skill == re.skillName {
-			existingPaths[r.Path] = true
+			path := r.Path
+			path = strings.TrimPrefix(path, "**/")
+			existingPaths[path] = true
 		}
 	}
 	if len(existingPaths) == 0 {
@@ -588,7 +593,7 @@ func (re *RuleEditor) autoExpandSelectedPaths() {
 		}
 	}
 
-	// Now mark matching items as selected
+	// Mark matching items as selected
 	for i := range re.pathItems {
 		if existingPaths[re.pathItems[i].value] {
 			re.pathItems[i].selected = true

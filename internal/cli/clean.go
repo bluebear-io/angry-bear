@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,7 +73,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 }
 
 // cleanSession validates and removes a specific session's state files.
-func cleanSession(out interface{ Write([]byte) (int, error) }, stateDir, sessionID string) error {
+func cleanSession(out io.Writer, stateDir, sessionID string) error {
 	err := state.ValidateSessionID(sessionID)
 	if err != nil {
 		return fmt.Errorf("invalid session ID: %w", err)
@@ -89,7 +90,7 @@ func cleanSession(out interface{ Write([]byte) (int, error) }, stateDir, session
 }
 
 // cleanAllSessions lists all session JSON files and removes each one.
-func cleanAllSessions(out interface{ Write([]byte) (int, error) }, stateDir string) error {
+func cleanAllSessions(out io.Writer, stateDir string) error {
 	entries, err := os.ReadDir(stateDir)
 	if err != nil {
 		return fmt.Errorf("reading state directory: %w", err)
@@ -117,7 +118,7 @@ func cleanAllSessions(out interface{ Write([]byte) (int, error) }, stateDir stri
 
 // cleanExpired loads the TTL from config and runs PruneExpired directly,
 // ignoring the throttle mechanism used in the hot path.
-func cleanExpired(out interface{ Write([]byte) (int, error) }, projectRoot, stateDir string) error {
+func cleanExpired(out io.Writer, projectRoot, stateDir string) error {
 	globalCfg, err := engine.LoadGlobalConfig(projectRoot)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)

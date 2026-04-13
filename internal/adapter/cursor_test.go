@@ -300,15 +300,13 @@ func TestCursorDetectSkillInvocation_FalseEvenWithSkillLikeName(t *testing.T) {
 // --- InstallHook tests ---
 
 func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -335,15 +333,13 @@ func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
 }
 
 func TestCursorInstallHook_RegistersAllRequiredHookTypes(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -379,9 +375,7 @@ func TestCursorInstallHook_RegistersAllRequiredHookTypes(t *testing.T) {
 }
 
 func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
 		t.Fatalf("failed to create .cursor dir: %v", err)
@@ -404,7 +398,7 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Fatalf("failed to write existing hooks.json: %v", err)
 	}
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -429,15 +423,13 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 }
 
 func TestCursorInstallHook_Idempotent(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 
 	// Install twice
 	if err := adapter.InstallHook(tmpDir); err != nil {
@@ -461,12 +453,10 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 }
 
 func TestCursorInstallHook_CreatesCursorDir(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	// Don't pre-create .cursor dir -- InstallHook should handle it
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -478,9 +468,7 @@ func TestCursorInstallHook_CreatesCursorDir(t *testing.T) {
 }
 
 func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
 		t.Fatalf("failed to create .cursor dir: %v", err)
@@ -500,7 +488,7 @@ func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
 		t.Fatalf("failed to write existing hooks.json: %v", err)
 	}
 
-	adapter := &CursorAdapter{}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}

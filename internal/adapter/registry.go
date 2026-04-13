@@ -11,18 +11,48 @@ import (
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 )
 
+// registryDefaultHomeDir and registryDefaultBinaryPath are applied to
+// all adapters created by NewRegistry. main.go sets BinaryPath at startup;
+// tests may set HomeDir to redirect config file paths to temp directories.
+var (
+	registryDefaultHomeDir    string
+	registryDefaultBinaryPath string
+)
+
+// SetRegistryDefaults sets HomeDir and BinaryPath defaults applied to all
+// adapters created by NewRegistry. Pass empty strings to clear overrides.
+// main.go calls this at startup with the resolved binary path;
+// tests call it to inject a temporary home directory.
+func SetRegistryDefaults(homeDir, binaryPath string) {
+	registryDefaultHomeDir = homeDir
+	registryDefaultBinaryPath = binaryPath
+}
+
+// RegistryBinaryPath returns the current registry default binary path.
+// Used by the init command to display installation hints.
+func RegistryBinaryPath() string {
+	return registryDefaultBinaryPath
+}
+
 // AdapterRegistry holds all registered adapters indexed by name.
 type AdapterRegistry struct {
 	adapters map[string]HookAdapter
 }
 
 // NewRegistry creates a registry pre-populated with all built-in adapters.
-// Currently registers: "claude" -> ClaudeAdapter, "cursor" -> CursorAdapter (stub).
+// Currently registers: "claude" -> ClaudeAdapter, "cursor" -> CursorAdapter.
+// Registry defaults set via SetRegistryDefaults are applied to each adapter.
 func NewRegistry() *AdapterRegistry {
 	return &AdapterRegistry{
 		adapters: map[string]HookAdapter{
-			"claude": &ClaudeAdapter{},
-			"cursor": &CursorAdapter{},
+			"claude": &ClaudeAdapter{
+				HomeDir:    registryDefaultHomeDir,
+				BinaryPath: registryDefaultBinaryPath,
+			},
+			"cursor": &CursorAdapter{
+				HomeDir:    registryDefaultHomeDir,
+				BinaryPath: registryDefaultBinaryPath,
+			},
 		},
 	}
 }

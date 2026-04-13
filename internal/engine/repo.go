@@ -13,6 +13,14 @@ import (
 	"strings"
 )
 
+// Pre-compiled regex patterns for Git remote URL normalization.
+// Compiled once at package init to avoid repeated compilation per call.
+var (
+	sshPattern      = regexp.MustCompile(`git@[^:]+:(.+)`)
+	httpsPattern    = regexp.MustCompile(`https?://[^/]+/(.+)`)
+	sshProtoPattern = regexp.MustCompile(`ssh://[^/]+/(.+)`)
+)
+
 // RepoIdentity represents a normalized Git repository.
 type RepoIdentity struct {
 	// Slug is the normalized org/repo identifier (e.g., "Blue-Bear-Security/blueden").
@@ -66,20 +74,17 @@ func NormalizeRemoteURL(url string) string {
 	url = strings.TrimSuffix(url, ".git")
 
 	// SSH format: git@host:org/repo or git@host-alias:org/repo
-	sshPattern := regexp.MustCompile(`git@[^:]+:(.+)`)
 	if m := sshPattern.FindStringSubmatch(url); len(m) == 2 {
 		return m[1]
 	}
 
 	// HTTPS format: https://[user:pass@]host/org/repo
 	// Extract the last two path components as org/repo
-	httpsPattern := regexp.MustCompile(`https?://[^/]+/(.+)`)
 	if m := httpsPattern.FindStringSubmatch(url); len(m) == 2 {
 		return m[1]
 	}
 
 	// SSH:// format: ssh://git@host/org/repo
-	sshProtoPattern := regexp.MustCompile(`ssh://[^/]+/(.+)`)
 	if m := sshProtoPattern.FindStringSubmatch(url); len(m) == 2 {
 		return m[1]
 	}

@@ -3,8 +3,8 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,22 +45,24 @@ func NewRootCommand() *cobra.Command {
 // First shows a project picker, then loads the selected project's config and skills.
 func tuiRunE(cmd *cobra.Command, args []string) error {
 	for {
-		tui.SwitchRequested = false
-		if err := tuiRunOnce(cmd, args); err != nil {
+		switchRequested, err := tuiRunOnce(cmd, args)
+		if err != nil {
 			return err
 		}
-		if !tui.SwitchRequested {
+		if !switchRequested {
 			return nil
 		}
 	}
 }
 
-func tuiRunOnce(cmd *cobra.Command, args []string) error {
+func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
+	logger := slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelWarn}))
+
 	// 1. Discover all projects on the machine via adapter registry.
 	registry := adapter.NewRegistry()
 	projects, err := registry.ScanAllProjects()
 	if err != nil {
-		return fmt.Errorf("scanning projects: %w", err)
+		return false, fmt.Errorf("scanning projects: %w", err)
 	}
 
 	var projectRoot string
@@ -69,7 +71,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 		// No projects found — fall back to cwd
 		cwd, err := os.Getwd()
 		if err != nil {
-			return fmt.Errorf("getting working directory: %w", err)
+			return false, fmt.Errorf("getting working directory: %w", err)
 		}
 		projectRoot = engine.ResolveProjectRoot(cwd)
 	} else {
@@ -98,7 +100,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 
 		err := form.Run()
 		if err != nil {
-			return err
+			return false, err
 		}
 		projectRoot = selectedPath
 	}
@@ -107,21 +109,31 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	repo := engine.ResolveRepoIdentity(projectRoot)
 	var repoConfigDir string
 	if repo != nil {
-		home, _ := os.UserHomeDir()
-		repoConfigDir = engine.RepoConfigDir(home, repo)
-		os.MkdirAll(repoConfigDir, 0755)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			logger.Warn("failed to get home directory for repo config", "error", err)
+		} else {
+			repoConfigDir = engine.RepoConfigDir(home, repo)
+			if err := os.MkdirAll(repoConfigDir, 0o755); err != nil {
+				logger.Warn("failed to create repo config directory", "path", repoConfigDir, "error", err)
+			}
+		}
 	}
 
 	// Load rules: repo config dir first, then project-level fallback
 	var rules []engine.MatchedRule
 	if repoConfigDir != "" {
-		rules, _ = engine.LoadConfigFromDir(repoConfigDir)
+		rules, err = engine.LoadConfigFromDir(repoConfigDir)
+		if err != nil {
+			logger.Warn("failed to load repo config, trying project config", "error", err)
+			rules = nil
+		}
 	}
 	if len(rules) == 0 {
 		rules, err = engine.LoadConfig(projectRoot)
 	}
 	if err != nil {
-		return fmt.Errorf("loading enforcement config: %w", err)
+		return false, fmt.Errorf("loading enforcement config: %w", err)
 	}
 
 	// Build a Config struct from loaded rules.
@@ -143,7 +155,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	// 3. Load global config for skill paths.
 	globalCfg, err := engine.LoadGlobalConfig(projectRoot)
 	if err != nil {
-		return fmt.Errorf("loading global config: %w", err)
+		return false, fmt.Errorf("loading global config: %w", err)
 	}
 
 	// 4. Resolve skill paths relative to project root.
@@ -159,64 +171,24 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	// 5. Scan skills from configured paths.
 	skills, err := scanner.ScanSkills(skillPaths)
 	if err != nil {
-		return fmt.Errorf("scanning skills: %w", err)
+		return false, fmt.Errorf("scanning skills: %w", err)
 	}
 
 	// 6. Collect loaded skills from all active sessions.
-	loadedSkills := collectLoadedSkills(filepath.Join(projectRoot, ".care-bare", "state"))
+	loadedSkills := state.CollectLoadedSkills(filepath.Join(projectRoot, ".care-bare", "state"))
 
 	// 7. Create TUI model and load event log.
-	model := tui.NewApp(cfg, configPath, skills, loadedSkills, globalCfg)
+	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
-	_, err = p.Run()
-	return err
-}
-
-// collectLoadedSkills reads all session state files and returns skills
-// with their agent information.
-func collectLoadedSkills(stateDir string) map[string]*tui.SkillStatus {
-	loaded := make(map[string]*tui.SkillStatus)
-
-	entries, err := os.ReadDir(stateDir)
+	finalModel, err := p.Run()
 	if err != nil {
-		return loaded
+		return false, err
 	}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(stateDir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var ss state.SessionState
-		if err := json.Unmarshal(data, &ss); err != nil {
-			continue
-		}
-		agent := ss.Agent
-		if agent == "" {
-			agent = "unknown"
-		}
-		for _, skill := range ss.InvokedSkills {
-			if loaded[skill] == nil {
-				loaded[skill] = &tui.SkillStatus{}
-			}
-			found := false
-			for _, a := range loaded[skill].Agents {
-				if a == agent {
-					found = true
-					break
-				}
-			}
-			if !found {
-				loaded[skill].Agents = append(loaded[skill].Agents, agent)
-			}
-		}
+	if app, ok := finalModel.(tui.App); ok {
+		return app.SwitchRequested(), nil
 	}
-
-	return loaded
+	return false, nil
 }
 
 // Execute runs the root command.

@@ -23,17 +23,14 @@ import (
 
 // runInitInDir executes the init command with the working directory set to dir.
 // It captures stdout and stderr and returns them along with any error.
+// It configures the adapter registry to use test-specific HomeDir and BinaryPath
+// on all adapters via adapter.SetRegistryDefaults.
 func runInitInDir(t *testing.T, dir string) (stdout, stderr string, err error) {
 	t.Helper()
 
-	// Set a stable binary path and home dir for hook installation during tests.
-	oldBinPath := adapter.BinaryPath
-	adapter.BinaryPath = "care-bare"
-	t.Cleanup(func() { adapter.BinaryPath = oldBinPath })
-
-	oldHome := adapter.TestHomeDir
-	adapter.TestHomeDir = dir
-	t.Cleanup(func() { adapter.TestHomeDir = oldHome })
+	// Set test overrides for all adapters created by NewRegistry.
+	adapter.SetRegistryDefaults(dir, "care-bare")
+	t.Cleanup(func() { adapter.SetRegistryDefaults("", "") })
 
 	// Change to the target directory so os.Getwd() returns it.
 	origDir, wdErr := os.Getwd()

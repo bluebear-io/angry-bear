@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -466,7 +467,7 @@ func TestLoadConfig(t *testing.T) {
 		// Write malformed JSON
 		dir := filepath.Join(startDir, ".care-bare")
 		mustMkdirAll(t, dir)
-		err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte("{bad json"), 0644)
+		err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte("{bad json"), 0o644)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -904,7 +905,7 @@ func TestShouldBlock(t *testing.T) {
 			if tt.wantReasonHas != "" {
 				if got.Reason == "" {
 					t.Error("expected non-empty Reason")
-				} else if !containsString(got.Reason, tt.wantReasonHas) {
+				} else if !strings.Contains(got.Reason, tt.wantReasonHas) {
 					t.Errorf("Reason %q does not contain %q", got.Reason, tt.wantReasonHas)
 				}
 			}
@@ -919,7 +920,7 @@ func TestShouldBlock(t *testing.T) {
 // mustMkdirAll creates a directory tree, failing the test if it cannot.
 func mustMkdirAll(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("failed to create directory %q: %v", path, err)
 	}
 }
@@ -934,24 +935,9 @@ func writeConfig(t *testing.T, dir string, cfg Config) {
 	if err != nil {
 		t.Fatalf("failed to marshal config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "skill_enforcement.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "skill_enforcement.json"), data, 0o644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
-}
-
-// containsString checks if substr is found within s.
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-// searchString is a simple substring search.
-func searchString(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 // --- MatchedSkills tests ---
@@ -1026,7 +1012,7 @@ func TestMatchedSkills_Deduplicates(t *testing.T) {
 func TestLoadConfigFromDir_LoadsRules(t *testing.T) {
 	dir := t.TempDir()
 	config := `{"version": 1, "tools": [{"tool": "Edit", "path": "**/*.go", "skill": "go-coding", "agent": "*"}]}`
-	if err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte(config), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

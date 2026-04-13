@@ -655,13 +655,13 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	colAgent := 8
 	colTool := 8
 	colSkill := 16
-	pathWidth := width - 75
+	pathWidth := width - 90
 	if pathWidth < 10 {
 		pathWidth = 10
 	}
 
 	// Header
-	title += d.styles.Description.Render(fmt.Sprintf("  %-*s %-13s %-6s %-*s %-*s %-*s %-*s",
+	title += d.styles.Description.Render(fmt.Sprintf("  %-*s %-28s %-6s %-*s %-*s %-*s %-*s",
 		colAct, "ACTION", "PROJECT", "SESS", colAgent, "AGENT", colTool, "TOOL", colSkill, "SKILL", pathWidth, "PATH")) + "\n"
 	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
@@ -784,7 +784,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 			sty = green
 		}
 
-		plainRow := fmt.Sprintf("  %-*s %-13s %-6s %-*s %-*s %-*s %-*s", colAct, act, project, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
+		plainRow := fmt.Sprintf("  %-*s %-28s %-6s %-*s %-*s %-*s %-*s", colAct, act, project, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
 
 		focused := fi == d.logCursor && d.focusPanel == 2
 		if focused {

@@ -228,12 +228,12 @@ func TestMatchPath(t *testing.T) {
 func TestResolveProjectRoot(t *testing.T) {
 	t.Parallel()
 
-	t.Run("finds nearest care-bear directory", func(t *testing.T) {
+	t.Run("finds nearest .git directory", func(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		root := filepath.Join(tmp, "project")
 		sub := filepath.Join(root, "a", "b", "c")
-		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
+		mustMkdirAll(t, filepath.Join(root, ".git"))
 		mustMkdirAll(t, sub)
 
 		got := ResolveProjectRoot(sub)
@@ -262,7 +262,7 @@ func TestResolveProjectRoot(t *testing.T) {
 		root := filepath.Join(tmp, "project")
 		sub := filepath.Join(root, "a", "b")
 		mustMkdirAll(t, filepath.Join(root, ".git"))
-		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
+		mustMkdirAll(t, filepath.Join(root, ".git"))
 		mustMkdirAll(t, sub)
 
 		got := ResolveProjectRoot(sub)
@@ -288,7 +288,7 @@ func TestResolveProjectRoot(t *testing.T) {
 		tmp := t.TempDir()
 		root := filepath.Join(tmp, "project")
 		deep := filepath.Join(root, "a", "b", "c", "d", "e")
-		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
+		mustMkdirAll(t, filepath.Join(root, ".git"))
 		mustMkdirAll(t, deep)
 
 		got := ResolveProjectRoot(deep)

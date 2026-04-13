@@ -1,6 +1,6 @@
 # care-bear — How It Works
 
-This document explains the complete flow: how hooks intercept agent actions, how enforcement decisions are made, how state is tracked per session, and how the TUI provides observability.
+This document explains the complete internals: enforcement flow, file management, state lifecycle, real-time updates, and hook installation.
 
 ## The Big Picture
 
@@ -15,17 +15,56 @@ care-bear hook (PreToolUse)
     +-- 1. Parse agent-specific JSON via adapter
     +-- 2. Detect skill invocations → record in session state
     +-- 3. Load enforcement rules from config
-    +-- 4. Load session state (which skills are loaded)
+    +-- 4. Load session state (which skills are loaded, check TTL)
     +-- 5. Evaluate: ShouldBlock(rules, tool, path, agent, skills)
     |
     +-- ALLOW → agent proceeds normally
-    +-- BLOCK → agent shows "Load skill by running: /skill-name"
+    +-- BLOCK → "Load skill by running: /skill-name"
                 Agent loads the skill, retries, succeeds
 ```
 
+## Data Layout
+
+ALL care-bear data lives under `~/.care-bear/`. Nothing is stored in project directories.
+
+```
+~/.care-bear/
+│
+├── config.json                                    # Global config defaults
+├── events.log                                     # Global enforcement event log (append-only)
+│
+└── repos/
+    ├── 5ce4353d-Blue-Bear-Security-blueden/        # Per-repo directory
+    │   ├── skill_enforcement.json                  #   Enforcement rules
+    │   ├── config.json                             #   Per-repo config overrides
+    │   ├── preferences.json                        #   Preferred checkout path
+    │   └── state/                                  #   Session state
+    │       ├── {session-id}.json                   #     Loaded skills + timestamps
+    │       ├── {session-id}.lock                   #     Advisory lock file
+    │       └── .last-prune                         #     Timestamp of last prune run
+    │
+    └── bb1bf16d-Blue-Bear-Security-care-bear/      # Another repo
+        └── ...
+```
+
+Directory name format: `{hash}-{slug}` where hash = first 8 chars of SHA-256(`org/repo`).
+
+### File Descriptions
+
+| File | Created when | Updated when | Read by |
+|------|-------------|--------------|---------|
+| `~/.care-bear/config.json` | User runs TUI settings (global level) | Settings page saves | Hook (for skill_ttl, state_ttl), all commands |
+| `~/.care-bear/events.log` | First enforcement event | Every BLOCK, ALLOW, or SKILL-LOAD | TUI dashboard (read + fsnotify watch) |
+| `repos/{hash}/skill_enforcement.json` | First `care-bear add` for this repo | `add`, `rm`, TUI rule editor | Hook (every invocation), `rules`, `status`, `doctor` |
+| `repos/{hash}/config.json` | TUI settings (project level) | Settings page saves | Hook, TUI (overrides global defaults) |
+| `repos/{hash}/preferences.json` | User picks a checkout path | TUI settings, project picker | TUI project picker, settings |
+| `repos/{hash}/state/{session}.json` | First skill load or enforcement in a session | Every skill invocation (timestamp refresh) | Hook (every invocation to check loaded skills) |
+| `repos/{hash}/state/{session}.lock` | Alongside state file | Held during read/write | State manager (concurrency safety) |
+| `repos/{hash}/state/.last-prune` | First prune run | After each prune (at most hourly) | Prune throttle check |
+
 ## Enforcement Rules
 
-Rules are defined in `skill_enforcement.json`:
+Rules in `skill_enforcement.json`:
 
 ```json
 {
@@ -36,124 +75,172 @@ Rules are defined in `skill_enforcement.json`:
 }
 ```
 
-Each rule says: "Before using `tool` on files matching `path` for `agent`, the skill `skill` must be loaded in the current session."
+Each rule: "Before using `tool` on files matching `path` for `agent`, skill `skill` must be loaded."
 
-### Rule Matching
+### Rule Matching (pure function, no I/O)
 
-`ShouldBlock()` in `internal/engine/engine.go` is a **pure function** — no side effects, no I/O:
+`ShouldBlock()` in `internal/engine/engine.go`:
 
-1. For each rule, check if `tool` matches (exact or `*` wildcard)
-2. Check if `path` matches the file being accessed (doublestar glob)
-3. Check if `agent` matches (`claude`, `cursor`, or `*`)
-4. If all three match, check if `skill` is in the session's loaded skills
-5. If any matched rule's skill is NOT loaded → **BLOCK**
+1. For each rule, check `tool` matches (exact or `*` wildcard)
+2. Check `path` matches the file (doublestar glob)
+3. Check `agent` matches (`claude`, `cursor`, or `*`)
+4. If all match, check `skill` in session's loaded skills
+5. Any matched rule's skill NOT loaded → **BLOCK**
 
-### Config Locations (priority order)
+## Session State Lifecycle
 
-1. **Repo-keyed config**: `~/.care-bear/repos/{hash}-{slug}/skill_enforcement.json` — per-repo rules stored outside the project directory
-2. **Project-level**: `{project}/.care-bear/skill_enforcement.json` — checked into the repo
-3. **User-level**: `~/.care-bear/skill_enforcement.json` — personal defaults
+### Skill Loading
 
-## Session State
+When an agent loads a skill:
+1. **Claude Code**: Agent runs `/skill-name` → hook sees `tool_name == "Skill"` → records skill + timestamp
+2. **Cursor**: Agent reads `.claude/skills/skill-name/SKILL.md` → hook detects the path pattern → records skill + timestamp
 
-State is tracked per-session using JSON files on disk:
-
-```
-{project}/.care-bear/state/
-  {session-id}.json     # Session state
-  {session-id}.lock     # Advisory lock for concurrency safety
-```
-
-Each state file contains:
-
-```json
-{
-  "session_id": "abc123",
-  "agent": "claude",
-  "created_at": "2024-01-01T00:00:00Z",
-  "invoked_skills": ["go-standards", "linear"],
-  "skill_timestamps": {
-    "go-standards": "2024-01-01T10:30:00Z",
-    "linear": "2024-01-01T10:35:00Z"
-  }
-}
-```
+Recording: `RecordSkillWithAgent(sessionID, skillName, agent)` in `internal/state/manager.go`
+- Creates `{session}.json` if it doesn't exist
+- Appends skill to `invoked_skills` list (idempotent)
+- Updates `skill_timestamps[skillName]` to current time (refreshes on re-load)
+- Uses exclusive file lock + atomic write
 
 ### Skill TTL
 
-Skills can expire after a configurable time (set in `config.json`):
-- `skill_ttl_minutes: 0` — no expiry (default, backward compatible)
-- `skill_ttl_minutes: 60` — skills expire after 1 hour, must be re-loaded
+`config.json` → `skill_ttl_minutes` (default: 0 = no expiry)
 
-When checking if a skill is loaded, `GetFreshSkills()` compares each skill's timestamp against the TTL. Expired skills are treated as not loaded.
+When checking loaded skills, `GetFreshSkills(sessionID, ttl)`:
+- If `ttl == 0`: return all skills (no expiry)
+- Otherwise: compare each skill's timestamp against TTL, exclude expired ones
+- Skills without timestamps (old state files) treated as fresh (backward compat)
 
 ### Concurrency Safety
 
-Multiple agent sessions may run simultaneously. State files use:
-- **Advisory file locks** (`gofrs/flock`) — exclusive lock for writes, shared lock for reads
-- **Atomic writes** (`natefinch/atomic`) — no partial/corrupt state files on crash
+Multiple agent sessions may run simultaneously:
+- **Advisory file locks** (`gofrs/flock`) — exclusive for writes, shared for reads
+- **Atomic writes** (`natefinch/atomic`) — no partial/corrupt files on crash
+- Lock files: `{session}.lock` alongside `{session}.json`
 
 ### State Pruning
 
-Old session state files are automatically cleaned up:
-- `state_ttl_hours` (default: 24) controls how long state files are kept
-- `PruneIfDue()` runs at most once per hour during hook invocations
-- Uses file modification time (mtime) — no need to parse JSON for expiry checks
+Runs automatically during hook invocations (throttled to once per hour):
+- `state_ttl_hours` (default: 24) controls file retention
+- Uses file modification time (mtime) — no JSON parsing needed
+- `.last-prune` file tracks when pruning last ran
+- Explicit: `care-bear clean [--all] [--session <id>]`
 
-## Agent Adapters
+## Event Log
 
-Each AI agent has its own hook format. Adapters normalize these into a common `HookInput`:
-
-### Claude Code
-
-- **Hook type**: PreToolUse (configured in `~/.claude/settings.json`)
-- **Input format**: JSON with `session_id`, `tool_name`, `tool_input.file_path`, `cwd`
-- **Allow**: Exit 0, empty stdout
-- **Deny**: Exit 0, JSON with `hookSpecificOutput.permissionDecision: "deny"`
-- **Skill detection**: Native `Skill` tool → `tool_name == "Skill"`, extract `tool_input.skill`
-
-### Cursor
-
-- **Hook type**: preToolUse (configured in `~/.cursor/hooks.json`)
-- **Input format**: JSON with `conversation_id`, `tool_name`, `file_path`, `workspace_roots`
-- **Allow**: Exit 0, `{"continue": true}`
-- **Deny**: Exit 2, `{"continue": false, "userMessage": "..."}`
-- **Skill detection**: No native Skill tool. Auto-detect SKILL.md file reads instead.
-- **Tool name normalization**: Maps `edit_file` → `Edit`, `write_file` → `Write`, etc.
-
-### Adding a New Agent
-
-1. Create `internal/adapter/myagent.go` implementing `HookAdapter`
-2. Register in `internal/adapter/registry.go`
-3. That's it — engine, TUI, CLI, state all work automatically
-
-## Project Identity
-
-Projects are identified by their Git repository, not their local directory:
-
-- `git remote get-url origin` → normalize SSH/HTTPS/token URLs → `org/repo` slug
-- Same repo checked out in multiple directories is treated as one project
-- Config stored at `~/.care-bear/repos/{hash}-{slug}/` — keyed by repo identity
-- Users can set a preferred checkout path in `preferences.json`
-
-## Global Event Log
-
-All enforcement decisions are logged to `~/.care-bear/events.log`:
+`~/.care-bear/events.log` — append-only, one line per event:
 
 ```
 2024-01-01T10:30:00Z | Blue-Bear-Security/blueden | claude | abc12 | Edit | services/bff/handler.py | BLOCK | backend-python-standards
 ```
 
-Columns: timestamp, project (repo slug), agent, session (5 chars), tool, path, action, skill(s)
+Columns: `timestamp | project | agent | session(5ch) | tool | path | action | skills`
 
-The TUI dashboard shows this log with:
-- Real-time updates via fsnotify
-- Multi-column filtering (action, project, session, agent, tool, skill)
-- Color coding: red = BLOCK, green = ALLOW, cyan = SKILL-LOAD
+### Written by
+- Hook: on every BLOCK or ALLOW that matched rules, and every SKILL-LOAD
+- Format: `logEvent()` and `logSkillEvent()` in `internal/cli/hook.go`
+
+### Read by
+- TUI dashboard: `LoadEventLog()` reads the file, filters to last 7 days
+- Only events with skill associations are shown (noise-free)
+
+### Real-time Updates (fsnotify)
+
+The TUI watches two paths for live updates:
+
+1. **`~/.care-bear/events.log`** — `watchEventsLog()` in `app.go`
+   - On file write/create → sends `eventsUpdatedMsg` → dashboard reloads log + auto-scrolls to latest
+   - Watcher restarts after each event (single-shot pattern)
+
+2. **`repos/{hash}/state/`** — `watchStateDir()` in `app.go`
+   - On `.json` file write/create → sends `loadedSkillsUpdatedMsg` → dashboard updates skill badges
+   - Shows which skills are loaded per agent (claude/cursor badges)
+
+Both watchers use `fsnotify` and restart after each event to avoid goroutine leaks.
+
+## Hook Installation
+
+### Auto-install (PersistentPreRunE)
+
+Every CLI command (except `hook`, `completion`, `version`, `enable`, `disable`) runs `EnsureHooksInstalled()` before executing:
+
+1. For each registered adapter (claude, cursor):
+   - Check if `~/.{agent}/` exists (agent present on machine)
+   - Check if hook config already contains "care-bear hook" (already installed)
+   - If not installed: call `adapter.InstallHook("")`
+2. Print `✓ Hooks installed for claude` on first install (silent if already installed)
+
+### Claude Code hooks
+
+Written to `~/.claude/settings.json` → `hooks.PreToolUse[]`:
+```json
+{
+  "matcher": "*",
+  "hooks": [{"type": "command", "command": "/path/to/care-bear hook --agent claude"}]
+}
+```
+Uses absolute binary path from `os.Executable()` for reliability.
+
+### Cursor hooks
+
+Written to `~/.cursor/hooks.json` → `hooks.{hookType}[]`:
+- Prepended to: `preToolUse`, `beforeFileEdit`, `beforeShellExecution`, `beforeReadFile`, `beforeMCPExecution`
+- Format: `{"command": "/path/to/care-bear hook --agent cursor"}`
+- Cursor blocks on exit code 2 (unlike Claude which reads stdout JSON)
+
+### enable / disable commands
+
+- `care-bear enable` — calls `InstallHook()` on all detected agents
+- `care-bear disable` — calls `UninstallHook()` on all detected agents
+  - Claude: filters care-bear entries from `settings.json` `PreToolUse[]`
+  - Cursor: filters care-bear entries from all hook type arrays in `hooks.json`
+  - Preserves all non-care-bear hooks
+
+## Project Discovery
+
+### TUI (rescans every startup)
+
+1. **Claude Code**: Scans `~/.claude/projects/` — encoded directory names
+2. **Cursor**: Scans `~/.cursor/projects/` — same encoding
+
+For each directory:
+1. Try `sessions-index.json` for real project path (most reliable)
+2. Fall back to greedy path decoding from directory name
+3. Resolve Git identity → `org/repo` slug
+4. Merge: same repo from multiple agents → one project entry
+
+### CLI commands
+
+`add`, `rules`, `status`, `doctor` use current directory:
+1. Walk up from `os.Getwd()` looking for `.git/` → project root
+2. `git remote get-url origin` → normalize → repo identity
+3. Config at `~/.care-bear/repos/{hash}-{slug}/`
+
+## Agent Adapters
+
+Each agent has its own hook format. The `HookAdapter` interface normalizes everything:
+
+### Claude Code
+- **Hook config**: `~/.claude/settings.json`
+- **Allow**: Exit 0, empty stdout
+- **Deny**: Exit 0, JSON with `hookSpecificOutput.permissionDecision: "deny"`
+- **Skill detection**: `tool_name == "Skill"` → extract `tool_input.skill`
+
+### Cursor
+- **Hook config**: `~/.cursor/hooks.json`
+- **Allow**: Exit 0, `{"continue": true}`
+- **Deny**: Exit 2, `{"continue": false, "userMessage": "..."}`
+- **Skill detection**: Auto-detect SKILL.md file reads (no native Skill tool)
+- **Tool normalization**: `edit_file` → `Edit`, `write_file` → `Write`, etc.
+
+### Adding a New Agent
+
+1. Implement `HookAdapter` interface in `internal/adapter/myagent.go`
+2. Register in `internal/adapter/registry.go`
+3. Everything else works automatically
 
 ## TUI Architecture
 
-The TUI uses Charmbracelet Bubble Tea with a hierarchy of models:
+Charmbracelet Bubble Tea with shared components:
 
 ```
 App (root model)
@@ -163,4 +250,6 @@ App (root model)
   └── Settings (global/project config editor)
 ```
 
-All scrollable lists use the shared `ScrollView` component (`internal/tui/scroll.go`) — one implementation for cursor tracking, viewport follow, page up/down, and jump to top/bottom.
+- **ScrollView** (`scroll.go`) — shared by all scrollable lists
+- **ParsedEvent** (`event_parser.go`) — shared event log parser
+- **Constants** (`constants.go`) — shared tool/agent/ignore lists

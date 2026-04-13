@@ -250,7 +250,7 @@ func checkHookInstallation(projectRoot string) []checkResult {
 func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapter) checkResult {
 	name := fmt.Sprintf("Hook installed: %s (%s)", agentName, hookAdapter.ConfigPath())
 
-	configPath := filepath.Join(projectRoot, hookAdapter.ConfigPath())
+	configPath := hookAdapter.GlobalConfigPath()
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {

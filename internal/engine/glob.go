@@ -76,30 +76,21 @@ func MatchPath(pattern, filePath string) (bool, error) {
 }
 
 // ResolveProjectRoot finds the project root directory by walking up from startDir.
+// Uses .git/ directory as the project root marker. All care-bear data lives
+// under ~/.care-bear/, not in project directories.
+//
 // Resolution order:
-//  1. Nearest directory containing .care-bear/
-//  2. Nearest directory containing .git/
-//  3. startDir itself (fallback)
+//  1. Nearest directory containing .git/
+//  2. startDir itself (fallback)
 //
 // The walk stops at the filesystem root (when parent == current).
 func ResolveProjectRoot(startDir string) string {
-	// Record the first directory containing .git/ as a fallback.
-	gitRoot := ""
-
 	current := startDir
 	for {
-		// Check for .care-bear/ directory -- highest priority, return immediately.
-		careBareDir := filepath.Join(current, ".care-bear")
-		if info, err := os.Stat(careBareDir); err == nil && info.IsDir() {
-			return current
-		}
-
-		// Check for .git/ directory -- record as fallback.
+		// Check for .git/ directory — the project root marker.
 		gitDir := filepath.Join(current, ".git")
 		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
-			if gitRoot == "" {
-				gitRoot = current
-			}
+			return current
 		}
 
 		// Move to parent directory.
@@ -111,11 +102,6 @@ func ResolveProjectRoot(startDir string) string {
 		current = parent
 	}
 
-	// Fall back to .git/ parent if found.
-	if gitRoot != "" {
-		return gitRoot
-	}
-
-	// Final fallback: return the original startDir.
+	// No .git/ found — fall back to startDir.
 	return startDir
 }

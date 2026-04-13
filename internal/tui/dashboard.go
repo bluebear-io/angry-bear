@@ -359,8 +359,10 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, nil
 
 		case "esc":
-			if d.focusPanel == 2 && d.filterMode {
+			if d.focusPanel == 2 {
 				d.filterMode = false
+				d.logFilters = make(map[filterCol]string)
+				d.logCursor = 0
 				return d, nil
 			}
 

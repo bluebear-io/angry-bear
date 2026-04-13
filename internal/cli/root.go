@@ -37,6 +37,9 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.AddCommand(NewCleanCommand())
 	rootCmd.AddCommand(NewDoctorCommand())
 	rootCmd.AddCommand(NewVersionCommand())
+	rootCmd.AddCommand(NewAddCommand())
+	rootCmd.AddCommand(NewRulesCommand())
+	rootCmd.AddCommand(NewRmCommand())
 
 	return rootCmd
 }
@@ -64,6 +67,9 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("scanning projects: %w", err)
 	}
+
+	// Show logo
+	printLogo()
 
 	var projectRoot string
 	var selectedProject *adapter.MergedProject
@@ -277,6 +283,37 @@ func resolveCheckoutPath(selectedPath string, project *adapter.MergedProject, lo
 	}
 
 	return chosenPath, nil
+}
+
+// printLogo displays the care-bare ASCII bear logo before the project picker.
+func printLogo() {
+	blue := "\033[38;5;69m"
+	heart := "\033[38;5;204m"
+	cyan := "\033[38;5;87m"
+	dim := "\033[38;5;245m"
+	bold := "\033[1m"
+	reset := "\033[0m"
+
+	bear := []string{
+		blue + "         ,---.   ,---." + reset,
+		blue + "        / .-. \\ / .-. \\" + reset,
+		blue + "        | | | | | | | |" + reset,
+		blue + "        \\ `-' / \\ `-' /" + reset,
+		blue + "    .----`---'---`---'----." + reset,
+		blue + "   /                       \\" + reset,
+		blue + "  |    " + bold + "o" + reset + blue + "             " + bold + "o" + reset + blue + "    |" + reset,
+		blue + "  |          ___          |" + reset,
+		blue + "  |         (" + heart + " \u2665 " + blue + ")         |" + reset,
+		blue + "   \\         ---         /" + reset,
+		blue + "    `-------.___.-------'" + reset,
+	}
+
+	for _, line := range bear {
+		fmt.Fprintln(os.Stderr, line)
+	}
+	fmt.Fprintf(os.Stderr, "\n    %s\u2665%s %s%scare-bare%s  %sby Blue Bear Security%s\n", heart, reset, bold, cyan, reset, dim, reset)
+	fmt.Fprintf(os.Stderr, "    %sSkill enforcement for AI coding agents%s\n", dim, reset)
+	fmt.Fprintf(os.Stderr, "    %s%s%s\n\n", dim, version, reset)
 }
 
 // Execute runs the root command.

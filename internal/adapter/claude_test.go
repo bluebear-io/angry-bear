@@ -385,11 +385,792 @@ func TestClaudeInstallHook_CreatesClaudeDir(t *testing.T) {
 	}
 }
 
+// --- InstallHook JSON structure tests ---
+
+func TestClaudeInstallHook_CorrectJSONStructure(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bare"}
+	if err := adapter.InstallHook(tmpDir); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmpDir, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read settings.json: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is invalid JSON: %v", err)
+	}
+
+	// Navigate to hooks -> PreToolUse -> [0]
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		t.Fatal("missing 'hooks' key in settings")
+	}
+	preToolUse, ok := hooks["PreToolUse"].([]any)
+	if !ok {
+		t.Fatal("missing 'PreToolUse' key in hooks")
+	}
+	if len(preToolUse) != 1 {
+		t.Fatalf("PreToolUse has %d entries, want 1", len(preToolUse))
+	}
+
+	entry, ok := preToolUse[0].(map[string]any)
+	if !ok {
+		t.Fatal("PreToolUse[0] is not a map")
+	}
+
+	// Verify matcher is "*"
+	if entry["matcher"] != "*" {
+		t.Errorf("matcher = %v, want %q", entry["matcher"], "*")
+	}
+
+	// Verify hooks array inside the entry
+	hooksList, ok := entry["hooks"].([]any)
+	if !ok {
+		t.Fatal("entry missing 'hooks' array")
+	}
+	if len(hooksList) != 1 {
+		t.Fatalf("hooks array has %d entries, want 1", len(hooksList))
+	}
+
+	hookEntry, ok := hooksList[0].(map[string]any)
+	if !ok {
+		t.Fatal("hooks[0] is not a map")
+	}
+	if hookEntry["type"] != "command" {
+		t.Errorf("type = %v, want %q", hookEntry["type"], "command")
+	}
+	if hookEntry["command"] != "/usr/local/bin/care-bare hook --agent claude" {
+		t.Errorf("command = %v, want %q", hookEntry["command"], "/usr/local/bin/care-bare hook --agent claude")
+	}
+}
+
+func TestClaudeInstallHook_MalformedExistingJSON(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	// Write malformed JSON
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte("{not valid json!"), 0o644); err != nil {
+		t.Fatalf("failed to write malformed settings: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	err := adapter.InstallHook(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "parsing existing settings.json") {
+		t.Errorf("error = %q, want it to mention parsing failure", err.Error())
+	}
+}
+
+func TestClaudeInstallHook_TrailingNewline(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	if err := adapter.InstallHook(tmpDir); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("failed to read settings.json: %v", err)
+	}
+
+	if !strings.HasSuffix(string(data), "\n") {
+		t.Error("settings.json does not end with trailing newline")
+	}
+}
+
+// --- GlobalConfigPath tests ---
+
+func TestClaudeGlobalConfigPath_WithHomeDir(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{HomeDir: "/custom/home"}
+	got := adapter.GlobalConfigPath()
+	want := filepath.Join("/custom/home", ".claude", "settings.json")
+	if got != want {
+		t.Errorf("GlobalConfigPath() = %q, want %q", got, want)
+	}
+}
+
+// --- ScanProjects tests ---
+
+func TestClaudeScanProjects_EmptyProjectsDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create the projects dir but leave it empty
+	projectsDir := filepath.Join(tmpDir, ".claude", "projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("failed to create projects dir: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("got %d projects, want 0", len(projects))
+	}
+}
+
+func TestClaudeScanProjects_MissingProjectsDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// Don't create .claude/projects/ at all
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if projects != nil {
+		t.Errorf("got %v, want nil for missing projects dir", projects)
+	}
+}
+
+func TestClaudeScanProjects_WithSessionsIndex(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a real project directory that ScanProjects can discover
+	projectPath := filepath.Join(tmpDir, "myproject")
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Create encoded project dir under .claude/projects/
+	encodedDir := filepath.Join(tmpDir, ".claude", "projects", "encoded-project")
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("failed to create encoded dir: %v", err)
+	}
+
+	// Write sessions-index.json pointing to the real project
+	indexJSON := `{"entries":[{"projectPath":"` + projectPath + `"}]}`
+	indexPath := filepath.Join(encodedDir, "sessions-index.json")
+	if err := os.WriteFile(indexPath, []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("failed to write sessions-index.json: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("got %d projects, want 1", len(projects))
+	}
+	if projects[0].Path != projectPath {
+		t.Errorf("Path = %q, want %q", projects[0].Path, projectPath)
+	}
+	if projects[0].Agent != "claude" {
+		t.Errorf("Agent = %q, want %q", projects[0].Agent, "claude")
+	}
+	if projects[0].Name != "myproject" {
+		t.Errorf("Name = %q, want %q", projects[0].Name, "myproject")
+	}
+	if projects[0].Encoded != "encoded-project" {
+		t.Errorf("Encoded = %q, want %q", projects[0].Encoded, "encoded-project")
+	}
+}
+
+func TestClaudeScanProjects_SkipsNonexistentProjectPaths(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create an encoded project dir with sessions-index pointing to a nonexistent path
+	encodedDir := filepath.Join(tmpDir, ".claude", "projects", "gone-project")
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("failed to create encoded dir: %v", err)
+	}
+
+	indexJSON := `{"entries":[{"projectPath":"/nonexistent/path/that/does/not/exist"}]}`
+	if err := os.WriteFile(filepath.Join(encodedDir, "sessions-index.json"), []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("failed to write sessions-index.json: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("got %d projects, want 0 (nonexistent path should be skipped)", len(projects))
+	}
+}
+
+func TestClaudeScanProjects_DeduplicatesSamePath(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a real project directory
+	projectPath := filepath.Join(tmpDir, "myproject")
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Create two encoded dirs both pointing to the same project
+	for _, name := range []string{"encoded-a", "encoded-b"} {
+		encodedDir := filepath.Join(tmpDir, ".claude", "projects", name)
+		if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+			t.Fatalf("failed to create encoded dir: %v", err)
+		}
+		indexJSON := `{"entries":[{"projectPath":"` + projectPath + `"}]}`
+		if err := os.WriteFile(filepath.Join(encodedDir, "sessions-index.json"), []byte(indexJSON), 0o644); err != nil {
+			t.Fatalf("failed to write sessions-index.json: %v", err)
+		}
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Errorf("got %d projects, want 1 (duplicates should be merged)", len(projects))
+	}
+}
+
+func TestClaudeScanProjects_GreedyDecodeWithoutIndex(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a real project directory
+	projectPath := filepath.Join(tmpDir, "myproject")
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Create an encoded project dir WITHOUT sessions-index.json.
+	// The scanner should fall back to greedy decode.
+	// Encoded name: all path components joined by "-", leading "-"
+	pathWithoutSlash := projectPath[1:] // strip leading "/"
+	encodedName := "-" + strings.ReplaceAll(pathWithoutSlash, "/", "-")
+	encodedDir := filepath.Join(tmpDir, ".claude", "projects", encodedName)
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("failed to create encoded dir: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("got %d projects, want 1 (greedy decode should find it)", len(projects))
+	}
+	if projects[0].Path != projectPath {
+		t.Errorf("Path = %q, want %q", projects[0].Path, projectPath)
+	}
+}
+
+func TestClaudeScanProjects_SkipsNonDirEntries(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create the projects dir with a file (not a directory)
+	projectsDir := filepath.Join(tmpDir, ".claude", "projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("failed to create projects dir: %v", err)
+	}
+	// Create a regular file that should be ignored
+	if err := os.WriteFile(filepath.Join(projectsDir, "not-a-dir.txt"), []byte("ignored"), 0o644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("got %d projects, want 0 (files should be skipped)", len(projects))
+	}
+}
+
+// --- DetectSkillInvocation edge cases ---
+
+func TestClaudeDetectSkillInvocation_MissingToolInput(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+	input := &HookInput{
+		Agent:    "claude",
+		ToolName: "Skill",
+		RawInput: map[string]any{
+			// No tool_input key at all
+		},
+	}
+
+	skillName, isSkill := adapter.DetectSkillInvocation(input)
+	if isSkill {
+		t.Fatal("expected isSkill=false when tool_input is missing")
+	}
+	if skillName != "" {
+		t.Errorf("skillName = %q, want empty", skillName)
+	}
+}
+
+func TestClaudeDetectSkillInvocation_MissingSkillField(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+	input := &HookInput{
+		Agent:    "claude",
+		ToolName: "Skill",
+		RawInput: map[string]any{
+			"tool_input": map[string]any{
+				// tool_input present but no "skill" key
+				"args": "some-args",
+			},
+		},
+	}
+
+	skillName, isSkill := adapter.DetectSkillInvocation(input)
+	if isSkill {
+		t.Fatal("expected isSkill=false when skill field is missing from tool_input")
+	}
+	if skillName != "" {
+		t.Errorf("skillName = %q, want empty", skillName)
+	}
+}
+
+func TestClaudeDetectSkillInvocation_SkillFieldIsNotString(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+	input := &HookInput{
+		Agent:    "claude",
+		ToolName: "Skill",
+		RawInput: map[string]any{
+			"tool_input": map[string]any{
+				"skill": 42, // not a string
+			},
+		},
+	}
+
+	skillName, isSkill := adapter.DetectSkillInvocation(input)
+	if isSkill {
+		t.Fatal("expected isSkill=false when skill field is not a string")
+	}
+	if skillName != "" {
+		t.Errorf("skillName = %q, want empty", skillName)
+	}
+}
+
+func TestClaudeDetectSkillInvocation_ToolInputIsNotMap(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+	input := &HookInput{
+		Agent:    "claude",
+		ToolName: "Skill",
+		RawInput: map[string]any{
+			"tool_input": "not a map",
+		},
+	}
+
+	skillName, isSkill := adapter.DetectSkillInvocation(input)
+	if isSkill {
+		t.Fatal("expected isSkill=false when tool_input is not a map")
+	}
+	if skillName != "" {
+		t.Errorf("skillName = %q, want empty", skillName)
+	}
+}
+
+// --- ParseInput edge cases ---
+
+func TestClaudeParseInput_GrepPathField(t *testing.T) {
+	t.Parallel()
+	// Grep/Glob use "path" instead of "file_path"
+	jsonStr := `{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"Grep","tool_input":{"path":"src/","pattern":"TODO"}}`
+	adapter := &ClaudeAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.FilePath != "src/" {
+		t.Errorf("FilePath = %q, want %q (should extract from tool_input.path)", input.FilePath, "src/")
+	}
+}
+
+func TestClaudeParseInput_EmptyJSON(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.SessionID != "" {
+		t.Errorf("SessionID = %q, want empty", input.SessionID)
+	}
+	if input.ToolName != "" {
+		t.Errorf("ToolName = %q, want empty", input.ToolName)
+	}
+	if input.Agent != "claude" {
+		t.Errorf("Agent = %q, want %q", input.Agent, "claude")
+	}
+}
+
+// --- resolveCareBareCommand tests ---
+
+func TestResolveCareBareCommand_WithExplicitPath(t *testing.T) {
+	t.Parallel()
+	result := resolveCareBareCommand("/explicit/path/care-bare")
+	if result != "/explicit/path/care-bare" {
+		t.Errorf("resolveCareBareCommand = %q, want %q", result, "/explicit/path/care-bare")
+	}
+}
+
+func TestResolveCareBareCommand_EmptyFallsBackToExecutable(t *testing.T) {
+	t.Parallel()
+	// When empty string is passed, it should resolve to os.Executable or "care-bare"
+	result := resolveCareBareCommand("")
+	if result == "" {
+		t.Error("resolveCareBareCommand returned empty string")
+	}
+	// Should return either an absolute path or "care-bare" fallback
+	if result != "care-bare" && !filepath.IsAbs(result) {
+		t.Errorf("resolveCareBareCommand = %q, expected absolute path or 'care-bare'", result)
+	}
+}
+
+// --- readProjectPathFromIndex tests ---
+
+func TestReadProjectPathFromIndex_ValidIndex(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "sessions-index.json")
+
+	indexJSON := `{"entries":[{"projectPath":"/home/user/myproject","sessionId":"s1"}]}`
+	if err := os.WriteFile(indexPath, []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("failed to write index: %v", err)
+	}
+
+	got := readProjectPathFromIndex(indexPath)
+	if got != "/home/user/myproject" {
+		t.Errorf("readProjectPathFromIndex = %q, want %q", got, "/home/user/myproject")
+	}
+}
+
+func TestReadProjectPathFromIndex_MissingFile(t *testing.T) {
+	t.Parallel()
+	got := readProjectPathFromIndex("/nonexistent/sessions-index.json")
+	if got != "" {
+		t.Errorf("readProjectPathFromIndex = %q, want empty for missing file", got)
+	}
+}
+
+func TestReadProjectPathFromIndex_MalformedJSON(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "sessions-index.json")
+	if err := os.WriteFile(indexPath, []byte("{bad json"), 0o644); err != nil {
+		t.Fatalf("failed to write index: %v", err)
+	}
+
+	got := readProjectPathFromIndex(indexPath)
+	if got != "" {
+		t.Errorf("readProjectPathFromIndex = %q, want empty for malformed JSON", got)
+	}
+}
+
+func TestReadProjectPathFromIndex_EmptyEntries(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "sessions-index.json")
+	if err := os.WriteFile(indexPath, []byte(`{"entries":[]}`), 0o644); err != nil {
+		t.Fatalf("failed to write index: %v", err)
+	}
+
+	got := readProjectPathFromIndex(indexPath)
+	if got != "" {
+		t.Errorf("readProjectPathFromIndex = %q, want empty for no entries", got)
+	}
+}
+
+func TestReadProjectPathFromIndex_EmptyProjectPath(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "sessions-index.json")
+	if err := os.WriteFile(indexPath, []byte(`{"entries":[{"projectPath":""}]}`), 0o644); err != nil {
+		t.Fatalf("failed to write index: %v", err)
+	}
+
+	got := readProjectPathFromIndex(indexPath)
+	if got != "" {
+		t.Errorf("readProjectPathFromIndex = %q, want empty for empty projectPath", got)
+	}
+}
+
+func TestReadProjectPathFromIndex_MultipleEntries_ReturnsFirst(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	indexPath := filepath.Join(tmpDir, "sessions-index.json")
+	indexJSON := `{"entries":[{"projectPath":""},{"projectPath":"/second/path"}]}`
+	if err := os.WriteFile(indexPath, []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("failed to write index: %v", err)
+	}
+
+	got := readProjectPathFromIndex(indexPath)
+	if got != "/second/path" {
+		t.Errorf("readProjectPathFromIndex = %q, want %q (should skip empty, return first non-empty)", got, "/second/path")
+	}
+}
+
+// --- careBareHookExists tests ---
+
+func TestCareBareHookExists_EmptyArray(t *testing.T) {
+	t.Parallel()
+	if careBareHookExists(nil) {
+		t.Error("expected false for nil array")
+	}
+	if careBareHookExists([]any{}) {
+		t.Error("expected false for empty array")
+	}
+}
+
+func TestCareBareHookExists_MalformedEntries(t *testing.T) {
+	t.Parallel()
+	// Array with non-map entries -- should not panic
+	entries := []any{
+		"a string, not a map",
+		42,
+		nil,
+	}
+	if careBareHookExists(entries) {
+		t.Error("expected false for array with non-map entries")
+	}
+}
+
+func TestCareBareHookExists_EntryWithoutHooksList(t *testing.T) {
+	t.Parallel()
+	entries := []any{
+		map[string]any{
+			"matcher": "*",
+			// "hooks" key missing
+		},
+	}
+	if careBareHookExists(entries) {
+		t.Error("expected false when entry has no hooks list")
+	}
+}
+
+func TestCareBareHookExists_HooksListWithNonMapEntries(t *testing.T) {
+	t.Parallel()
+	entries := []any{
+		map[string]any{
+			"matcher": "*",
+			"hooks":   []any{"not a map", 42},
+		},
+	}
+	if careBareHookExists(entries) {
+		t.Error("expected false when hooks contain non-map entries")
+	}
+}
+
+func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
+	t.Parallel()
+	entries := []any{
+		map[string]any{
+			"matcher": "*",
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": "/usr/bin/care-bare hook --agent claude",
+				},
+			},
+		},
+	}
+	if !careBareHookExists(entries) {
+		t.Error("expected true when care-bare hook exists")
+	}
+}
+
+func TestCareBareHookExists_IgnoresUnrelatedHooks(t *testing.T) {
+	t.Parallel()
+	entries := []any{
+		map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": "some-other-tool --check",
+				},
+			},
+		},
+	}
+	if careBareHookExists(entries) {
+		t.Error("expected false when no care-bare hook is present")
+	}
+}
+
+// --- greedyDecodeDirName tests ---
+
+func TestGreedyDecodeDirName_SimpleDecodeSuccess(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a directory structure that matches the "simple decode" path.
+	// Simple decode: strip leading dash, replace all remaining dashes with /.
+	// For an encoded name "-a-b-c", simple decode produces "/a/b/c".
+	targetDir := filepath.Join(tmpDir, "a", "b", "c")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded name "-{tmpDir without leading /}-a-b-c", but since tmpDir varies,
+	// let's construct the encoded name from tmpDir.
+	// Simple decode: "/" + replace("-", "/") of trimmed string.
+	// So we need the encoded form that, after TrimPrefix("-") and ReplaceAll("-","/"),
+	// gives us the tmpDir path + "/a/b/c".
+	// Easier: build the encoded name as the path with "/" replaced by "-" and leading "-".
+	pathWithoutLeadingSlash := targetDir[1:] // remove leading "/"
+	encoded := "-" + strings.ReplaceAll(pathWithoutLeadingSlash, "/", "-")
+
+	result := greedyDecodeDirName(encoded)
+	if result != targetDir {
+		t.Errorf("greedyDecodeDirName(%q) = %q, want %q", encoded, result, targetDir)
+	}
+}
+
+func TestGreedyDecodeDirName_GreedyFallback(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a hyphenated directory: the simple decode won't find it
+	// because simple decode splits ALL dashes into path separators.
+	// Create: tmpDir/my-project (hyphenated dir name)
+	targetDir := filepath.Join(tmpDir, "my-project")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// For the encoded name, we need the greedy path to discover it.
+	// The encoded form would be all path components joined by "-".
+	// tmpDir is something like /tmp/TestXYZ/001. Encoded:
+	// Strip leading /, replace / with -, prepend -: -tmp-TestXYZ-001-my-project
+	pathWithoutLeadingSlash := targetDir[1:]
+	encoded := "-" + strings.ReplaceAll(pathWithoutLeadingSlash, "/", "-")
+
+	// Simple decode will fail because it replaces ALL "-" with "/"
+	// which would split "my-project" into "my/project" which doesn't exist.
+	// So greedyDecodeDirName should fall through to greedy mode.
+	result := greedyDecodeDirName(encoded)
+	if result != targetDir {
+		t.Errorf("greedyDecodeDirName(%q) = %q, want %q", encoded, result, targetDir)
+	}
+}
+
+func TestGreedyDecodeDirName_NoLeadingDash(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Cursor format: no leading dash (e.g., "Users-orr-project")
+	targetDir := filepath.Join(tmpDir, "sub")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded without leading dash -- path components from tmpDir + "sub"
+	pathWithoutLeadingSlash := targetDir[1:]
+	encoded := strings.ReplaceAll(pathWithoutLeadingSlash, "/", "-")
+
+	result := greedyDecodeDirName(encoded)
+	if result != targetDir {
+		t.Errorf("greedyDecodeDirName(%q) = %q, want %q", encoded, result, targetDir)
+	}
+}
+
+func TestGreedyDecodeDirName_NonexistentPath(t *testing.T) {
+	t.Parallel()
+	result := greedyDecodeDirName("-nonexistent-path-that-does-not-exist-anywhere")
+	if result != "" {
+		t.Errorf("greedyDecodeDirName = %q, want empty for nonexistent path", result)
+	}
+}
+
+func TestGreedyBuildPath_EmptyParts(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// With no parts, should return prefix if it exists
+	result := greedyBuildPath(tmpDir, []string{})
+	if result != tmpDir {
+		t.Errorf("greedyBuildPath with empty parts = %q, want %q", result, tmpDir)
+	}
+}
+
+func TestGreedyBuildPath_NonexistentPath(t *testing.T) {
+	t.Parallel()
+	result := greedyBuildPath("/nonexistent", []string{"abc", "def"})
+	if result != "" {
+		t.Errorf("greedyBuildPath for nonexistent = %q, want empty", result)
+	}
+}
+
+func TestGreedyBuildPath_HyphenatedDirectoryName(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a directory with a hyphen in its name: "my-project"
+	targetDir := filepath.Join(tmpDir, "my-project")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Parts ["my", "project"] should be joined to "my-project" and matched
+	result := greedyBuildPath(tmpDir, []string{"my", "project"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q (should join hyphenated parts)", result, targetDir)
+	}
+}
+
+func TestGreedyBuildPath_NestedHyphenatedDirs(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create nested path: work/my-project/src
+	targetDir := filepath.Join(tmpDir, "work", "my-project", "src")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	result := greedyBuildPath(tmpDir, []string{"work", "my", "project", "src"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q", result, targetDir)
+	}
+}
+
 // --- ConfigPath test ---
 
 func TestClaudeConfigPath(t *testing.T) {
+	t.Parallel()
 	adapter := &ClaudeAdapter{}
 	if adapter.ConfigPath() != ".claude/settings.json" {
 		t.Errorf("ConfigPath() = %q, want %q", adapter.ConfigPath(), ".claude/settings.json")
+	}
+}
+
+// --- Name test ---
+
+func TestClaudeName(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+	if adapter.Name() != "claude" {
+		t.Errorf("Name() = %q, want %q", adapter.Name(), "claude")
 	}
 }

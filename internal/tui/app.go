@@ -407,7 +407,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a App) View() string {
 	var content string
 
-	title := a.styles.Header.Render("care-bare - Skill Enforcement Manager")
+	// Show project name and path in header
+	projectLabel := ""
+	if a.projectRoot != "" {
+		name := filepath.Base(a.projectRoot)
+		projectLabel = "  " + a.styles.Description.Render(name+" — "+a.projectRoot)
+	}
+	title := a.styles.Header.Render("care-bare") + projectLabel
 
 	switch a.view {
 	case viewDashboard:

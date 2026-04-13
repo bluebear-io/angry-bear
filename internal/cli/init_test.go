@@ -601,3 +601,83 @@ func TestInit_NoAgentsDetectedMessage(t *testing.T) {
 		t.Errorf("expected 'No AI agents detected' message, got: %s", stdout)
 	}
 }
+
+// TestInit_BothAgentsDetected verifies that when both .claude/ and .cursor/
+// directories exist, init detects both and installs hooks for each.
+func TestInit_BothAgentsDetected(t *testing.T) {
+	dir := t.TempDir()
+
+	// Pre-create both agent directories.
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatalf("failed to create .claude directory: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".cursor"), 0o755); err != nil {
+		t.Fatalf("failed to create .cursor directory: %v", err)
+	}
+
+	stdout, _, err := runInitInDir(t, dir)
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "claude") {
+		t.Errorf("expected stdout to mention claude, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "cursor") {
+		t.Errorf("expected stdout to mention cursor, got: %s", stdout)
+	}
+
+	// Verify both hook files were created.
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "settings.json")); err != nil {
+		t.Errorf("expected .claude/settings.json to exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".cursor", "hooks.json")); err != nil {
+		t.Errorf("expected .cursor/hooks.json to exist: %v", err)
+	}
+}
+
+// TestInit_OutputContainsNextSteps verifies that init output includes
+// the "Next steps" section with guidance for the user.
+func TestInit_OutputContainsNextSteps(t *testing.T) {
+	dir := t.TempDir()
+
+	stdout, _, err := runInitInDir(t, dir)
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Next steps") {
+		t.Errorf("expected 'Next steps' in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "care-bare doctor") {
+		t.Errorf("expected 'care-bare doctor' in next steps, got: %s", stdout)
+	}
+}
+
+// TestInit_GitignoreHandlesMissingNewlineAtEnd verifies that init properly
+// handles a .gitignore that doesn't end with a newline.
+func TestInit_GitignoreHandlesMissingNewlineAtEnd(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a .gitignore without trailing newline.
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte("node_modules/"), 0o644); err != nil {
+		t.Fatalf("failed to write .gitignore: %v", err)
+	}
+
+	_, _, err := runInitInDir(t, dir)
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	data, _ := os.ReadFile(gitignorePath)
+	content := string(data)
+
+	// Verify existing entry is preserved and new entry is on its own line.
+	if !strings.Contains(content, "node_modules/") {
+		t.Error("existing entry was lost")
+	}
+	if !strings.Contains(content, "\n.care-bare/state/") {
+		t.Error("care-bare entry is not on its own line after existing content")
+	}
+}

@@ -449,3 +449,260 @@ func TestSettingsRendersContent(t *testing.T) {
 		t.Error("settings view should show value 60")
 	}
 }
+
+// --- App View tests for each view state ---
+
+func TestApp_ViewSettings(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, cfg, "", nil)
+	app.width, app.height = 120, 40
+	app.view = viewSettings
+	app.settings = NewSettings(cfg, DefaultStyles(), "/tmp", nil)
+
+	output := app.View()
+	if !strings.Contains(output, "SETTINGS") {
+		t.Error("expected SETTINGS in view when in settings mode")
+	}
+	if !strings.Contains(output, "care-bare") {
+		t.Error("expected care-bare header in app view")
+	}
+}
+
+func TestApp_ViewRuleEditor(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.width, app.height = 120, 40
+	app.view = viewRuleEditor
+	app.ruleEditor = RuleEditor{
+		skillName: "test-skill",
+		phase:     phaseEdit,
+		styles:    DefaultStyles(),
+		toolItems: []listItem{
+			{typ: itemCheckbox, value: "Edit", label: "Edit"},
+		},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**", label: "** (all files)"},
+		},
+		agentItems: []listItem{
+			{typ: itemCheckbox, value: "claude", label: "claude"},
+		},
+	}
+
+	output := app.View()
+	if !strings.Contains(output, "test-skill") {
+		t.Error("expected skill name in rule editor view")
+	}
+}
+
+func TestApp_ViewTreePicker(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(dir+"/test.go", []byte(""), 0o644)
+
+	app := NewApp(testConfig(), "/tmp/test.json", dir, testSkills(), nil, nil, "", nil)
+	app.width, app.height = 120, 40
+	app.view = viewTreePicker
+	app.treePicker = NewTreePicker(dir, DefaultStyles())
+
+	output := app.View()
+	if !strings.Contains(output, "Select Path") {
+		t.Error("expected Select Path header in tree picker view")
+	}
+}
+
+// --- App: statusMsg display ---
+
+func TestApp_StatusMsgDisplayed(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.width, app.height = 120, 40
+	app.dashboard.width, app.dashboard.height = 120, 40
+	app.statusMsg = "Saved!"
+
+	output := app.View()
+	if !strings.Contains(output, "Saved!") {
+		t.Error("expected status message in view")
+	}
+}
+
+// --- App: saveResultMsg handling ---
+
+func TestApp_SaveResultSuccess(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	m, _ := app.Update(saveResultMsg{err: nil})
+	app = m.(App)
+	if app.statusMsg != "Saved!" {
+		t.Errorf("statusMsg = %q, want %q", app.statusMsg, "Saved!")
+	}
+}
+
+func TestApp_SaveResultError(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	m, _ := app.Update(saveResultMsg{err: os.ErrPermission})
+	app = m.(App)
+	if !strings.Contains(app.statusMsg, "Error") {
+		t.Errorf("statusMsg = %q, want error message", app.statusMsg)
+	}
+}
+
+// --- App: ctrl+c from any view ---
+
+func TestApp_CtrlCQuits(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("expected quit command from ctrl+c")
+	}
+}
+
+// --- App: key clears status message ---
+
+func TestApp_KeyClearsStatusMsg(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.statusMsg = "Saved!"
+
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if app.statusMsg != "" {
+		t.Errorf("statusMsg = %q, want empty (should be cleared on keypress)", app.statusMsg)
+	}
+}
+
+// --- App: helpBar for each panel and view ---
+
+func TestApp_HelpBarRulesPanel(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.width, app.height = 120, 40
+	app.dashboard.width, app.dashboard.height = 120, 40
+	app.dashboard.focusPanel = 1
+
+	output := app.View()
+	if !strings.Contains(output, "tool") || !strings.Contains(output, "path") {
+		t.Error("help bar should show rule editing keys when on rules panel")
+	}
+}
+
+func TestApp_HelpBarLogPanel(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.width, app.height = 120, 40
+	app.dashboard.width, app.dashboard.height = 120, 40
+	app.dashboard.focusPanel = 2
+
+	output := app.View()
+	if !strings.Contains(output, "filter") {
+		t.Error("help bar should show filter key when on log panel")
+	}
+}
+
+func TestApp_HelpBarSettingsView(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, cfg, "", nil)
+	app.width, app.height = 120, 40
+	app.view = viewSettings
+	app.settings = NewSettings(cfg, DefaultStyles(), "/tmp", nil)
+
+	output := app.View()
+	if !strings.Contains(output, "global") || !strings.Contains(output, "project") {
+		t.Error("settings help bar should show g/p level keys")
+	}
+}
+
+// --- App: openTreePickerMsg ---
+
+func TestApp_OpenTreePicker(t *testing.T) {
+	dir := t.TempDir()
+	app := NewApp(testConfig(), "/tmp/test.json", dir, testSkills(), nil, nil, "", nil)
+
+	m, _ := app.Update(openTreePickerMsg{})
+	app = m.(App)
+	if app.view != viewTreePicker {
+		t.Errorf("view = %d, want %d (viewTreePicker)", app.view, viewTreePicker)
+	}
+}
+
+func TestApp_TreePickerDone(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewTreePicker
+
+	m, _ := app.Update(treePickerDoneMsg{pattern: "src/**"})
+	app = m.(App)
+	if app.view != viewRuleEditor {
+		t.Errorf("view = %d, want %d (viewRuleEditor)", app.view, viewRuleEditor)
+	}
+}
+
+// --- App: ruleSubmittedMsg for edit mode ---
+
+func TestApp_RuleSubmittedEditExisting(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewRuleEditor
+	app.ruleEditor = RuleEditor{
+		toolItems:  []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems:  []listItem{{typ: itemCheckbox, value: "**"}},
+		agentItems: []listItem{{typ: itemCheckbox, value: "*"}},
+	}
+
+	// Submit a rule to replace existing at index 0
+	rule := engine.Rule{Tool: "Bash", Path: "scripts/**", Skill: "go-coding", Agent: "*"}
+	m, _ := app.Update(ruleSubmittedMsg{rule: &rule, ruleIndex: 0})
+	app = m.(App)
+	if app.config.Tools[0].Tool != "Bash" {
+		t.Errorf("tool = %q, want %q after edit submission", app.config.Tools[0].Tool, "Bash")
+	}
+}
+
+func TestApp_RuleSubmittedNilRule(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewRuleEditor
+	before := len(app.config.Tools)
+
+	m, _ := app.Update(ruleSubmittedMsg{rule: nil, ruleIndex: -1})
+	app = m.(App)
+	if len(app.config.Tools) != before {
+		t.Error("nil rule submission should not change tools")
+	}
+}
+
+// --- App: settingsDoneMsg with path change ---
+
+func TestApp_SettingsDoneWithPathChange(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	app := NewApp(testConfig(), "/tmp/test.json", "/path/a", testSkills(), nil, cfg, "/tmp/repo-config", []string{"/path/a", "/path/b"})
+	app.view = viewSettings
+
+	m, cmds := app.Update(settingsDoneMsg{
+		config:        cfg,
+		configLevel:   "project",
+		preferredPath: "/path/b",
+	})
+	app = m.(App)
+	if app.view != viewDashboard {
+		t.Errorf("view = %d, want %d (viewDashboard)", app.view, viewDashboard)
+	}
+	if cmds == nil {
+		t.Error("expected commands for saving config and preferred path")
+	}
+}
+
+func TestApp_SettingsDoneNilConfig(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewSettings
+
+	m, cmd := app.Update(settingsDoneMsg{config: nil, configLevel: "project"})
+	app = m.(App)
+	if app.view != viewDashboard {
+		t.Errorf("view = %d, want %d (viewDashboard)", app.view, viewDashboard)
+	}
+	if cmd != nil {
+		t.Error("expected no commands for nil config")
+	}
+}

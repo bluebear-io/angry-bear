@@ -291,6 +291,73 @@ func TestClean_InvalidSessionID(t *testing.T) {
 	}
 }
 
+// TestClean_AllSkipsDirectoriesAndHiddenFiles verifies that clean --all
+// skips subdirectories and hidden files in the state directory, only
+// removing JSON session files.
+func TestClean_AllSkipsDirectoriesAndHiddenFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	writeEnforcementConfig(t, dir, []engine.Rule{})
+	writeCleanStateFile(t, dir, "session-real", []string{"skill-a"})
+
+	// Add a subdirectory and a hidden file to the state dir.
+	stateDir := filepath.Join(dir, ".care-bare", "state")
+	err := os.Mkdir(filepath.Join(stateDir, "subdir"), 0o755)
+	if err != nil {
+		t.Fatalf("failed to create subdirectory: %v", err)
+	}
+	err = os.WriteFile(filepath.Join(stateDir, ".hidden"), []byte("hidden"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to create hidden file: %v", err)
+	}
+	err = os.WriteFile(filepath.Join(stateDir, "not-json.txt"), []byte("text"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to create non-json file: %v", err)
+	}
+
+	output, execErr := runCleanInDir(t, dir, "--all")
+	if execErr != nil {
+		t.Fatalf("clean --all returned error: %v", execErr)
+	}
+
+	// Only the real session should be cleaned (subdir, hidden, non-json are skipped).
+	if !strings.Contains(output, "Cleaned 1 sessions") {
+		t.Errorf("expected 'Cleaned 1 sessions', got: %s", output)
+	}
+
+	// Verify the subdirectory and hidden file are still there.
+	if _, err := os.Stat(filepath.Join(stateDir, "subdir")); err != nil {
+		t.Error("subdirectory should not be removed by clean --all")
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, ".hidden")); err != nil {
+		t.Error("hidden file should not be removed by clean --all")
+	}
+}
+
+// TestClean_MalformedGlobalConfig verifies that clean handles a malformed
+// config.json by returning an error.
+func TestClean_MalformedGlobalConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	writeEnforcementConfig(t, dir, []engine.Rule{})
+	stateDir := filepath.Join(dir, ".care-bare", "state")
+	err := os.MkdirAll(stateDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create state directory: %v", err)
+	}
+
+	// Write malformed config.json.
+	err = os.WriteFile(filepath.Join(dir, ".care-bare", "config.json"), []byte("{bad json"), 0o644)
+	if err != nil {
+		t.Fatalf("failed to write config.json: %v", err)
+	}
+
+	_, execErr := runCleanInDir(t, dir)
+	if execErr == nil {
+		t.Fatal("expected error for malformed config.json, got nil")
+	}
+}
+
 // TestClean_AllWithNoSessions verifies that clean --all with no session files
 // reports 0 sessions cleaned.
 func TestClean_AllWithNoSessions(t *testing.T) {

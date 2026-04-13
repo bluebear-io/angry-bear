@@ -381,12 +381,28 @@ func (d Dashboard) View() string {
 		panelHeight = 20
 	}
 
-	// Split right panel: top = rules (50%), divider (1 line), bottom = event log
-	rulesHeight := panelHeight * 50 / 100
-	logsHeight := panelHeight - rulesHeight - 1 // -1 for divider line
-
+	// Dynamic split: rules take only what they need, logs get the rest.
+	// Render rules first to measure actual height, then allocate remaining to logs.
+	maxRulesHeight := panelHeight * 50 / 100 // Cap rules at 50% max
 	left := d.renderSkillList(leftWidth, panelHeight)
-	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)
+	rulesContent := d.renderRulePanel(rightWidth, maxRulesHeight)
+
+	// Measure actual rules content height
+	rulesLines := strings.Count(rulesContent, "\n") + 1
+	rulesHeight := rulesLines
+	if rulesHeight > maxRulesHeight {
+		rulesHeight = maxRulesHeight
+	}
+	minRulesHeight := 5 // Always show at least skill name + description
+	if rulesHeight < minRulesHeight {
+		rulesHeight = minRulesHeight
+	}
+
+	logsHeight := panelHeight - rulesHeight - 1 // -1 for divider line
+	if logsHeight < 5 {
+		logsHeight = 5
+	}
+
 	logsContent := d.renderEventLog(rightWidth, logsHeight)
 
 	// Pad each section to its exact allocated height so the divider

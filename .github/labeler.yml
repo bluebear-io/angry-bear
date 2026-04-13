@@ -1,0 +1,19 @@
+feature:
+  - changed-files:
+      - any-glob-to-any-file: ['internal/tui/**', 'internal/adapter/**', 'internal/engine/**']
+
+fix:
+  - changed-files:
+      - any-glob-to-any-file: ['internal/**']
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['docs/**', '*.md']
+
+chore:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/**', '.golangci.yml', '.goreleaser.yaml', 'Makefile']
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ['go.mod', 'go.sum']

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release:
-    name: Release
+    name: Build & Publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,4 +29,3 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

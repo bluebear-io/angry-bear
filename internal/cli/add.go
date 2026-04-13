@@ -354,17 +354,29 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 		agentOpts[i] = huh.NewOption(a, a)
 	}
 
+	// Show project context
+	projectName := filepath.Base(projectRoot)
+	repo := engine.ResolveRepoIdentity(projectRoot)
+	if repo != nil {
+		projectName = repo.Slug
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Project: %s (%s)\n\n", projectName, projectRoot)
+
 	var selectedSkill string
 	var selectedTools []string
 	var selectedPaths []string
 	var selectedAgents []string
 
+	// Skill selector with scrollable height
+	skillSelect := huh.NewSelect[string]().
+		Title("Skill to enforce").
+		Options(skillOpts...).
+		Value(&selectedSkill).
+		Height(min(len(skillOpts)+2, 20))
+
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Skill to enforce").
-				Options(skillOpts...).
-				Value(&selectedSkill),
+			skillSelect,
 			huh.NewMultiSelect[string]().
 				Title("Tools").
 				Description("space to toggle, enter to confirm").

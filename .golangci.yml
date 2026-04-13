@@ -25,7 +25,7 @@ linters:
         - (*os.File).Close
         - (*os.File).WriteString
         - (*github.com/fsnotify/fsnotify.Watcher).Close
-        - (*github.com/Blue-Bear-Security/care-bare/internal/state.FileLock).Unlock
+        - (*github.com/Blue-Bear-Security/care-bear/internal/state.FileLock).Unlock
         - encoding/json.Unmarshal
     staticcheck:
       checks:

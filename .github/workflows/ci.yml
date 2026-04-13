@@ -62,9 +62,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go build -v ./cmd/care-bare
+      - run: go build -v ./cmd/care-bear
       - name: Verify binary
-        run: ./care-bare version
+        run: ./care-bear version
 
   goreleaser-check:
     name: GoReleaser Check

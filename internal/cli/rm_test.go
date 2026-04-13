@@ -1,4 +1,4 @@
-// rm_test.go contains integration tests for the care-bare rm command.
+// rm_test.go contains integration tests for the care-bear rm command.
 // Tests exercise the command against real temporary filesystems, verifying
 // that rules are removed correctly with full and partial matching.
 package cli_test
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/cli"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // runRmInDir executes the rm command with the working directory set to dir
@@ -35,7 +35,7 @@ func runRmInDir(t *testing.T, dir string, extraArgs ...string) (string, error) {
 		}
 	})
 
-	configPath := filepath.Join(dir, ".care-bare", "skill_enforcement.json")
+	configPath := filepath.Join(dir, ".care-bear", "skill_enforcement.json")
 
 	cmd := cli.NewRootCommand()
 	outBuf := new(bytes.Buffer)
@@ -200,9 +200,9 @@ func TestRm_NoMatchingRules(t *testing.T) {
 // is provided.
 func TestRm_RequiresSkillArgument(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bare"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare: %v", err)
+		t.Fatalf("failed to create .care-bear: %v", err)
 	}
 
 	_, execErr := runRmInDir(t, dir)
@@ -233,10 +233,10 @@ func TestRm_EmptyConfig(t *testing.T) {
 func TestRm_NoConfigFile(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare directory but no config file.
-	err := os.MkdirAll(filepath.Join(dir, ".care-bare"), 0o755)
+	// Create .care-bear directory but no config file.
+	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare: %v", err)
+		t.Fatalf("failed to create .care-bear: %v", err)
 	}
 
 	output, execErr := runRmInDir(t, dir, "go-standards")

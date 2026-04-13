@@ -15,7 +15,7 @@ var DefaultIgnoreSet = map[string]bool{
 	".venv":        true,
 	"build":        true,
 	"target":       true,
-	".care-bare":   true,
+	".care-bear":   true,
 	"bin":          true,
 }
 

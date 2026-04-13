@@ -77,7 +77,7 @@ func MatchPath(pattern, filePath string) (bool, error) {
 
 // ResolveProjectRoot finds the project root directory by walking up from startDir.
 // Resolution order:
-//  1. Nearest directory containing .care-bare/
+//  1. Nearest directory containing .care-bear/
 //  2. Nearest directory containing .git/
 //  3. startDir itself (fallback)
 //
@@ -88,8 +88,8 @@ func ResolveProjectRoot(startDir string) string {
 
 	current := startDir
 	for {
-		// Check for .care-bare/ directory -- highest priority, return immediately.
-		careBareDir := filepath.Join(current, ".care-bare")
+		// Check for .care-bear/ directory -- highest priority, return immediately.
+		careBareDir := filepath.Join(current, ".care-bear")
 		if info, err := os.Stat(careBareDir); err == nil && info.IsDir() {
 			return current
 		}

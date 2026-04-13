@@ -1,4 +1,4 @@
-// validate.go provides session ID sanitization for care-bare state management.
+// validate.go provides session ID sanitization for care-bear state management.
 // It ensures session IDs are safe for use as filenames and rejects path traversal attacks.
 package state
 

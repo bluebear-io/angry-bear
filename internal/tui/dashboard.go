@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 )
 
 // filterCol identifies a filterable column in the event log.
@@ -438,7 +438,7 @@ func nextAgent(current string) string {
 // View renders the split-pane layout.
 func (d Dashboard) View() string {
 	if len(d.skills) == 0 {
-		return d.styles.Description.Render("  No skills discovered. Add skill paths to .care-bare/config.json")
+		return d.styles.Description.Render("  No skills discovered. Add skill paths to .care-bear/config.json")
 	}
 
 	leftWidth := d.width*30/100 - 2
@@ -1049,7 +1049,7 @@ func (d *Dashboard) jumpToLogEntry() {
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
 	home, _ := os.UserHomeDir()
-	logPath := filepath.Join(home, ".care-bare", "events.log")
+	logPath := filepath.Join(home, ".care-bear", "events.log")
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		d.eventLines = nil

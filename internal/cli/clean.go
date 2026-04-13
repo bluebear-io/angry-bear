@@ -1,4 +1,4 @@
-// clean.go implements the care-bare clean command for state file cleanup.
+// clean.go implements the care-bear clean command for state file cleanup.
 // It supports three modes: pruning expired sessions (default), cleaning all
 // sessions (--all), or cleaning a specific session (--session).
 package cli
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ func NewCleanCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clean",
 		Short: "Clean up session state files",
-		Long: `Clean up session state files in .care-bare/state/.
+		Long: `Clean up session state files in .care-bear/state/.
 
 With no flags, prunes sessions that have expired based on the configured TTL.
 Use --all to remove all sessions regardless of TTL.
@@ -55,9 +55,9 @@ func runClean(cmd *cobra.Command, args []string) error {
 	projectRoot := engine.ResolveProjectRoot(cwd)
 
 	// Check if state directory exists.
-	stateDir := filepath.Join(projectRoot, ".care-bare", "state")
+	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
 	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
-		fmt.Fprintln(out, "No state directory found. Run 'care-bare init' first.")
+		fmt.Fprintln(out, "No state directory found. Run 'care-bear init' first.")
 		return nil
 	}
 

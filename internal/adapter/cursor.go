@@ -14,7 +14,7 @@ import (
 )
 
 // cursorToolMap maps Cursor-native tool names and hook events to canonical
-// care-bare tool names. This is the adapter's core job — normalize agent-specific
+// care-bear tool names. This is the adapter's core job — normalize agent-specific
 // names so enforcement rules use a single vocabulary across all agents.
 var cursorToolMap = map[string]string{
 	// Cursor tool_name values
@@ -72,7 +72,7 @@ func (a *CursorAdapter) ParseInput(stdin io.Reader) (*HookInput, error) {
 		input.SessionID = cid
 	}
 
-	// Extract and normalize tool_name to canonical care-bare name.
+	// Extract and normalize tool_name to canonical care-bear name.
 	// Cursor uses agent-specific names like "edit_file", "write_file" etc.
 	if tn, ok := raw["tool_name"].(string); ok {
 		if canonical, exists := cursorToolMap[tn]; exists && canonical != "" {
@@ -156,7 +156,7 @@ func (a *CursorAdapter) GlobalConfigPath() string {
 	return filepath.Join(home, ".cursor", "hooks.json")
 }
 
-// InstallHook adds care-bare hooks to the GLOBAL Cursor hooks config.
+// InstallHook adds care-bear hooks to the GLOBAL Cursor hooks config.
 // This ensures enforcement works in every project without per-project init.
 // projectDir is ignored — hooks are always installed globally.
 // This method is idempotent -- calling it twice does not duplicate the hook entry.
@@ -191,12 +191,12 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 		config["hooks"] = hooks
 	}
 
-	// Check if care-bare hook already exists in any hook type (idempotency check)
+	// Check if care-bear hook already exists in any hook type (idempotency check)
 	if cursorCareBareHookExists(hooks) {
 		return nil
 	}
 
-	// Hook types that care-bare needs to intercept for skill enforcement
+	// Hook types that care-bear needs to intercept for skill enforcement
 	hookTypes := []string{
 		"preToolUse",
 		"beforeFileEdit",
@@ -210,13 +210,13 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 		"command": binPath + " hook --agent cursor",
 	}
 
-	// Prepend care-bare hook to each hook type, preserving existing entries
+	// Prepend care-bear hook to each hook type, preserving existing entries
 	for _, hookType := range hookTypes {
 		var existing []any
 		if arr, ok := hooks[hookType].([]any); ok {
 			existing = arr
 		}
-		// Prepend care-bare entry so it runs before other hooks
+		// Prepend care-bear entry so it runs before other hooks
 		hooks[hookType] = append([]any{careBareEntry}, existing...)
 	}
 
@@ -236,7 +236,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 }
 
 // cursorCareBareHookExists checks if any hook array in the hooks map already
-// contains a care-bare hook command. Used for idempotency.
+// contains a care-bear hook command. Used for idempotency.
 func cursorCareBareHookExists(hooks map[string]any) bool {
 	for _, hookList := range hooks {
 		arr, ok := hookList.([]any)
@@ -249,7 +249,7 @@ func cursorCareBareHookExists(hooks map[string]any) bool {
 				continue
 			}
 			if cmd, ok := entryMap["command"].(string); ok {
-				if strings.Contains(cmd, "care-bare hook") {
+				if strings.Contains(cmd, "care-bear hook") {
 					return true
 				}
 			}
@@ -258,7 +258,7 @@ func cursorCareBareHookExists(hooks map[string]any) bool {
 	return false
 }
 
-// UninstallHook removes all care-bare hooks from Cursor's global hooks config.
+// UninstallHook removes all care-bear hooks from Cursor's global hooks config.
 func (a *CursorAdapter) UninstallHook() error {
 	hooksPath := a.GlobalConfigPath()
 	data, err := os.ReadFile(hooksPath)
@@ -279,7 +279,7 @@ func (a *CursorAdapter) UninstallHook() error {
 		return nil
 	}
 
-	// For each hook type, filter out care-bare entries
+	// For each hook type, filter out care-bear entries
 	for hookType, hookList := range hooks {
 		arr, ok := hookList.([]any)
 		if !ok {
@@ -292,8 +292,8 @@ func (a *CursorAdapter) UninstallHook() error {
 				filtered = append(filtered, entry)
 				continue
 			}
-			if cmd, ok := entryMap["command"].(string); ok && strings.Contains(cmd, "care-bare hook") {
-				continue // skip care-bare entries
+			if cmd, ok := entryMap["command"].(string); ok && strings.Contains(cmd, "care-bear hook") {
+				continue // skip care-bear entries
 			}
 			filtered = append(filtered, entry)
 		}

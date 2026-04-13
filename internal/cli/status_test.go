@@ -1,4 +1,4 @@
-// status_test.go contains integration tests for the care-bare status command.
+// status_test.go contains integration tests for the care-bear status command.
 // Tests exercise the command against real temporary filesystems with controlled
 // fixture data, verifying output for rules, sessions, skills, and agents.
 package cli_test
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/cli"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 )
 
 // runStatusInDir executes the status command with the working directory set
@@ -90,7 +90,7 @@ func TestStatus_DisplaysConfiguredRules(t *testing.T) {
 func TestStatus_DisplaysActiveSessions(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare directory and enforcement config so project root resolves.
+	// Create .care-bear directory and enforcement config so project root resolves.
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Write session state files.
@@ -125,7 +125,7 @@ func TestStatus_DisplaysActiveSessions(t *testing.T) {
 func TestStatus_DisplaysDiscoveredSkills(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare with config pointing to .claude/skills.
+	// Create .care-bear with config pointing to .claude/skills.
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Create a skill file.
@@ -154,7 +154,7 @@ func TestStatus_DisplaysDiscoveredSkills(t *testing.T) {
 }
 
 // TestStatus_WorksWithNoConfig verifies that status handles a project with
-// no .care-bare directory gracefully, displaying empty/default state.
+// no .care-bear directory gracefully, displaying empty/default state.
 func TestStatus_WorksWithNoConfig(t *testing.T) {
 	dir := t.TempDir()
 
@@ -234,7 +234,7 @@ func TestStatus_CorruptStateFile(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Write a corrupt state file.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -265,7 +265,7 @@ func TestStatus_SessionWithEmptyCreatedAt(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Write a state file with empty CreatedAt.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -321,7 +321,7 @@ func TestStatus_NoActiveSessions(t *testing.T) {
 	dir := t.TempDir()
 
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -385,7 +385,7 @@ func TestStatus_ReadErrorOnStateFile(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Create a state directory with a file that cannot be read.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -418,11 +418,11 @@ func TestStatus_ReadErrorOnStateFile(t *testing.T) {
 func TestStatus_MalformedConfigShowsError(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare with malformed enforcement config.
-	careBareDir := filepath.Join(dir, ".care-bare")
+	// Create .care-bear with malformed enforcement config.
+	careBareDir := filepath.Join(dir, ".care-bear")
 	err := os.MkdirAll(careBareDir, 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare: %v", err)
+		t.Fatalf("failed to create .care-bear: %v", err)
 	}
 	err = os.WriteFile(filepath.Join(careBareDir, "skill_enforcement.json"), []byte("{bad json"), 0o644)
 	if err != nil {
@@ -444,9 +444,9 @@ func TestStatus_MalformedConfigShowsError(t *testing.T) {
 func TestStatus_DiscoveredSkillsWithConfigError(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare with valid enforcement config but malformed config.json.
+	// Create .care-bear with valid enforcement config but malformed config.json.
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	careBareDir := filepath.Join(dir, ".care-bare")
+	careBareDir := filepath.Join(dir, ".care-bear")
 	err := os.WriteFile(filepath.Join(careBareDir, "config.json"), []byte("{bad json"), 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config.json: %v", err)
@@ -470,7 +470,7 @@ func TestStatus_StateDirectoryReadError(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Create state directory and make it unreadable.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -499,7 +499,7 @@ func TestStatus_SkillScanError(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Write config.json pointing to a skill path that exists but is unreadable.
-	careBareDir := filepath.Join(dir, ".care-bare")
+	careBareDir := filepath.Join(dir, ".care-bear")
 	skillPath := filepath.Join(dir, ".claude", "skills")
 	err := os.MkdirAll(skillPath, 0o755)
 	if err != nil {
@@ -567,7 +567,7 @@ func TestStatus_CursorDetected(t *testing.T) {
 // writeStatusStateFile is a test helper that creates a session state file.
 func writeStatusStateFile(t *testing.T, dir, sessionID string, skills []string) {
 	t.Helper()
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)

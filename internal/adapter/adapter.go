@@ -28,9 +28,9 @@ type HookAdapter interface {
 	// ConfigPath returns the relative path to the agent's hook config file.
 	// Used to detect if this agent is present in a project.
 	ConfigPath() string
-	// InstallHook modifies the agent's global config to add a care-bare hook.
+	// InstallHook modifies the agent's global config to add a care-bear hook.
 	InstallHook(projectDir string) error
-	// UninstallHook removes all care-bare hooks from the agent's global config.
+	// UninstallHook removes all care-bear hooks from the agent's global config.
 	UninstallHook() error
 	// DetectSkillInvocation checks if the input represents a skill being invoked.
 	DetectSkillInvocation(input *HookInput) (skillName string, isSkill bool)

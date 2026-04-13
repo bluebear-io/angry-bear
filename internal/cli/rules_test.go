@@ -1,4 +1,4 @@
-// rules_test.go contains integration tests for the care-bare rules command.
+// rules_test.go contains integration tests for the care-bear rules command.
 // Tests exercise the command against real temporary filesystems, verifying
 // table output, JSON output, skill filtering, and empty-state behavior.
 package cli_test
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/cli"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // runRulesInDir executes the rules command with the working directory set
@@ -36,7 +36,7 @@ func runRulesInDir(t *testing.T, dir string, extraArgs ...string) (string, error
 		}
 	})
 
-	configPath := filepath.Join(dir, ".care-bare", "skill_enforcement.json")
+	configPath := filepath.Join(dir, ".care-bear", "skill_enforcement.json")
 
 	cmd := cli.NewRootCommand()
 	outBuf := new(bytes.Buffer)
@@ -227,10 +227,10 @@ func TestRules_EmptyConfig(t *testing.T) {
 func TestRules_NoConfigFile(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bare directory but no config file.
-	err := os.MkdirAll(filepath.Join(dir, ".care-bare"), 0o755)
+	// Create .care-bear directory but no config file.
+	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare: %v", err)
+		t.Fatalf("failed to create .care-bear: %v", err)
 	}
 
 	output, execErr := runRulesInDir(t, dir)

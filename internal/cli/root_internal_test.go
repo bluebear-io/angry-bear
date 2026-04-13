@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // TestResolveCheckoutPath_NilProject verifies that resolveCheckoutPath returns

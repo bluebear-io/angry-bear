@@ -1,6 +1,6 @@
 // config.go handles loading and merging enforcement configurations from
 // user-level and project-level config files. It implements a two-level
-// merge strategy: user-level (~/.care-bare/) rules are loaded first,
+// merge strategy: user-level (~/.care-bear/) rules are loaded first,
 // then project-level rules are accumulated by walking up from the start
 // directory to the filesystem root or user home directory.
 package engine
@@ -16,8 +16,8 @@ import (
 // configFileName is the name of the skill enforcement config file.
 const configFileName = "skill_enforcement.json"
 
-// configDirName is the name of the care-bare config directory.
-const configDirName = ".care-bare"
+// configDirName is the name of the care-bear config directory.
+const configDirName = ".care-bear"
 
 // ConfigOption configures the behavior of LoadConfig.
 type ConfigOption func(*configOptions)
@@ -39,8 +39,8 @@ func WithHomeDir(dir string) ConfigOption {
 // project-level config files. Returns all accumulated rules.
 //
 // The loading order is:
-//  1. User-level: ~/.care-bare/skill_enforcement.json
-//  2. Project-level: walk up from startDir collecting .care-bare/skill_enforcement.json
+//  1. User-level: ~/.care-bear/skill_enforcement.json
+//  2. Project-level: walk up from startDir collecting .care-bear/skill_enforcement.json
 //     files at each directory level, stopping at filesystem root or user home.
 //
 // Behavior:
@@ -69,7 +69,7 @@ func LoadConfig(startDir string, opts ...ConfigOption) ([]MatchedRule, error) {
 
 	var allRules []MatchedRule
 
-	// 1. Load user-level config from ~/.care-bare/skill_enforcement.json.
+	// 1. Load user-level config from ~/.care-bear/skill_enforcement.json.
 	if homeDir != "" {
 		userConfigPath := filepath.Join(homeDir, configDirName, configFileName)
 		rules, err := loadConfigFile(userConfigPath)
@@ -171,7 +171,7 @@ func loadConfigFile(path string) ([]MatchedRule, error) {
 }
 
 // RepoPreferences holds per-repo user preferences such as the preferred
-// local checkout path. Stored at ~/.care-bare/repos/{hash}-{slug}/preferences.json.
+// local checkout path. Stored at ~/.care-bear/repos/{hash}-{slug}/preferences.json.
 type RepoPreferences struct {
 	PreferredPath string `json:"preferred_path"`
 }
@@ -234,7 +234,7 @@ func globalConfigDefaults() *GlobalConfig {
 	}
 }
 
-// LoadGlobalDefaults reads ~/.care-bare/config.json (machine-level defaults).
+// LoadGlobalDefaults reads ~/.care-bear/config.json (machine-level defaults).
 // Returns built-in defaults if the file does not exist.
 func LoadGlobalDefaults() (*GlobalConfig, error) {
 	defaults := globalConfigDefaults()
@@ -250,7 +250,7 @@ func LoadGlobalDefaults() (*GlobalConfig, error) {
 }
 
 // LoadGlobalConfig reads project-level config.json from the project root and
-// merges it on top of the global defaults from ~/.care-bare/config.json.
+// merges it on top of the global defaults from ~/.care-bear/config.json.
 // Project-level non-zero fields override global values.
 // Returns defaults if neither file exists.
 func LoadGlobalConfig(projectRoot string) (*GlobalConfig, error) {

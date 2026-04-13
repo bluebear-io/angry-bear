@@ -207,7 +207,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 		// Monkey-patch LoadGlobalDefaults by using LoadGlobalConfig with
 		// a project that has no config — it should use built-in defaults.
 		// We can't easily mock os.UserHomeDir, so we test LoadGlobalConfig
-		// with a project root that has no .care-bare/config.json.
+		// with a project root that has no .care-bear/config.json.
 		got, err := LoadGlobalConfig(projectRoot)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -236,7 +236,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 			SkillPaths:     []string{"my/skills", "other/skills"},
 			IgnorePatterns: []string{".git", "custom_dir"},
 		}
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		writeGlobalConfig(t, filepath.Join(configDir, "config.json"), projectCfg)
 
@@ -265,7 +265,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 		projectRoot := filepath.Join(tmp, "project")
 
 		// Write project config with only DefaultAgent set (other fields are zero).
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		content := `{"default_agent": "codex"}`
 		if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(content), 0o644); err != nil {
@@ -301,7 +301,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 		tmp := t.TempDir()
 		projectRoot := filepath.Join(tmp, "project")
 
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		content := `{"skill_ttl_minutes": 15}`
 		if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(content), 0o644); err != nil {
@@ -323,7 +323,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 		tmp := t.TempDir()
 		projectRoot := filepath.Join(tmp, "project")
 
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		// Explicitly set skill_ttl_minutes to 0 — should not change the default (also 0).
 		content := `{"skill_ttl_minutes": 0, "state_ttl_hours": 10}`
@@ -350,7 +350,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 		tmp := t.TempDir()
 		projectRoot := filepath.Join(tmp, "project")
 
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte("not json"), 0o644); err != nil {
 			t.Fatal(err)
@@ -374,7 +374,7 @@ func TestLoadGlobalConfig(t *testing.T) {
 			DefaultAgent:    "test-agent",
 			IgnorePatterns:  []string{"only-this"},
 		}
-		configDir := filepath.Join(projectRoot, ".care-bare")
+		configDir := filepath.Join(projectRoot, ".care-bear")
 		mustMkdirAll(t, configDir)
 		writeGlobalConfig(t, filepath.Join(configDir, "config.json"), projectCfg)
 

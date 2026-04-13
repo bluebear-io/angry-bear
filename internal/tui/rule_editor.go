@@ -172,16 +172,22 @@ func (re *RuleEditor) buildPathTree() []listItem {
 	}
 
 	var dirNames []string
+	var fileNames []string
 	for _, e := range entries {
-		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") || DefaultIgnoreSet[e.Name()] {
 			continue
 		}
-		dirNames = append(dirNames, e.Name())
+		if e.IsDir() {
+			dirNames = append(dirNames, e.Name())
+		} else {
+			fileNames = append(fileNames, e.Name())
+		}
 	}
 	sort.Strings(dirNames)
+	sort.Strings(fileNames)
 
+	// Directories first (expandable)
 	for _, name := range dirNames {
-		// Discover children for expand/collapse
 		var children []string
 		subEntries, err := os.ReadDir(filepath.Join(root, name))
 		if err == nil {
@@ -200,6 +206,17 @@ func (re *RuleEditor) buildPathTree() []listItem {
 			section:  "paths",
 			indent:   0,
 			children: children,
+		})
+	}
+
+	// Files after directories
+	for _, name := range fileNames {
+		items = append(items, listItem{
+			typ:     itemCheckbox,
+			label:   name,
+			value:   name,
+			section: "paths",
+			indent:  0,
 		})
 	}
 
@@ -230,14 +247,26 @@ func (re *RuleEditor) expandDir(idx int) {
 		return
 	}
 
-	var newItems []listItem
+	// Separate dirs and files
+	var dirEntries []os.DirEntry
+	var fileEntries []os.DirEntry
 	for _, e := range entries {
-		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") || DefaultIgnoreSet[e.Name()] {
 			continue
 		}
+		if e.IsDir() {
+			dirEntries = append(dirEntries, e)
+		} else {
+			fileEntries = append(fileEntries, e)
+		}
+	}
+
+	var newItems []listItem
+
+	// Directories first
+	for _, e := range dirEntries {
 		childPath := parentPath + "/" + e.Name()
 
-		// Check if this child has its own subdirectories
 		var grandchildren []string
 		subEntries, err := os.ReadDir(filepath.Join(root, childPath))
 		if err == nil {
@@ -249,7 +278,6 @@ func (re *RuleEditor) expandDir(idx int) {
 		}
 
 		if len(grandchildren) > 0 {
-			// Has children — make it an expandable tree dir
 			newItems = append(newItems, listItem{
 				typ:      itemTreeDir,
 				label:    e.Name(),
@@ -259,15 +287,27 @@ func (re *RuleEditor) expandDir(idx int) {
 				children: grandchildren,
 			})
 		} else {
-			// Leaf directory — just a checkbox
+			// Leaf directory
 			newItems = append(newItems, listItem{
 				typ:     itemCheckbox,
-				label:   e.Name(),
+				label:   e.Name() + "/",
 				value:   childPath + "/**",
 				section: "paths",
 				indent:  item.indent + 1,
 			})
 		}
+	}
+
+	// Files after directories
+	for _, e := range fileEntries {
+		childPath := parentPath + "/" + e.Name()
+		newItems = append(newItems, listItem{
+			typ:     itemCheckbox,
+			label:   e.Name(),
+			value:   childPath,
+			section: "paths",
+			indent:  item.indent + 1,
+		})
 	}
 
 	if len(newItems) == 0 {

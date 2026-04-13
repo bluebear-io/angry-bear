@@ -48,18 +48,35 @@ Each rule says: "Before using `tool` on files matching `path` for `agent`, the s
 4. If all three match, check if `skill` is in the session's loaded skills
 5. If any matched rule's skill is NOT loaded → **BLOCK**
 
-### Config Locations (priority order)
+### Data Layout
 
-1. **Repo-keyed config**: `~/.care-bear/repos/{hash}-{slug}/skill_enforcement.json` — per-repo rules stored outside the project directory
-2. **Project-level**: `{project}/.care-bear/skill_enforcement.json` — checked into the repo
-3. **User-level**: `~/.care-bear/skill_enforcement.json` — personal defaults
+ALL care-bear data lives under `~/.care-bear/`. Nothing is stored in project directories.
+
+```
+~/.care-bear/
+  config.json                                    # Global config defaults
+  events.log                                     # Global enforcement event log
+  repos/
+    5ce4353d-Blue-Bear-Security-blueden/          # Per-repo (keyed by git identity hash)
+      skill_enforcement.json                      #   Enforcement rules
+      config.json                                 #   Per-repo config overrides
+      state/                                      #   Session state
+        {session-id}.json                         #     Which skills are loaded
+        {session-id}.lock                         #     Advisory lock
+      preferences.json                            #   Preferred checkout path
+    bb1bf16d-Blue-Bear-Security-care-bear/        # Another repo
+      skill_enforcement.json
+      ...
+```
+
+The repo directory name is `{hash}-{slug}` where hash is the first 8 chars of SHA-256 of the normalized `org/repo` slug.
 
 ## Session State
 
 State is tracked per-session using JSON files on disk:
 
 ```
-{project}/.care-bear/state/
+~/.care-bear/repos/{hash}-{slug}/state/
   {session-id}.json     # Session state
   {session-id}.lock     # Advisory lock for concurrency safety
 ```
@@ -126,6 +143,28 @@ Each AI agent has its own hook format. Adapters normalize these into a common `H
 1. Create `internal/adapter/myagent.go` implementing `HookAdapter`
 2. Register in `internal/adapter/registry.go`
 3. That's it — engine, TUI, CLI, state all work automatically
+
+## Project Discovery
+
+On every TUI startup, care-bear scans all registered agent directories to discover projects:
+
+1. **Claude Code**: Scans `~/.claude/projects/` — each subdirectory is an encoded project path
+2. **Cursor**: Scans `~/.cursor/projects/` — same encoding scheme
+
+For each discovered directory:
+1. Try `sessions-index.json` for the real project path (most reliable)
+2. Fall back to greedy path decoding from the encoded directory name
+3. Resolve Git identity (`git remote get-url origin` → normalize → `org/repo` slug)
+4. Merge: same repo from multiple agents or multiple checkouts → one `MergedProject`
+
+The project picker shows all discovered projects sorted by name, with agent badges and checkout count.
+
+### CLI commands (non-TUI)
+
+`care-bear add`, `rules`, `status`, `doctor` do NOT scan all projects. They use `os.Getwd()` to determine the current project:
+1. Find `.git/` by walking up from cwd → project root
+2. `git remote get-url origin` → normalize → repo identity
+3. Config at `~/.care-bear/repos/{hash}-{slug}/`
 
 ## Project Identity
 

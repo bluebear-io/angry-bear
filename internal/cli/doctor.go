@@ -22,7 +22,7 @@ type checkResult struct {
 	Name    string // e.g., "Config validity: skill_enforcement.json"
 	Passed  bool
 	Detail  string // e.g., "version 1, 3 rules"
-	FixHint string // e.g., "Run 'care-bare init'..."
+	FixHint string // e.g., "Run 'care-bare add'..."
 }
 
 // NewDoctorCommand returns the doctor subcommand.
@@ -246,7 +246,7 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 				Name:    name,
 				Passed:  false,
 				Detail:  "config file not found",
-				FixHint: fmt.Sprintf("Run 'care-bare init' to install hooks for %s.", agentName),
+				FixHint: fmt.Sprintf("Run 'care-bare add' to install hooks for %s.", agentName),
 			}
 		}
 		return checkResult{
@@ -262,7 +262,7 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 			Name:    name,
 			Passed:  false,
 			Detail:  "hook entry not found",
-			FixHint: fmt.Sprintf("Run 'care-bare init' to install hooks for %s.", agentName),
+			FixHint: fmt.Sprintf("Run 'care-bare add' to install hooks for %s.", agentName),
 		}
 	}
 
@@ -284,7 +284,7 @@ func checkStateDirectory(projectRoot string) checkResult {
 				Name:    name,
 				Passed:  false,
 				Detail:  "does not exist",
-				FixHint: "Run 'care-bare init' to create the state directory.",
+				FixHint: "Run 'care-bare add' to create the state directory.",
 			}
 		}
 		return checkResult{
@@ -300,7 +300,7 @@ func checkStateDirectory(projectRoot string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  "exists but is not a directory",
-			FixHint: "Remove .care-bare/state and run 'care-bare init'.",
+			FixHint: "Remove .care-bare/state and run 'care-bare add'.",
 		}
 	}
 

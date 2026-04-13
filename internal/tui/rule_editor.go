@@ -84,6 +84,7 @@ type RuleEditor struct {
 	agentScroll ScrollView // cursor within agents
 	height      int
 
+	standalone    bool // When true, s/esc quit the program instead of sending messages
 	addAnother    bool
 	confirmCursor int // 0=Yes, 1=No
 }
@@ -107,7 +108,13 @@ func (re *RuleEditor) SetProjectRoot(root string) {
 	re.autoExpandSelectedPaths()
 }
 
+// SetStandalone makes the editor quit on save/esc instead of sending messages.
+func (re *RuleEditor) SetStandalone() {
+	re.standalone = true
+}
+
 // SetExistingRules provides the current ruleset.
+
 func (re *RuleEditor) SetExistingRules(rules []engine.Rule) {
 	re.existingRules = rules
 }
@@ -304,6 +311,9 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "esc":
+		if re.standalone {
+			return re, tea.Quit
+		}
 		return re, func() tea.Msg {
 			return ruleEditorDoneMsg{rule: nil, ruleIndex: re.ruleIndex}
 		}
@@ -395,6 +405,9 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					})
 				}
 			}
+		}
+		if re.standalone {
+			return re, tea.Quit
 		}
 		return re, func() tea.Msg {
 			return rulesSubmittedMsg{rules: rules}

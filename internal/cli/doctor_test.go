@@ -207,8 +207,8 @@ func TestDoctor_FailsWhenHookNotInstalled(t *testing.T) {
 	if !strings.Contains(output, "[FAIL] Hook installed: claude") {
 		t.Errorf("expected hook FAIL, got: %s", output)
 	}
-	if !strings.Contains(output, "care-bare init") {
-		t.Errorf("expected fix hint mentioning 'care-bare init', got: %s", output)
+	if !strings.Contains(output, "care-bare add") {
+		t.Errorf("expected fix hint mentioning 'care-bare add', got: %s", output)
 	}
 }
 

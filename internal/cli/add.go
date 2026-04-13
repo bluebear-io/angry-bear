@@ -10,11 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+
 	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
-	"github.com/charmbracelet/huh"
-	"github.com/spf13/cobra"
+	"github.com/Blue-Bear-Security/care-bare/internal/tui"
 )
 
 // validToolNames lists the recognized tool names for flag validation and completion.
@@ -303,8 +306,8 @@ func completeAgentNames(cmd *cobra.Command, args []string, toComplete string) ([
 	return matches, cobra.ShellCompDirectiveNoFileComp
 }
 
-// runAddInteractive launches an interactive form to select skill, tools, paths, agents.
-// All fields are in a single group so the user can navigate freely between them.
+// runAddInteractive picks a skill via huh, then launches the TUI rule editor
+// (same component as the dashboard) for tool/path/agent selection.
 func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents []string, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -312,47 +315,6 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
 	globalCfg, _ := engine.LoadGlobalConfig(projectRoot)
-
-	var skillPaths []string
-	for _, sp := range globalCfg.SkillPaths {
-		if filepath.IsAbs(sp) {
-			skillPaths = append(skillPaths, sp)
-		} else {
-			skillPaths = append(skillPaths, filepath.Join(projectRoot, sp))
-		}
-	}
-	discoveredSkills, _ := scanner.ScanSkills(skillPaths)
-
-	// Skill options
-	skillOpts := make([]huh.Option[string], 0, len(discoveredSkills))
-	for _, s := range discoveredSkills {
-		label := s.Name
-		if s.Description != "" {
-			label = s.Name + " — " + s.Description
-			if len(label) > 60 {
-				label = label[:57] + "..."
-			}
-		}
-		skillOpts = append(skillOpts, huh.NewOption(label, s.Name))
-	}
-	if len(skillOpts) == 0 {
-		return "", nil, nil, nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
-	}
-
-	// Tool options
-	toolOpts := make([]huh.Option[string], len(validToolNames))
-	for i, t := range validToolNames {
-		toolOpts[i] = huh.NewOption(t, t)
-	}
-
-	// Path options — scan project directories + common patterns
-	pathOpts := buildPathOptions(projectRoot)
-
-	// Agent options
-	agentOpts := make([]huh.Option[string], len(validAgentNames))
-	for i, a := range validAgentNames {
-		agentOpts[i] = huh.NewOption(a, a)
-	}
 
 	// Show project context
 	projectName := filepath.Base(projectRoot)
@@ -362,90 +324,96 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Project: %s (%s)\n\n", projectName, projectRoot)
 
+	// Discover skills
+	var skillPathDirs []string
+	for _, sp := range globalCfg.SkillPaths {
+		if filepath.IsAbs(sp) {
+			skillPathDirs = append(skillPathDirs, sp)
+		} else {
+			skillPathDirs = append(skillPathDirs, filepath.Join(projectRoot, sp))
+		}
+	}
+	discoveredSkills, _ := scanner.ScanSkills(skillPathDirs)
+	if len(discoveredSkills) == 0 {
+		return "", nil, nil, nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
+	}
+
+	// Step 1: Pick skill via huh select
+	skillOpts := make([]huh.Option[string], 0, len(discoveredSkills))
+	for _, s := range discoveredSkills {
+		label := s.Name
+		if s.Description != "" {
+			label = s.Name + " — " + s.Description
+			if len(label) > 70 {
+				label = label[:67] + "..."
+			}
+		}
+		skillOpts = append(skillOpts, huh.NewOption(label, s.Name))
+	}
+
 	var selectedSkill string
-	var selectedTools []string
-	var selectedPaths []string
-	var selectedAgents []string
-
-	// Skill selector with scrollable height
-	skillSelect := huh.NewSelect[string]().
-		Title("Skill to enforce").
-		Options(skillOpts...).
-		Value(&selectedSkill).
-		Height(min(len(skillOpts)+2, 20))
-
-	form := huh.NewForm(
+	selectForm := huh.NewForm(
 		huh.NewGroup(
-			skillSelect,
-			huh.NewMultiSelect[string]().
-				Title("Tools").
-				Description("space to toggle, enter to confirm").
-				Options(toolOpts...).
-				Value(&selectedTools),
-			huh.NewMultiSelect[string]().
-				Title("Paths").
-				Description("space to toggle, enter to confirm").
-				Options(pathOpts...).
-				Value(&selectedPaths),
-			huh.NewMultiSelect[string]().
-				Title("Agents").
-				Options(agentOpts...).
-				Value(&selectedAgents),
+			huh.NewSelect[string]().
+				Title("Select a skill to enforce").
+				Options(skillOpts...).
+				Value(&selectedSkill).
+				Height(min(len(skillOpts)+2, 20)),
 		),
 	).WithTheme(huh.ThemeDracula())
 
-	err = form.Run()
+	err = selectForm.Run()
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	// Defaults for empty selections
-	if len(selectedTools) == 0 {
-		selectedTools = []string{"*"}
+	// Step 2: Launch the TUI rule editor (same component as dashboard)
+	// Load existing config to pre-select items
+	configPath, cfgErr := resolveConfigPath(cmd)
+	if cfgErr != nil {
+		return "", nil, nil, nil, cfgErr
 	}
-	if len(selectedPaths) == 0 {
-		selectedPaths = []string{"**"}
-	}
-	if len(selectedAgents) == 0 {
-		selectedAgents = []string{"*"}
-	}
+	existingCfg, _ := loadOrCreateConfig(configPath)
 
-	return selectedSkill, selectedTools, selectedPaths, selectedAgents, nil
-}
+	styles := tui.DefaultStyles()
+	editor := tui.NewRuleEditor(selectedSkill, nil, -1, styles)
+	editor.SetStandalone()
+	editor.SetExistingRules(existingCfg.Tools)
+	editor.SetProjectRoot(projectRoot)
 
-// buildPathOptions scans the project root and returns path options for the interactive picker.
-// Includes "** (all files)" plus every top-level directory as "dir/**" glob.
-func buildPathOptions(projectRoot string) []huh.Option[string] {
-	opts := []huh.Option[string]{
-		huh.NewOption("** (all files)", "**"),
-	}
-
-	entries, err := os.ReadDir(projectRoot)
+	p := tea.NewProgram(editor, tea.WithAltScreen())
+	finalModel, err := p.Run()
 	if err != nil {
-		return opts
+		return "", nil, nil, nil, err
 	}
 
-	// Common glob patterns
-	exts := []string{"*.go", "*.py", "*.ts", "*.tsx", "*.js", "*.jsx"}
-	for _, ext := range exts {
-		pattern := "**/" + ext
-		opts = append(opts, huh.NewOption(pattern, pattern))
+	re := finalModel.(tui.RuleEditor)
+	rules := re.Result()
+	if len(rules) == 0 {
+		return "", nil, nil, nil, fmt.Errorf("no rules selected")
 	}
 
-	// Top-level directories
-	ignoreSet := map[string]bool{
-		".git": true, "node_modules": true, "vendor": true, "dist": true,
-		".next": true, "__pycache__": true, ".venv": true, "build": true,
-	}
-	for _, e := range entries {
-		if !e.IsDir() || ignoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		pattern := e.Name() + "/**"
-		opts = append(opts, huh.NewOption(e.Name()+"/", pattern))
+	// Extract unique tools, paths, agents from the result
+	toolSet := make(map[string]bool)
+	pathSet := make(map[string]bool)
+	agentSet := make(map[string]bool)
+	for _, r := range rules {
+		toolSet[r.Tool] = true
+		pathSet[r.Path] = true
+		agentSet[r.Agent] = true
 	}
 
-	return opts
+	for t := range toolSet {
+		tools = append(tools, t)
+	}
+	for pa := range pathSet {
+		paths = append(paths, pa)
+	}
+	for a := range agentSet {
+		agents = append(agents, a)
+	}
+
+	return selectedSkill, tools, paths, agents, nil
 }
 
 // ensureHooksInstalled checks if care-bare hooks are installed in agent configs.

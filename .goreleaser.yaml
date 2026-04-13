@@ -69,3 +69,18 @@ release:
 
 snapshot:
   version_template: "{{ .Tag }}-next"
+
+brews:
+  - name: care-bare
+    repository:
+      owner: Blue-Bear-Security
+      name: care-bare
+      branch: main
+      directory: HomebrewFormula
+    homepage: https://github.com/Blue-Bear-Security/care-bare
+    description: "Enforce skill-loading requirements for AI coding agents"
+    license: "Apache-2.0"
+    install: |
+      bin.install "care-bare"
+    test: |
+      system "#{bin}/care-bare", "version"

@@ -378,14 +378,16 @@ func (d Dashboard) View() string {
 	}
 
 	// Split right panel: top = rules (60%), bottom = event log (40%)
-	// Two bordered panels stacked: each adds 2 rows of border
-	// Total right side inner height must match left panel inner height
-	rulesHeight := (panelHeight - 4) * 55 / 100  // 55% of inner space
-	logsHeight := panelHeight - 4 - rulesHeight   // remaining inner space
+	rulesHeight := panelHeight * 50 / 100
+	logsHeight := panelHeight - rulesHeight
 
 	left := d.renderSkillList(leftWidth, panelHeight)
 	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)
 	logsContent := d.renderEventLog(rightWidth, logsHeight)
+
+	// Combine rules + divider + logs into one right panel
+	divider := d.styles.Divider.Render(strings.Repeat("─", rightWidth))
+	rightContent := rulesContent + "\n" + divider + "\n" + logsContent
 
 	activeBorder := lipgloss.Color("#7C3AED")
 	dimBorder := lipgloss.Color("#374151")
@@ -405,27 +407,14 @@ func (d Dashboard) View() string {
 		Height(panelHeight).
 		Render(left)
 
-	rulesPanel := lipgloss.NewStyle().
+	rightPanel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(rightBorderColor).
 		Width(rightWidth).
-		Height(rulesHeight).
-		Render(rulesContent)
+		Height(panelHeight).
+		Render(rightContent)
 
-	logsBorderColor := lipgloss.Color("#374151")
-	if d.focusPanel == 2 {
-		logsBorderColor = activeBorder
-	}
-	logsPanel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(logsBorderColor).
-		Width(rightWidth).
-		Height(logsHeight).
-		Render(logsContent)
-
-	rightCombined := lipgloss.JoinVertical(lipgloss.Left, rulesPanel, logsPanel)
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightCombined)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightPanel)
 }
 
 // renderSkillList renders the left panel.

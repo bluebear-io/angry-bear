@@ -67,14 +67,38 @@ func runStatus(cmd *cobra.Command, args []string) error {
 }
 
 // printEnforcementRules loads and displays the merged enforcement config.
+// It checks the repo-keyed config directory first (~/.care-bear/repos/{hash}/),
+// then falls back to project-level config, matching the resolution order used
+// by the hook and the TUI.
 func printEnforcementRules(out io.Writer, projectRoot string) {
 	fmt.Fprintln(out, "=== Enforcement Rules ===")
 
-	rules, err := engine.LoadConfig(projectRoot)
-	if err != nil {
-		fmt.Fprintf(out, "  Error loading config: %v\n", err)
-		fmt.Fprintln(out)
-		return
+	// Try repo-keyed config directory first, same as the hook uses.
+	var rules []engine.MatchedRule
+	var err error
+
+	repo := engine.ResolveRepoIdentity(projectRoot)
+	if repo != nil {
+		home, homeErr := os.UserHomeDir()
+		if homeErr == nil {
+			repoConfigDir := engine.RepoConfigDir(home, repo)
+			rules, err = engine.LoadConfigFromDir(repoConfigDir)
+			if err != nil {
+				fmt.Fprintf(out, "  Error loading config: %v\n", err)
+				fmt.Fprintln(out)
+				return
+			}
+		}
+	}
+
+	// Fall back to project-level config walk if no repo-keyed rules found.
+	if len(rules) == 0 {
+		rules, err = engine.LoadConfig(projectRoot)
+		if err != nil {
+			fmt.Fprintf(out, "  Error loading config: %v\n", err)
+			fmt.Fprintln(out)
+			return
+		}
 	}
 
 	if len(rules) == 0 {

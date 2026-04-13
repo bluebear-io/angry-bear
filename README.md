@@ -16,16 +16,18 @@ care-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifyi
 ## Install
 
 ```bash
-# Homebrew
+# Homebrew (recommended)
 brew tap Blue-Bear-Security/care-bear
 brew install care-bear
 
-# Go
+# Go (requires $GOPATH/bin on your PATH)
 go install github.com/Blue-Bear-Security/care-bear/cmd/care-bear@latest
 
 # From source
 git clone https://github.com/Blue-Bear-Security/care-bear.git
 cd care-bear && make install
+# Binary installed to $GOPATH/bin — ensure it's on your PATH:
+# export PATH="$HOME/go/bin:$PATH"  # add to ~/.zshrc or ~/.bashrc
 ```
 
 ## Quick Start
@@ -245,6 +247,27 @@ care-bear/
 ```
 
 All agent-specific logic lives in adapters. The engine is agent-agnostic. See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture guide.
+
+## Troubleshooting
+
+### `care-bear: command not found`
+
+If you installed via `go install` or `make install`, the binary is placed in `$GOPATH/bin` (defaults to `$HOME/go/bin`). Ensure this directory is on your `PATH`:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+Add this line to your shell profile (`~/.zshrc`, `~/.bashrc`, or `~/.bash_profile`) to make it permanent.
+
+### `care-bear doctor` reports failures
+
+Run `care-bear doctor` to diagnose installation issues. Each failed check includes a fix hint. Common issues:
+
+- **Hook not installed**: Run `care-bear add` in your project directory.
+- **Config invalid JSON**: Check syntax in `.care-bear/skill_enforcement.json`.
+- **Skill path does not exist**: Verify `skill_paths` in `.care-bear/config.json` point to valid directories containing `SKILL.md` files.
+- **State directory not yet created**: This is normal on a fresh install. The state directory is created automatically on the first hook invocation.
 
 ## Contributing
 

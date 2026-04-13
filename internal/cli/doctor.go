@@ -69,7 +69,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	results = append(results, checkHookInstallation(projectRoot)...)
 	results = append(results, checkStateDirectory(projectRoot))
 	results = append(results, checkBinaryOnPath())
-	results = append(results, checkSkillPaths(projectRoot)...)
+	results = append(results, checkSkillPaths(projectRoot, cwd)...)
 
 	// Print results.
 	passed := 0
@@ -106,12 +106,24 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 // checkConfigValidity validates skill_enforcement.json and config.json.
 // Returns one or two check results depending on what files exist.
+// Uses ResolveConfigForProject to find the enforcement config in the same
+// location as the hook (repo-keyed dir first, project-level fallback).
 func checkConfigValidity(projectRoot string) []checkResult {
 	var results []checkResult
 
-	// Check skill_enforcement.json.
-	enforcementPath := filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json")
-	results = append(results, checkEnforcementConfig(enforcementPath))
+	// Check skill_enforcement.json via the shared resolver so we look in the
+	// same repo-keyed directory (~/.care-bear/repos/{hash}/) that the hook uses.
+	enforcementPath, err := ResolveConfigForProject(projectRoot)
+	if err != nil {
+		results = append(results, checkResult{
+			Name:    "Config validity: skill_enforcement.json",
+			Passed:  false,
+			Detail:  fmt.Sprintf("cannot resolve config path: %v", err),
+			FixHint: "Check home directory permissions.",
+		})
+	} else {
+		results = append(results, checkEnforcementConfig(enforcementPath))
+	}
 
 	// Check config.json.
 	configPath := filepath.Join(projectRoot, ".care-bear", "config.json")
@@ -273,6 +285,8 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 }
 
 // checkStateDirectory verifies that .care-bear/state/ exists and is writable.
+// A missing state directory is not a failure because it is created lazily on
+// first hook invocation. It is reported as PASS with an informational note.
 func checkStateDirectory(projectRoot string) checkResult {
 	name := "State directory: .care-bear/state/"
 	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
@@ -281,10 +295,9 @@ func checkStateDirectory(projectRoot string) checkResult {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return checkResult{
-				Name:    name,
-				Passed:  false,
-				Detail:  "does not exist",
-				FixHint: "Run 'care-bear add' to create the state directory.",
+				Name:   name,
+				Passed: true,
+				Detail: "not yet created (will be created on first hook invocation)",
 			}
 		}
 		return checkResult{
@@ -346,8 +359,11 @@ func checkBinaryOnPath() checkResult {
 }
 
 // checkSkillPaths loads the global config and checks each configured skill path
-// for existence and discoverable skill files.
-func checkSkillPaths(projectRoot string) []checkResult {
+// for existence and discoverable skill files. Relative skill paths are resolved
+// against cwd (the actual project directory) rather than projectRoot, because
+// skills are project-level and projectRoot may resolve to the home directory
+// when ~/.care-bear/ exists.
+func checkSkillPaths(projectRoot, cwd string) []checkResult {
 	var results []checkResult
 
 	globalCfg, err := engine.LoadGlobalConfig(projectRoot)
@@ -366,7 +382,7 @@ func checkSkillPaths(projectRoot string) []checkResult {
 		if filepath.IsAbs(sp) {
 			absPath = sp
 		} else {
-			absPath = filepath.Join(projectRoot, sp)
+			absPath = filepath.Join(cwd, sp)
 		}
 
 		result := checkSingleSkillPath(sp, absPath)

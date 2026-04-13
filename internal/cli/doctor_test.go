@@ -335,8 +335,10 @@ func TestDoctor_FailsWhenSkillPathExistsButEmpty(t *testing.T) {
 	}
 }
 
-// TestDoctor_MissingStateDirectory verifies that doctor reports FAIL when
-// the .care-bear/state/ directory does not exist.
+// TestDoctor_MissingStateDirectory verifies that doctor reports PASS with an
+// informational note when the .care-bear/state/ directory does not exist.
+// A missing state directory is not a failure because it is created lazily on
+// first hook invocation.
 func TestDoctor_MissingStateDirectory(t *testing.T) {
 	dir := t.TempDir()
 	setupHealthyProject(t, dir)
@@ -347,17 +349,16 @@ func TestDoctor_MissingStateDirectory(t *testing.T) {
 		t.Fatalf("failed to remove state directory: %v", err)
 	}
 
-	output, execErr := runDoctorInDir(t, dir)
+	output, _ := runDoctorInDir(t, dir)
 
-	if execErr == nil {
-		t.Fatal("expected doctor to return error for missing state dir, got nil")
+	if !strings.Contains(output, "[PASS] State directory") {
+		t.Errorf("expected state directory PASS, got: %s", output)
 	}
-
-	if !strings.Contains(output, "[FAIL] State directory") {
-		t.Errorf("expected state directory FAIL, got: %s", output)
+	if !strings.Contains(output, "not yet created") {
+		t.Errorf("expected 'not yet created' detail, got: %s", output)
 	}
-	if !strings.Contains(output, "does not exist") {
-		t.Errorf("expected 'does not exist' detail, got: %s", output)
+	if !strings.Contains(output, "first hook invocation") {
+		t.Errorf("expected 'first hook invocation' detail, got: %s", output)
 	}
 }
 

@@ -167,12 +167,19 @@ func runHook(cmd *cobra.Command, args []string) error {
 		return writeAllow(cmd, hookAdapter)
 	}
 
-	// Step 7: Load session state.
+	// Step 7: Load session state with skill TTL.
+	globalCfg, cfgErr := engine.LoadGlobalConfig(projectRoot)
+	if cfgErr != nil {
+		logger.Warn("failed to load global config, using defaults", "error", cfgErr)
+		globalCfg = &engine.GlobalConfig{StateTTLHours: 24}
+	}
+	skillTTL := time.Duration(globalCfg.SkillTTLMinutes) * time.Minute
+
 	stateDir := filepath.Join(projectRoot, ".care-bare", "state")
 	var invokedSkills map[string]bool
 	if _, err := os.Stat(stateDir); err == nil {
 		mgr := state.NewStateManager(stateDir)
-		invokedSkills, err = mgr.GetInvokedSkills(hookInput.SessionID)
+		invokedSkills, err = mgr.GetFreshSkills(hookInput.SessionID, skillTTL)
 		if err != nil {
 			logger.Warn("failed to read session state, treating as empty", "error", err)
 			invokedSkills = make(map[string]bool)
@@ -180,7 +187,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	} else {
 		invokedSkills = make(map[string]bool)
 	}
-	logger.Debug("loaded invoked skills", "count", len(invokedSkills))
+	logger.Debug("loaded invoked skills", "count", len(invokedSkills), "ttl_minutes", globalCfg.SkillTTLMinutes)
 
 	// Step 8: Normalize the file path.
 	normalizedPath := engine.NormalizeFilePath(hookInput.FilePath, projectRoot)
@@ -224,16 +231,11 @@ func runHook(cmd *cobra.Command, args []string) error {
 		logger.Debug("allowed tool invocation")
 	}
 
-	// Step 11: Trigger throttled pruning.
+	// Step 11: Trigger throttled pruning (reuses globalCfg loaded in step 7).
 	if _, err := os.Stat(stateDir); err == nil {
-		globalCfg, err := engine.LoadGlobalConfig(projectRoot)
-		if err != nil {
-			logger.Warn("failed to load global config for pruning", "error", err)
-		} else {
-			ttl := time.Duration(globalCfg.StateTTLHours) * time.Hour
-			if err := state.PruneIfDue(stateDir, ttl); err != nil {
-				logger.Warn("pruning failed", "error", err)
-			}
+		ttl := time.Duration(globalCfg.StateTTLHours) * time.Hour
+		if pruneErr := state.PruneIfDue(stateDir, ttl); pruneErr != nil {
+			logger.Warn("pruning failed", "error", pruneErr)
 		}
 	}
 

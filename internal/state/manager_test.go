@@ -472,6 +472,170 @@ func TestRecordSkillWithAgent_SetsAgent(t *testing.T) {
 	}
 }
 
+// --- Skill timestamp tests ---
+
+func TestRecordSkill_StoresTimestamp(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	before := time.Now().UTC()
+	err := mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	if err != nil {
+		t.Fatalf("RecordSkillWithAgent failed: %v", err)
+	}
+	after := time.Now().UTC()
+
+	data, err := os.ReadFile(filepath.Join(dir, "sess1.json"))
+	if err != nil {
+		t.Fatalf("state file not created: %v", err)
+	}
+
+	var state SessionState
+	err = json.Unmarshal(data, &state)
+	if err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	ts, ok := state.SkillTimestamps["git"]
+	if !ok {
+		t.Fatal("no timestamp for skill 'git'")
+	}
+
+	loadedAt, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		t.Fatalf("invalid timestamp %q: %v", ts, err)
+	}
+
+	if loadedAt.Before(before.Truncate(time.Second)) || loadedAt.After(after.Add(time.Second)) {
+		t.Errorf("timestamp = %v, want between %v and %v", loadedAt, before, after)
+	}
+}
+
+func TestRecordSkill_RefreshesTimestamp(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	err := mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	if err != nil {
+		t.Fatalf("first record failed: %v", err)
+	}
+
+	// Read first timestamp, then backdate it to ensure refresh is visible
+	stPath := filepath.Join(dir, "sess1.json")
+	data1, _ := os.ReadFile(stPath)
+	var state1 SessionState
+	_ = json.Unmarshal(data1, &state1)
+	state1.SkillTimestamps["git"] = time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	backdated, _ := json.Marshal(state1)
+	_ = os.WriteFile(stPath, backdated, 0600)
+
+	// Re-record same skill — should update timestamp to now
+	err = mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	if err != nil {
+		t.Fatalf("second record failed: %v", err)
+	}
+
+	data2, _ := os.ReadFile(stPath)
+	var state2 SessionState
+	_ = json.Unmarshal(data2, &state2)
+	ts2 := state2.SkillTimestamps["git"]
+
+	refreshedAt, _ := time.Parse(time.RFC3339, ts2)
+	if time.Since(refreshedAt) > 5*time.Second {
+		t.Errorf("timestamp not refreshed to now, got %q", ts2)
+	}
+
+	// Should still have exactly 1 entry in the list
+	if len(state2.InvokedSkills) != 1 {
+		t.Errorf("expected 1 skill, got %d", len(state2.InvokedSkills))
+	}
+}
+
+// --- GetFreshSkills tests ---
+
+func TestGetFreshSkills_ZeroTTLReturnsAll(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	_ = mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	_ = mgr.RecordSkillWithAgent("sess1", "linear", "claude")
+
+	skills, err := mgr.GetFreshSkills("sess1", 0)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+	if len(skills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(skills))
+	}
+}
+
+func TestGetFreshSkills_ExpiredSkillsExcluded(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	// Record a skill, then manually backdate its timestamp
+	_ = mgr.RecordSkillWithAgent("sess1", "old-skill", "claude")
+	_ = mgr.RecordSkillWithAgent("sess1", "fresh-skill", "claude")
+
+	// Backdate old-skill to 2 hours ago
+	stPath := filepath.Join(dir, "sess1.json")
+	data, _ := os.ReadFile(stPath)
+	var state SessionState
+	_ = json.Unmarshal(data, &state)
+	state.SkillTimestamps["old-skill"] = time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
+	updated, _ := json.Marshal(state)
+	_ = os.WriteFile(stPath, updated, 0600)
+
+	// TTL of 1 hour — old-skill should be expired
+	skills, err := mgr.GetFreshSkills("sess1", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+
+	if skills["old-skill"] {
+		t.Error("old-skill should be expired but was returned as fresh")
+	}
+	if !skills["fresh-skill"] {
+		t.Error("fresh-skill should be fresh but was not returned")
+	}
+}
+
+func TestGetFreshSkills_NoTimestampTreatedAsFresh(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a state file WITHOUT timestamps (old format)
+	state := SessionState{
+		SessionID:     "sess1",
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		InvokedSkills: []string{"legacy-skill"},
+	}
+	data, _ := json.Marshal(state)
+	_ = os.WriteFile(filepath.Join(dir, "sess1.json"), data, 0600)
+
+	mgr := NewStateManager(dir)
+	skills, err := mgr.GetFreshSkills("sess1", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+
+	if !skills["legacy-skill"] {
+		t.Error("legacy skill without timestamp should be treated as fresh")
+	}
+}
+
+func TestGetFreshSkills_MissingSession(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	skills, err := mgr.GetFreshSkills("nonexistent", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+	if len(skills) != 0 {
+		t.Errorf("expected empty map, got %v", skills)
+	}
+}
+
 func TestRecordSkillWithAgent_UpdatesAgent(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewStateManager(dir)

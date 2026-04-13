@@ -40,6 +40,7 @@ const (
 	viewDashboard  viewState = iota // Main skills+rules dashboard
 	viewRuleEditor                  // Huh form for add/edit rule
 	viewTreePicker                  // File browser for path selection
+	viewSettings                    // Config.json settings editor
 )
 
 // --- Messages for inter-view communication ---
@@ -65,6 +66,9 @@ type treePickerDoneMsg struct {
 	pattern string // Empty if cancelled
 }
 
+// openSettingsMsg triggers the settings view.
+type openSettingsMsg struct{}
+
 // saveResultMsg is sent after a config save attempt.
 type saveResultMsg struct {
 	err error
@@ -73,6 +77,7 @@ type saveResultMsg struct {
 // App is the root Bubble Tea model that manages the TUI lifecycle.
 type App struct {
 	config       engine.Config           // Currently loaded enforcement config (mutable)
+	globalConfig *engine.GlobalConfig    // Global config (skill_ttl, state_ttl, etc.)
 	configPath   string                  // Path to the config file for saving
 	stateDir     string                  // Path to .care-bare/state/ for watching
 	skills       []scanner.Skill         // Discovered skills from the scanner
@@ -81,6 +86,7 @@ type App struct {
 	dashboard    Dashboard               // Dashboard child model
 	ruleEditor   RuleEditor              // Rule editor child model
 	treePicker   TreePicker              // Tree picker child model
+	settings     Settings                // Settings editor child model
 	statusMsg    string                  // Transient status message ("Saved!", "Error: ...")
 	width        int                     // Terminal width
 	height       int                     // Terminal height
@@ -89,10 +95,17 @@ type App struct {
 
 // NewApp creates a new TUI application model with the given config, config path,
 // discovered skills, and currently loaded skills from session state.
-func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loadedSkills map[string]*SkillStatus) App {
+func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loadedSkills map[string]*SkillStatus, globalCfg *engine.GlobalConfig) App {
 	styles := DefaultStyles()
 	if loadedSkills == nil {
 		loadedSkills = make(map[string]*SkillStatus)
+	}
+	if globalCfg == nil {
+		globalCfg = &engine.GlobalConfig{
+			SkillPaths:    []string{".claude/skills"},
+			StateTTLHours: 24,
+			DefaultAgent:  "*",
+		}
 	}
 	stateDir := ""
 	if configPath != "" {
@@ -101,6 +114,7 @@ func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loaded
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)
 	return App{
 		config:       cfg,
+		globalConfig: globalCfg,
 		configPath:   configPath,
 		stateDir:     stateDir,
 		skills:       skills,
@@ -262,8 +276,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, watchStateDir(a.stateDir)
 
 	case eventsUpdatedMsg:
-		// Events log changed — reload and restart watcher
+		// Events log changed — reload, auto-scroll to latest, restart watcher
 		a.dashboard.LoadEventLog("")
+		// Auto-scroll to the newest event
+		if len(a.dashboard.eventLines) > 0 {
+			a.dashboard.logCursor = len(a.dashboard.eventLines) - 1
+		}
 		home, _ := os.UserHomeDir()
 		eventsLog := filepath.Join(home, ".care-bare", "events.log")
 		return a, watchEventsLog(eventsLog)
@@ -354,6 +372,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case openSettingsMsg:
+		a.view = viewSettings
+		a.settings = NewSettings(a.globalConfig, a.styles)
+		a.settings.width = a.width
+		a.settings.height = a.height
+		return a, a.settings.Init()
+
+	case settingsDoneMsg:
+		a.view = viewDashboard
+		if msg.config != nil {
+			// Preserve fields not editable in settings
+			msg.config.SkillPaths = a.globalConfig.SkillPaths
+			msg.config.IgnorePatterns = a.globalConfig.IgnorePatterns
+			a.globalConfig = msg.config
+			return a, saveGlobalConfig(a.globalConfig, a.configPath)
+		}
+		return a, nil
+
 	case saveResultMsg:
 		if msg.err != nil {
 			a.statusMsg = fmt.Sprintf("Error saving: %v", msg.err)
@@ -380,6 +416,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var newPicker tea.Model
 		newPicker, cmd = a.treePicker.Update(msg)
 		a.treePicker = newPicker.(TreePicker)
+	case viewSettings:
+		var newSettings tea.Model
+		newSettings, cmd = a.settings.Update(msg)
+		a.settings = newSettings.(Settings)
 	}
 
 	return a, cmd
@@ -398,6 +438,8 @@ func (a App) View() string {
 		content = a.ruleEditor.View()
 	case viewTreePicker:
 		content = a.treePicker.View()
+	case viewSettings:
+		content = a.settings.View()
 	}
 
 	status := ""
@@ -428,22 +470,42 @@ func (a App) helpBar() string {
 		switch a.dashboard.focusPanel {
 		case 0:
 			text = key("↑↓", "navigate") + sep + key("tab/→", "rules") + sep +
-				key("enter/a", "add rules") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+				key("enter/a", "add rules") + sep + key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 1:
 			text = key("↑↓", "navigate") + sep + key("tab", "logs") + sep + key("←", "skills") + sep +
 				key("t", "tool") + sep + key("p", "path") + sep + key("g", "agent") + sep +
-				key("d", "del") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+				key("d", "del") + sep + key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
-			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
-				key("enter", "jump to rule") + sep + key("f", "filter project") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+			text = key("↑↓", "scroll") + sep + key("PgUp/Dn", "page") + sep + key("Home/End", "top/bottom") + sep +
+				key("f", "filter") + sep + key("F", "clear filters") + sep + key("enter", "jump") + sep +
+				key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help
 	case viewTreePicker:
 		text = key("j/k", "navigate") + sep + key("enter", "select/open") + sep +
 			key("backspace", "up dir") + sep + key("esc", "cancel")
+	case viewSettings:
+		text = key("↑↓", "navigate") + sep + key("enter", "edit") + sep + key("esc/q", "save & exit")
 	}
 	return "\n" + text
+}
+
+// saveGlobalConfig writes the global config (config.json) to disk.
+func saveGlobalConfig(cfg *engine.GlobalConfig, enforcementConfigPath string) tea.Cmd {
+	return func() tea.Msg {
+		// config.json sits alongside skill_enforcement.json
+		dir := filepath.Dir(enforcementConfigPath)
+		configPath := filepath.Join(dir, "config.json")
+		data, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return saveResultMsg{err: err}
+		}
+		if err := os.WriteFile(configPath, data, 0o644); err != nil {
+			return saveResultMsg{err: err}
+		}
+		return saveResultMsg{err: nil}
+	}
 }
 
 // saveConfig writes the current config to disk as indented JSON.

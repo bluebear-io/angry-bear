@@ -18,10 +18,11 @@ type Config struct {
 
 // GlobalConfig represents the global care-bare configuration.
 type GlobalConfig struct {
-	SkillPaths     []string `json:"skill_paths"`
-	StateTTLHours  int      `json:"state_ttl_hours"`
-	DefaultAgent   string   `json:"default_agent"`
-	IgnorePatterns []string `json:"ignore_patterns"`
+	SkillPaths      []string `json:"skill_paths"`
+	StateTTLHours   int      `json:"state_ttl_hours"`
+	SkillTTLMinutes int      `json:"skill_ttl_minutes"`
+	DefaultAgent    string   `json:"default_agent"`
+	IgnorePatterns  []string `json:"ignore_patterns"`
 }
 
 // MatchedRule is a Rule paired with the file path it was loaded from.

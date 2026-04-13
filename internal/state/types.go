@@ -4,10 +4,11 @@ package state
 
 // SessionState represents the persisted state for a single session.
 type SessionState struct {
-	SessionID     string   `json:"session_id"`
-	Agent         string   `json:"agent,omitempty"`
-	CreatedAt     string   `json:"created_at"`
-	InvokedSkills []string `json:"invoked_skills"`
+	SessionID       string            `json:"session_id"`
+	Agent           string            `json:"agent,omitempty"`
+	CreatedAt       string            `json:"created_at"`
+	InvokedSkills   []string          `json:"invoked_skills"`
+	SkillTimestamps map[string]string `json:"skill_timestamps,omitempty"`
 }
 
 // LoadedSkill represents a skill loaded in a specific session/agent.

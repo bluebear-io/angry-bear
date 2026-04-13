@@ -16,24 +16,60 @@ import (
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
 )
 
+// filterCol identifies a filterable column in the event log.
+type filterCol int
+
+const (
+	filterAction   filterCol = iota // ACTION column
+	filterProject                   // PROJECT column
+	filterSess                      // SESS column
+	filterAgent                     // AGENT column
+	filterTool                      // TOOL column
+	filterSkill                     // SKILL column
+	filterColCount                  // sentinel — total number of filterable columns
+)
+
+// filterColNames returns display names for filter columns.
+func filterColName(c filterCol) string {
+	switch c {
+	case filterAction:
+		return "ACTION"
+	case filterProject:
+		return "PROJECT"
+	case filterSess:
+		return "SESS"
+	case filterAgent:
+		return "AGENT"
+	case filterTool:
+		return "TOOL"
+	case filterSkill:
+		return "SKILL"
+	}
+	return ""
+}
+
 // Dashboard is a split-pane view: skills (left), rules+logs (right).
 type Dashboard struct {
-	skills           []scanner.Skill
-	config           engine.Config
-	loadedSkills     map[string]*SkillStatus
-	eventLines       []string // Recent event log lines
-	projectRoot      string   // For reading events.log
-	skillCursor      int
-	ruleCursor       int
-	logCursor        int
-	logProjectFilter string // "" = all projects, or specific project name
-	focusPanel       int    // 0=skills, 1=rules, 2=event log
-	editingPath      bool
-	pathBuffer       string
-	pathCurPos       int
-	width            int
-	height           int
-	styles           Styles
+	skills       []scanner.Skill
+	config       engine.Config
+	loadedSkills map[string]*SkillStatus
+	eventLines   []string // Recent event log lines
+	projectRoot  string   // For reading events.log
+	skillCursor  int
+	ruleCursor   int
+	logCursor    int
+	focusPanel   int // 0=skills, 1=rules, 2=event log
+	editingPath  bool
+	pathBuffer   string
+	pathCurPos   int
+	width        int
+	height       int
+	styles       Styles
+
+	// Log filtering — multi-column
+	filterMode   bool                 // true when filter bar is active
+	filterCursor filterCol            // which column the filter cursor is on
+	logFilters   map[filterCol]string // active filters: column → value ("" = all)
 }
 
 // NewDashboard creates a new split-pane Dashboard.
@@ -46,6 +82,7 @@ func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, load
 		config:       cfg,
 		loadedSkills: loadedSkills,
 		styles:       styles,
+		logFilters:   make(map[filterCol]string),
 	}
 }
 
@@ -98,7 +135,9 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					d.ruleCursor--
 				}
 			case 2:
-				if d.logCursor > 0 {
+				if d.filterMode {
+					d.cycleFilterValue(-1)
+				} else if d.logCursor > 0 {
 					d.logCursor--
 				}
 			}
@@ -117,7 +156,9 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					d.ruleCursor++
 				}
 			case 2:
-				if d.logCursor < len(d.eventLines)-1 {
+				if d.filterMode {
+					d.cycleFilterValue(1)
+				} else if d.logCursor < len(d.eventLines)-1 {
 					d.logCursor++
 				}
 			}
@@ -288,35 +329,32 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, func() tea.Msg { return saveRequestMsg{} }
 
 		case "f":
-			// Cycle project filter: all → project1 → project2 → ... → all
+			// Toggle filter mode or advance to next column
 			if d.focusPanel == 2 {
-				projects := d.uniqueLogProjects()
-				if len(projects) == 0 {
-					return d, nil
-				}
-				if d.logProjectFilter == "" {
-					d.logProjectFilter = projects[0]
+				if !d.filterMode {
+					d.filterMode = true
+					d.filterCursor = filterAction
 				} else {
-					// Find current and move to next
-					found := false
-					for i, p := range projects {
-						if p == d.logProjectFilter {
-							if i+1 < len(projects) {
-								d.logProjectFilter = projects[i+1]
-							} else {
-								d.logProjectFilter = "" // Back to all
-							}
-							found = true
-							break
-						}
-					}
-					if !found {
-						d.logProjectFilter = ""
-					}
+					// Move to next column
+					d.filterCursor = (d.filterCursor + 1) % filterColCount
 				}
+			}
+			return d, nil
+
+		case "F":
+			// Clear all filters
+			if d.focusPanel == 2 {
+				d.logFilters = make(map[filterCol]string)
+				d.filterMode = false
 				d.logCursor = 0
 			}
 			return d, nil
+
+		case "esc":
+			if d.focusPanel == 2 && d.filterMode {
+				d.filterMode = false
+				return d, nil
+			}
 
 		case "c":
 			// Open settings view
@@ -727,9 +765,12 @@ func wordWrap(text string, width int) string {
 // renderEventLog renders the bottom-right panel showing recent hook events.
 // Columns auto-size based on actual data width.
 func (d Dashboard) renderEventLog(width, height int) string {
+	// Build filter label showing active filters
 	filterLabel := ""
-	if d.logProjectFilter != "" {
-		filterLabel = " [" + d.logProjectFilter + "]"
+	for col := filterAction; col < filterColCount; col++ {
+		if v, ok := d.logFilters[col]; ok && v != "" {
+			filterLabel += " [" + filterColName(col) + "=" + v + "]"
+		}
 	}
 	title := d.styles.RuleHeader.Render("  EVENT LOG"+filterLabel) + "\n"
 
@@ -737,22 +778,16 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	// Parse all visible events into structured rows
+	// Parse all events into structured rows
 	type eventRow struct {
 		act, project, sess, agent, tool, skill, path string
 		lineIdx                                      int
 		isBlock, isLoad                              bool
 	}
 
-	var allRows []eventRow
+	// First pass: parse all rows (unfiltered, for value extraction)
+	var parsedRows []eventRow
 	for i, line := range d.eventLines {
-		if d.logProjectFilter != "" {
-			parts := strings.Split(line, " | ")
-			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
-				continue
-			}
-		}
-
 		parts := strings.Split(line, " | ")
 		for j := range parts {
 			parts[j] = strings.TrimSpace(parts[j])
@@ -794,6 +829,15 @@ func (d Dashboard) renderEventLog(width, height int) string {
 			r.act = "ALLOW"
 		}
 
+		parsedRows = append(parsedRows, r)
+	}
+
+	// Second pass: apply filters
+	var allRows []eventRow
+	for _, r := range parsedRows {
+		if !d.matchesFilters(r.act, r.project, r.sess, r.agent, r.tool, r.skill) {
+			continue
+		}
 		allRows = append(allRows, r)
 	}
 
@@ -843,8 +887,27 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
 		colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
 
-	// Header
-	title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+	// Header — highlight the active filter column when in filter mode
+	if d.filterMode {
+		activeStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#FBBF24"))
+		headers := []string{"ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
+		colWidths := []int{colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"]}
+		var headerParts []string
+		for i, h := range headers {
+			padded := fmt.Sprintf("%-*s", colWidths[i], h)
+			if filterCol(i) == d.filterCursor && i < int(filterColCount) {
+				headerParts = append(headerParts, activeStyle.Render(padded))
+			} else if v, ok := d.logFilters[filterCol(i)]; ok && v != "" && i < int(filterColCount) {
+				filteredStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FBBF24"))
+				headerParts = append(headerParts, filteredStyle.Render(padded))
+			} else {
+				headerParts = append(headerParts, d.styles.Description.Render(padded))
+			}
+		}
+		title += "  " + strings.Join(headerParts, "  ")
+	} else {
+		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+	}
 	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
 	// Scrolling
@@ -909,37 +972,113 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	return title + b.String()
 }
 
-// uniqueLogProjects extracts unique project names from event lines.
-func (d *Dashboard) uniqueLogProjects() []string {
+// uniqueColumnValues returns the unique values for a given filter column
+// from all parsed event lines.
+func (d *Dashboard) uniqueColumnValues(col filterCol) []string {
 	seen := make(map[string]bool)
-	var projects []string
+	var vals []string
 	for _, line := range d.eventLines {
 		parts := strings.Split(line, " | ")
-		if len(parts) >= 2 {
-			proj := strings.TrimSpace(parts[1])
-			if proj != "" && !seen[proj] {
-				seen[proj] = true
-				projects = append(projects, proj)
+		for j := range parts {
+			parts[j] = strings.TrimSpace(parts[j])
+		}
+		var val string
+		if len(parts) >= 8 {
+			switch col {
+			case filterAction:
+				if strings.Contains(line, "| BLOCK") {
+					val = "BLOCK"
+				} else if strings.Contains(line, "SKILL-LOAD") {
+					val = "LOAD"
+				} else {
+					val = "ALLOW"
+				}
+			case filterProject:
+				val = parts[1]
+			case filterSess:
+				val = parts[3]
+			case filterAgent:
+				val = parts[2]
+			case filterTool:
+				val = parts[4]
+			case filterSkill:
+				val = parts[7]
 			}
 		}
+		if val != "" && !seen[val] {
+			seen[val] = true
+			vals = append(vals, val)
+		}
 	}
-	return projects
+	return vals
+}
+
+// cycleFilterValue cycles the filter value for the current column.
+// direction: 1 = next, -1 = previous.
+func (d *Dashboard) cycleFilterValue(direction int) {
+	vals := d.uniqueColumnValues(d.filterCursor)
+	if len(vals) == 0 {
+		return
+	}
+	// Prepend "" (all) as first option
+	options := append([]string{""}, vals...)
+	current := d.logFilters[d.filterCursor]
+
+	idx := 0
+	for i, v := range options {
+		if v == current {
+			idx = i
+			break
+		}
+	}
+	idx += direction
+	if idx < 0 {
+		idx = len(options) - 1
+	}
+	if idx >= len(options) {
+		idx = 0
+	}
+
+	if options[idx] == "" {
+		delete(d.logFilters, d.filterCursor)
+	} else {
+		d.logFilters[d.filterCursor] = options[idx]
+	}
+	d.logCursor = 0
+}
+
+// matchesFilters checks if a row passes all active filters.
+func (d *Dashboard) matchesFilters(act, project, sess, agent, tool, skill string) bool {
+	for col, want := range d.logFilters {
+		if want == "" {
+			continue
+		}
+		var got string
+		switch col {
+		case filterAction:
+			got = act
+		case filterProject:
+			got = project
+		case filterSess:
+			got = sess
+		case filterAgent:
+			got = agent
+		case filterTool:
+			got = tool
+		case filterSkill:
+			got = skill
+		}
+		if got != want {
+			return false
+		}
+	}
+	return true
 }
 
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.
 // Works with the filtered log view used by renderEventLog.
 func (d *Dashboard) jumpToLogEntry() {
-	// Build the same filtered list as renderEventLog
-	var filtered []string
-	for _, line := range d.eventLines {
-		if d.logProjectFilter != "" {
-			parts := strings.Split(line, " | ")
-			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
-				continue
-			}
-		}
-		filtered = append(filtered, line)
-	}
+	filtered := append([]string{}, d.eventLines...)
 
 	if d.logCursor < 0 || d.logCursor >= len(filtered) {
 		return

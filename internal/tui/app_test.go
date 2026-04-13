@@ -241,7 +241,7 @@ func TestLogPanelNavigation(t *testing.T) {
 	}
 }
 
-func TestProjectFilterCycle(t *testing.T) {
+func TestMultiColumnFilter(t *testing.T) {
 	app := NewApp(testConfig(), "/tmp/test.json", testSkills(), nil, nil)
 	app.dashboard.eventLines = []string{
 		"2026-04-13T00:00:00Z | blueden | claude | abc12 | Edit | test.go | BLOCK | git",
@@ -249,25 +249,36 @@ func TestProjectFilterCycle(t *testing.T) {
 	}
 	app.dashboard.focusPanel = 2
 
-	// Press f — should set filter to first project (blueden)
+	// Press f — enters filter mode on ACTION column
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 	app = m.(App)
-	if app.dashboard.logProjectFilter != "blueden" {
-		t.Errorf("expected filter 'blueden', got %q", app.dashboard.logProjectFilter)
+	if !app.dashboard.filterMode {
+		t.Error("expected filter mode active")
+	}
+	if app.dashboard.filterCursor != filterAction {
+		t.Errorf("expected cursor on ACTION, got %d", app.dashboard.filterCursor)
 	}
 
-	// Press f again — should cycle to next project (baloo)
+	// Press f again — moves to PROJECT column
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 	app = m.(App)
-	if app.dashboard.logProjectFilter != "baloo" {
-		t.Errorf("expected filter 'baloo', got %q", app.dashboard.logProjectFilter)
+	if app.dashboard.filterCursor != filterProject {
+		t.Errorf("expected cursor on PROJECT, got %d", app.dashboard.filterCursor)
 	}
 
-	// Press f again — should clear filter
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	// Press down — cycles to first project value
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if app.dashboard.logProjectFilter != "" {
-		t.Errorf("expected empty filter, got %q", app.dashboard.logProjectFilter)
+	projectFilter := app.dashboard.logFilters[filterProject]
+	if projectFilter == "" {
+		t.Error("expected project filter to be set after down")
+	}
+
+	// Press F (shift) — clears all filters
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	app = m.(App)
+	if len(app.dashboard.logFilters) != 0 {
+		t.Errorf("expected empty filters after F, got %v", app.dashboard.logFilters)
 	}
 }
 

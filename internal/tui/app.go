@@ -276,8 +276,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, watchStateDir(a.stateDir)
 
 	case eventsUpdatedMsg:
-		// Events log changed — reload and restart watcher
+		// Events log changed — reload, auto-scroll to latest, restart watcher
 		a.dashboard.LoadEventLog("")
+		// Auto-scroll to the newest event
+		if len(a.dashboard.eventLines) > 0 {
+			a.dashboard.logCursor = len(a.dashboard.eventLines) - 1
+		}
 		home, _ := os.UserHomeDir()
 		eventsLog := filepath.Join(home, ".care-bare", "events.log")
 		return a, watchEventsLog(eventsLog)
@@ -472,8 +476,9 @@ func (a App) helpBar() string {
 				key("t", "tool") + sep + key("p", "path") + sep + key("g", "agent") + sep +
 				key("d", "del") + sep + key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
-			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
-				key("enter", "jump to rule") + sep + key("f", "filter project") + sep + key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+			text = key("↑↓", "scroll") + sep + key("PgUp/Dn", "page") + sep + key("Home/End", "top/bottom") + sep +
+				key("f", "filter") + sep + key("F", "clear filters") + sep + key("enter", "jump") + sep +
+				key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help

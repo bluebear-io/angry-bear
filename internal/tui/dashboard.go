@@ -214,16 +214,24 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d.focusPanel = (d.focusPanel + 2) % 3
 			return d, nil
 
-		// Right arrow: skills → rules or logs
+		// Right arrow: move filter column when filtering, else switch panel
 		case "right", "l":
+			if d.focusPanel == 2 && d.filterMode {
+				d.filterCursor = (d.filterCursor + 1) % filterColCount
+				return d, nil
+			}
 			if d.focusPanel == 0 {
 				d.focusPanel = 1
 				d.ruleCursor = 0
 			}
 			return d, nil
 
-		// Left arrow: rules/logs → skills
+		// Left arrow: move filter column when filtering, else switch panel
 		case "left", "h":
+			if d.focusPanel == 2 && d.filterMode {
+				d.filterCursor = (d.filterCursor + filterColCount - 1) % filterColCount
+				return d, nil
+			}
 			if d.focusPanel == 1 || d.focusPanel == 2 {
 				d.focusPanel = 0
 			}

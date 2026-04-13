@@ -608,13 +608,22 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	// Column format — plain text first, color the whole row after
-	colFmt := "  %-7s  %-8s  %-8s  %-16s  %s"
-
-	title += d.styles.Description.Render(fmt.Sprintf(colFmt, "ACTION", "AGENT", "TOOL", "SKILL", "PATH")) + "\n"
-	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
-
 	var b strings.Builder
+
+	// Column widths
+	colAct := 7
+	colAgent := 8
+	colTool := 8
+	colSkill := 16
+	pathWidth := width - 60
+	if pathWidth < 10 {
+		pathWidth = 10
+	}
+
+	// Header
+	title += d.styles.Description.Render(fmt.Sprintf("  %-*s %-6s %-*s %-*s %-*s %-*s",
+		colAct, "ACTION", "SESS", colAgent, "AGENT", colTool, "TOOL", colSkill, "SKILL", pathWidth, "PATH")) + "\n"
+	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
 	visible := height - 4
 	if visible < 3 {
@@ -641,16 +650,6 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
-
-	colAct := 7
-	colAgent := 8
-	colTool := 8
-	colSkill := 16
-
-	pathWidth := width - 55
-	if pathWidth < 10 {
-		pathWidth = 10
-	}
 
 	for idx := start; idx < end; idx++ {
 		line := d.eventLines[idx]

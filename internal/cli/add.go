@@ -304,8 +304,8 @@ func completeAgentNames(cmd *cobra.Command, args []string, toComplete string) ([
 }
 
 // runAddInteractive launches an interactive form to select skill, tools, paths, agents.
+// All fields are in a single group so the user can navigate freely between them.
 func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents []string, err error) {
-	// Discover available skills
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", nil, nil, nil, fmt.Errorf("getting working directory: %w", err)
@@ -323,14 +323,14 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	}
 	discoveredSkills, _ := scanner.ScanSkills(skillPaths)
 
-	// Build skill options
-	skillOpts := make([]huh.Option[string], 0, len(discoveredSkills)+1)
+	// Skill options
+	skillOpts := make([]huh.Option[string], 0, len(discoveredSkills))
 	for _, s := range discoveredSkills {
 		label := s.Name
 		if s.Description != "" {
-			label = s.Name + "  — " + s.Description
-			if len(label) > 70 {
-				label = label[:67] + "..."
+			label = s.Name + " — " + s.Description
+			if len(label) > 60 {
+				label = label[:57] + "..."
 			}
 		}
 		skillOpts = append(skillOpts, huh.NewOption(label, s.Name))
@@ -339,13 +339,16 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 		return "", nil, nil, nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
 	}
 
-	// Build tool options
+	// Tool options
 	toolOpts := make([]huh.Option[string], len(validToolNames))
 	for i, t := range validToolNames {
 		toolOpts[i] = huh.NewOption(t, t)
 	}
 
-	// Build agent options
+	// Path options — scan project directories + common patterns
+	pathOpts := buildPathOptions(projectRoot)
+
+	// Agent options
 	agentOpts := make([]huh.Option[string], len(validAgentNames))
 	for i, a := range validAgentNames {
 		agentOpts[i] = huh.NewOption(a, a)
@@ -353,34 +356,27 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 
 	var selectedSkill string
 	var selectedTools []string
+	var selectedPaths []string
 	var selectedAgents []string
-	var pathInput string
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Select a skill to enforce").
+				Title("Skill to enforce").
 				Options(skillOpts...).
 				Value(&selectedSkill),
-		),
-		huh.NewGroup(
 			huh.NewMultiSelect[string]().
-				Title("Select tools to enforce").
-				Description("Which tools require this skill?").
+				Title("Tools").
+				Description("space to toggle, enter to confirm").
 				Options(toolOpts...).
 				Value(&selectedTools),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("File path patterns").
-				Description("Comma-separated globs (e.g., **/*.go, stacks/**)").
-				Placeholder("**").
-				Value(&pathInput),
-		),
-		huh.NewGroup(
 			huh.NewMultiSelect[string]().
-				Title("Select agents").
-				Description("Which agents should enforce this?").
+				Title("Paths").
+				Description("space to toggle, enter to confirm").
+				Options(pathOpts...).
+				Value(&selectedPaths),
+			huh.NewMultiSelect[string]().
+				Title("Agents").
 				Options(agentOpts...).
 				Value(&selectedAgents),
 		),
@@ -391,18 +387,53 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 		return "", nil, nil, nil, err
 	}
 
-	// Defaults
+	// Defaults for empty selections
 	if len(selectedTools) == 0 {
 		selectedTools = []string{"*"}
 	}
-	if pathInput == "" {
-		pathInput = "**"
+	if len(selectedPaths) == 0 {
+		selectedPaths = []string{"**"}
 	}
 	if len(selectedAgents) == 0 {
 		selectedAgents = []string{"*"}
 	}
 
-	return selectedSkill, selectedTools, splitCSV(pathInput), selectedAgents, nil
+	return selectedSkill, selectedTools, selectedPaths, selectedAgents, nil
+}
+
+// buildPathOptions scans the project root and returns path options for the interactive picker.
+// Includes "** (all files)" plus every top-level directory as "dir/**" glob.
+func buildPathOptions(projectRoot string) []huh.Option[string] {
+	opts := []huh.Option[string]{
+		huh.NewOption("** (all files)", "**"),
+	}
+
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		return opts
+	}
+
+	// Common glob patterns
+	exts := []string{"*.go", "*.py", "*.ts", "*.tsx", "*.js", "*.jsx"}
+	for _, ext := range exts {
+		pattern := "**/" + ext
+		opts = append(opts, huh.NewOption(pattern, pattern))
+	}
+
+	// Top-level directories
+	ignoreSet := map[string]bool{
+		".git": true, "node_modules": true, "vendor": true, "dist": true,
+		".next": true, "__pycache__": true, ".venv": true, "build": true,
+	}
+	for _, e := range entries {
+		if !e.IsDir() || ignoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		pattern := e.Name() + "/**"
+		opts = append(opts, huh.NewOption(e.Name()+"/", pattern))
+	}
+
+	return opts
 }
 
 // ensureHooksInstalled checks if care-bare hooks are installed in agent configs.

@@ -52,7 +52,7 @@ func ResolveRepoIdentity(dir string) *RepoIdentity {
 		return nil
 	}
 
-	hash := shortHash(slug)
+	hash := ShortHash(slug)
 
 	return &RepoIdentity{
 		Slug:      slug,
@@ -92,9 +92,9 @@ func NormalizeRemoteURL(url string) string {
 	return ""
 }
 
-// shortHash returns the first 8 chars of the SHA-256 hash of a string.
+// ShortHash returns the first 8 chars of the SHA-256 hash of a string.
 // Used for filesystem-safe directory names.
-func shortHash(s string) string {
+func ShortHash(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", h[:4])
 }

@@ -77,6 +77,8 @@ type App struct {
 	globalConfig    *engine.GlobalConfig          // Global config (skill_ttl, state_ttl, etc.)
 	configPath      string                        // Path to the config file for saving
 	projectRoot     string                        // Actual project root (for path tree in rule editor)
+	repoConfigDir   string                        // Path to ~/.care-bare/repos/{hash}-{slug}/ (empty if no repo)
+	availablePaths  []string                      // All local checkout paths for this repo
 	stateDir        string                        // Path to .care-bare/state/ for watching
 	skills          []scanner.Skill               // Discovered skills from the scanner
 	loadedSkills    map[string]*state.SkillStatus // Skills loaded in active sessions, with agent info
@@ -99,7 +101,18 @@ func (a App) SwitchRequested() bool {
 
 // NewApp creates a new TUI application model with the given config, config path,
 // discovered skills, and currently loaded skills from session state.
-func NewApp(cfg engine.Config, configPath string, projectRoot string, skills []scanner.Skill, loadedSkills map[string]*state.SkillStatus, globalCfg *engine.GlobalConfig) App {
+// repoConfigDir is the path to ~/.care-bare/repos/{hash}-{slug}/ (may be empty).
+// availablePaths lists all local checkout directories for this repo (may be nil).
+func NewApp(
+	cfg engine.Config,
+	configPath string,
+	projectRoot string,
+	skills []scanner.Skill,
+	loadedSkills map[string]*state.SkillStatus,
+	globalCfg *engine.GlobalConfig,
+	repoConfigDir string,
+	availablePaths []string,
+) App {
 	styles := DefaultStyles()
 	if loadedSkills == nil {
 		loadedSkills = make(map[string]*state.SkillStatus)
@@ -117,16 +130,18 @@ func NewApp(cfg engine.Config, configPath string, projectRoot string, skills []s
 	}
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)
 	return App{
-		config:       cfg,
-		globalConfig: globalCfg,
-		configPath:   configPath,
-		projectRoot:  projectRoot,
-		stateDir:     stateDir,
-		skills:       skills,
-		loadedSkills: loadedSkills,
-		view:         viewDashboard,
-		dashboard:    dashboard,
-		styles:       styles,
+		config:         cfg,
+		globalConfig:   globalCfg,
+		configPath:     configPath,
+		projectRoot:    projectRoot,
+		repoConfigDir:  repoConfigDir,
+		availablePaths: availablePaths,
+		stateDir:       stateDir,
+		skills:         skills,
+		loadedSkills:   loadedSkills,
+		view:           viewDashboard,
+		dashboard:      dashboard,
+		styles:         styles,
 	}
 }
 
@@ -327,21 +342,32 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case openSettingsMsg:
 		a.view = viewSettings
-		a.settings = NewSettings(a.globalConfig, a.styles)
+		a.settings = NewSettings(a.globalConfig, a.styles, a.projectRoot, a.availablePaths)
 		a.settings.width = a.width
 		a.settings.height = a.height
 		return a, a.settings.Init()
 
 	case settingsDoneMsg:
 		a.view = viewDashboard
+		var cmds []tea.Cmd
+
+		// Handle preferred path change.
+		if msg.preferredPath != "" && msg.preferredPath != a.projectRoot && a.repoConfigDir != "" {
+			cmds = append(cmds, savePreferredPath(a.repoConfigDir, msg.preferredPath))
+		}
+
 		if msg.config != nil {
 			// Preserve fields not editable in settings
 			msg.config.SkillPaths = a.globalConfig.SkillPaths
 			msg.config.IgnorePatterns = a.globalConfig.IgnorePatterns
 			a.globalConfig = msg.config
-			return a, saveGlobalConfig(a.globalConfig, a.configPath)
+			cmds = append(cmds, saveGlobalConfig(a.globalConfig, msg.configLevel, a.configPath))
 		}
-		return a, nil
+
+		if len(cmds) == 0 {
+			return a, nil
+		}
+		return a, tea.Batch(cmds...)
 
 	case saveResultMsg:
 		if msg.err != nil {
@@ -439,23 +465,54 @@ func (a App) helpBar() string {
 		text = key("j/k", "navigate") + sep + key("enter", "select/open") + sep +
 			key("backspace", "up dir") + sep + key("esc", "cancel")
 	case viewSettings:
-		text = key("↑↓", "navigate") + sep + key("enter", "edit") + sep + key("esc/q", "save & exit")
+		text = key("↑↓", "navigate") + sep + key("enter", "edit") + sep +
+			key("g", "global") + sep + key("p", "project") + sep + key("esc/q", "save & exit")
 	}
 	return "\n" + text
 }
 
 // saveGlobalConfig writes the global config (config.json) to disk.
-func saveGlobalConfig(cfg *engine.GlobalConfig, enforcementConfigPath string) tea.Cmd {
+// When level is "global", it writes to ~/.care-bare/config.json.
+// When level is "project", it writes alongside the enforcement config file.
+func saveGlobalConfig(cfg *engine.GlobalConfig, level string, enforcementConfigPath string) tea.Cmd {
 	return func() tea.Msg {
-		// config.json sits alongside skill_enforcement.json
-		dir := filepath.Dir(enforcementConfigPath)
-		configPath := filepath.Join(dir, "config.json")
+		var configPath string
+		if level == "global" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return saveResultMsg{err: fmt.Errorf("getting home dir: %w", err)}
+			}
+			dir := filepath.Join(home, ".care-bare")
+			err = os.MkdirAll(dir, 0o755)
+			if err != nil {
+				return saveResultMsg{err: fmt.Errorf("creating global config dir: %w", err)}
+			}
+			configPath = filepath.Join(dir, "config.json")
+		} else {
+			// Project level: config.json sits alongside skill_enforcement.json
+			dir := filepath.Dir(enforcementConfigPath)
+			configPath = filepath.Join(dir, "config.json")
+		}
+
 		data, err := json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			return saveResultMsg{err: err}
 		}
-		if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		err = os.WriteFile(configPath, data, 0o644)
+		if err != nil {
 			return saveResultMsg{err: err}
+		}
+		return saveResultMsg{err: nil}
+	}
+}
+
+// savePreferredPath writes the preferred checkout path to preferences.json.
+func savePreferredPath(repoConfigDir string, path string) tea.Cmd {
+	return func() tea.Msg {
+		prefs := &engine.RepoPreferences{PreferredPath: path}
+		err := engine.SaveRepoPreferences(repoConfigDir, prefs)
+		if err != nil {
+			return saveResultMsg{err: fmt.Errorf("saving preferred path: %w", err)}
 		}
 		return saveResultMsg{err: nil}
 	}

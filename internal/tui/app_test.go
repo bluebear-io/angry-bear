@@ -31,7 +31,7 @@ func testConfig() engine.Config {
 }
 
 func TestNewAppInitialization(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	if len(app.config.Tools) != 2 {
 		t.Errorf("expected 2 rules, got %d", len(app.config.Tools))
 	}
@@ -41,7 +41,7 @@ func TestNewAppInitialization(t *testing.T) {
 }
 
 func TestDashboardRendersSkillNames(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.width, app.height = 120, 40
 	app.dashboard.width, app.dashboard.height = 120, 40
 	output := app.View()
@@ -53,7 +53,7 @@ func TestDashboardRendersSkillNames(t *testing.T) {
 }
 
 func TestDashboardNavigation(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	if app.dashboard.skillCursor != 1 {
@@ -62,7 +62,7 @@ func TestDashboardNavigation(t *testing.T) {
 }
 
 func TestDashboardPanelSwitch(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	if app.dashboard.focusPanel != 1 {
@@ -76,7 +76,7 @@ func TestDashboardPanelSwitch(t *testing.T) {
 }
 
 func TestDashboardQuit(t *testing.T) {
-	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
 		t.Fatal("expected quit command")
@@ -85,7 +85,7 @@ func TestDashboardQuit(t *testing.T) {
 
 func TestDashboardSave(t *testing.T) {
 	tmpFile := t.TempDir() + "/config.json"
-	app := NewApp(testConfig(), tmpFile, "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), tmpFile, "/tmp", testSkills(), nil, nil, "", nil)
 	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if cmd == nil {
 		t.Fatal("expected command from 's'")
@@ -109,7 +109,7 @@ func TestDashboardSave(t *testing.T) {
 }
 
 func TestDashboardDeleteRule(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.dashboard.focusPanel = 1
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	app = m.(App)
@@ -119,7 +119,7 @@ func TestDashboardDeleteRule(t *testing.T) {
 }
 
 func TestRuleEditorCancel(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.view = viewRuleEditor
 	m, _ := app.Update(ruleEditorDoneMsg{rule: nil, ruleIndex: -1})
 	app = m.(App)
@@ -129,7 +129,7 @@ func TestRuleEditorCancel(t *testing.T) {
 }
 
 func TestRuleEditorSubmit(t *testing.T) {
-	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.view = viewRuleEditor
 	rule := engine.Rule{Tool: "Edit", Path: "**/*.go", Skill: "linear", Agent: "*"}
 	m, _ := app.Update(rulesSubmittedMsg{rules: []engine.Rule{rule}})
@@ -141,7 +141,7 @@ func TestRuleEditorSubmit(t *testing.T) {
 
 func TestLoadedSkillsShown(t *testing.T) {
 	loaded := map[string]*state.SkillStatus{"linear": {Agents: []string{"claude"}}}
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), loaded, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), loaded, nil, "", nil)
 	app.width, app.height = 120, 40
 	app.dashboard.width, app.dashboard.height = 120, 40
 	output := app.View()
@@ -152,7 +152,7 @@ func TestLoadedSkillsShown(t *testing.T) {
 }
 
 func TestWindowSizeMsg(t *testing.T) {
-	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", nil, nil, nil)
+	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", nil, nil, nil, "", nil)
 	m, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	app = m.(App)
 	if app.width != 120 || app.height != 40 {
@@ -161,7 +161,7 @@ func TestWindowSizeMsg(t *testing.T) {
 }
 
 func TestHelpBarContent(t *testing.T) {
-	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.width, app.height = 120, 40
 	app.dashboard.width, app.dashboard.height = 120, 40
 	output := app.View()
@@ -173,7 +173,7 @@ func TestHelpBarContent(t *testing.T) {
 // --- Three-panel navigation tests ---
 
 func TestThreePanelTabCycle(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	// Start at panel 0 (skills)
 	if app.dashboard.focusPanel != 0 {
 		t.Fatalf("expected panel 0, got %d", app.dashboard.focusPanel)
@@ -202,7 +202,7 @@ func TestThreePanelTabCycle(t *testing.T) {
 }
 
 func TestShiftTabReverse(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	// Shift+Tab from panel 0 → panel 2
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	app = m.(App)
@@ -212,7 +212,7 @@ func TestShiftTabReverse(t *testing.T) {
 }
 
 func TestLogPanelNavigation(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.dashboard.eventLines = []string{
 		"2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | linear",
 		"2026-04-13T00:00:01Z | proj | claude | abc12 | SKILL-LOAD | | LOAD | linear",
@@ -243,7 +243,7 @@ func TestLogPanelNavigation(t *testing.T) {
 }
 
 func TestMultiColumnFilter(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	app.dashboard.eventLines = []string{
 		"2026-04-13T00:00:00Z | blueden | claude | abc12 | Edit | test.go | BLOCK | git",
 		"2026-04-13T00:00:01Z | baloo   | cursor | def45 | Edit | main.go | BLOCK | review",
@@ -285,7 +285,7 @@ func TestMultiColumnFilter(t *testing.T) {
 
 func TestJumpToLogEntry(t *testing.T) {
 	skills := testSkills() // go-coding, linear, testing
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", skills, nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", skills, nil, nil, "", nil)
 	app.dashboard.eventLines = []string{
 		"2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | linear",
 	}
@@ -356,7 +356,7 @@ func TestPadToHeight(t *testing.T) {
 }
 
 func TestSwitchProjectKey(t *testing.T) {
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 
 	// Press P -- should trigger switchProjectMsg which sets switchRequested.
 	m, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
@@ -379,7 +379,7 @@ func TestSettingsOpenAndClose(t *testing.T) {
 		StateTTLHours:   24,
 		DefaultAgent:    "*",
 	}
-	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, cfg)
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, cfg, "", nil)
 
 	// Press c to open settings
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -398,7 +398,7 @@ func TestSettingsOpenAndClose(t *testing.T) {
 	app = m.(App)
 	// Should get settingsDoneMsg
 	settingsCmd := func() tea.Msg {
-		return settingsDoneMsg{config: cfg}
+		return settingsDoneMsg{config: cfg, configLevel: "project"}
 	}
 	m, _ = app.Update(settingsCmd())
 	app = m.(App)
@@ -415,7 +415,7 @@ func TestSettingsPreservesValues(t *testing.T) {
 		SkillPaths:      []string{".claude/skills"},
 		IgnorePatterns:  []string{".git"},
 	}
-	settings := NewSettings(cfg, DefaultStyles())
+	settings := NewSettings(cfg, DefaultStyles(), "/tmp", nil)
 
 	// Build config from settings and verify values preserved
 	result := settings.buildConfig()
@@ -436,7 +436,7 @@ func TestSettingsRendersContent(t *testing.T) {
 		StateTTLHours:   24,
 		DefaultAgent:    "*",
 	}
-	settings := NewSettings(cfg, DefaultStyles())
+	settings := NewSettings(cfg, DefaultStyles(), "/tmp", nil)
 	output := settings.View()
 
 	if !strings.Contains(output, "Skill TTL") {

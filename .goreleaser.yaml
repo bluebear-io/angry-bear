@@ -63,8 +63,9 @@ brews:
   - name: care-bare
     repository:
       owner: Blue-Bear-Security
-      name: care-bare
-      branch: homebrew
+      name: homebrew-care-bare
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
     homepage: https://github.com/Blue-Bear-Security/care-bare
     description: "Enforce skill-loading requirements for AI coding agents"
     license: "Apache-2.0"

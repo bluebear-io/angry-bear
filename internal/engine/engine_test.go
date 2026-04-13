@@ -633,15 +633,15 @@ func TestShouldBlock(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		rules          []MatchedRule
-		toolName       string
-		filePath       string
-		agent          string
-		invokedSkills  map[string]bool
-		wantBlocked    bool
-		wantMissing    []string
-		wantReasonHas  string
+		name          string
+		rules         []MatchedRule
+		toolName      string
+		filePath      string
+		agent         string
+		invokedSkills map[string]bool
+		wantBlocked   bool
+		wantMissing   []string
+		wantReasonHas string
 	}{
 		{
 			name:        "no rules returns not blocked",

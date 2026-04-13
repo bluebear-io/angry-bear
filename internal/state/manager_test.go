@@ -477,13 +477,13 @@ func TestRecordSkillWithAgent_UpdatesAgent(t *testing.T) {
 	mgr := NewStateManager(dir)
 
 	// First call sets agent to claude
-	mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	_ = mgr.RecordSkillWithAgent("sess1", "git", "claude")
 	// Second call updates to cursor
-	mgr.RecordSkillWithAgent("sess1", "linear", "cursor")
+	_ = mgr.RecordSkillWithAgent("sess1", "linear", "cursor")
 
 	data, _ := os.ReadFile(filepath.Join(dir, "sess1.json"))
 	var state SessionState
-	json.Unmarshal(data, &state)
+	_ = json.Unmarshal(data, &state)
 
 	if state.Agent != "cursor" {
 		t.Errorf("agent = %q, want %q (last writer wins)", state.Agent, "cursor")

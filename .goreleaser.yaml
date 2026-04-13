@@ -8,6 +8,8 @@ builds:
     binary: care-bare
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     goos:
       - darwin
       - linux
@@ -17,7 +19,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.version=v{{.Version}}
       - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
 
@@ -41,14 +43,21 @@ checksum:
 
 changelog:
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?\!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\(.+\))?\!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
   filters:
     exclude:
       - "^docs:"
       - "^chore:"
       - "^ci:"
       - "^test:"
-      - "^style:"
-      - "^refactor:"
 
 release:
   github:

@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
 
@@ -7,10 +9,34 @@ linters:
     - govet
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
     - misspell
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.MkdirAll
+        - os.Remove
+        - os.Chmod
+        - os.Chtimes
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*os.File).WriteString
+        - (*github.com/fsnotify/fsnotify.Watcher).Close
+        - (*github.com/Blue-Bear-Security/care-bare/internal/state.FileLock).Unlock
+        - encoding/json.Unmarshal
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"
+        - "-ST1000"
+
+formatters:
+  enable:
     - gofmt
+    - goimports
 
 issues:
   max-issues-per-linter: 0

@@ -18,24 +18,24 @@ import (
 // names so enforcement rules use a single vocabulary across all agents.
 var cursorToolMap = map[string]string{
 	// Cursor tool_name values
-	"edit_file":    "Edit",
-	"write_file":   "Write",
-	"read_file":    "Read",
-	"create_file":  "Write",
-	"delete_file":  "Write",
-	"list_dir":     "Glob",
-	"search_files": "Grep",
-	"codebase_search": "Grep",
-	"grep_search":  "Grep",
+	"edit_file":            "Edit",
+	"write_file":           "Write",
+	"read_file":            "Read",
+	"create_file":          "Write",
+	"delete_file":          "Write",
+	"list_dir":             "Glob",
+	"search_files":         "Grep",
+	"codebase_search":      "Grep",
+	"grep_search":          "Grep",
 	"run_terminal_command": "Bash",
-	"terminal":     "Bash",
+	"terminal":             "Bash",
 
 	// Cursor hook_event_name values (fallback when tool_name is empty)
-	"beforeFileEdit":        "Edit",
-	"beforeShellExecution":  "Bash",
-	"beforeReadFile":        "Read",
-	"beforeMCPExecution":    "Agent",
-	"preToolUse":            "",  // generic, keep original
+	"beforeFileEdit":       "Edit",
+	"beforeShellExecution": "Bash",
+	"beforeReadFile":       "Read",
+	"beforeMCPExecution":   "Agent",
+	"preToolUse":           "", // generic, keep original
 }
 
 // CursorAdapter implements HookAdapter for Cursor IDE.

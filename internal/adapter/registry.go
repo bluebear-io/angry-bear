@@ -108,7 +108,10 @@ func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
 				// Add agent
 				hasAgent := false
 				for _, ag := range existing.Agents {
-					if ag == p.Agent { hasAgent = true; break }
+					if ag == p.Agent {
+						hasAgent = true
+						break
+					}
 				}
 				if !hasAgent {
 					existing.Agents = append(existing.Agents, p.Agent)
@@ -116,7 +119,10 @@ func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
 				// Add local path
 				hasPath := false
 				for _, lp := range existing.LocalPaths {
-					if lp == p.Path { hasPath = true; break }
+					if lp == p.Path {
+						hasPath = true
+						break
+					}
 				}
 				if !hasPath {
 					existing.LocalPaths = append(existing.LocalPaths, p.Path)

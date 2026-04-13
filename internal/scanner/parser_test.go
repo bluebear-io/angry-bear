@@ -14,14 +14,14 @@ func TestParseSkillFile(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		dir         string // Parent directory name (used for fallback)
-		filename    string // File name within the directory
-		content     string
-		wantName    string
-		wantDesc    string
-		wantErr     bool
-		wantSource  bool // If true, assert Source is set to the file path
+		name       string
+		dir        string // Parent directory name (used for fallback)
+		filename   string // File name within the directory
+		content    string
+		wantName   string
+		wantDesc   string
+		wantErr    bool
+		wantSource bool // If true, assert Source is set to the file path
 	}{
 		{
 			name:     "extracts name from YAML frontmatter",
@@ -160,7 +160,7 @@ description: Only one delimiter
 			name:     "BOM at file start is stripped before checking frontmatter",
 			dir:      "bom-skill",
 			filename: "SKILL.md",
-			content: "\xef\xbb\xbf---\nname: bom-skill-name\ndescription: Has BOM\n---\n",
+			content:  "\xef\xbb\xbf---\nname: bom-skill-name\ndescription: Has BOM\n---\n",
 			wantName: "bom-skill-name",
 			wantDesc: "Has BOM",
 			wantErr:  false,

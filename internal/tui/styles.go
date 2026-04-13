@@ -27,7 +27,7 @@ type Styles struct {
 
 // DefaultStyles returns a polished set of styles with a cohesive colour palette.
 func DefaultStyles() Styles {
-	accent := lipgloss.Color("#7C3AED")    // Violet
+	accent := lipgloss.Color("#7C3AED")      // Violet
 	accentLight := lipgloss.Color("#A78BFA") // Light violet
 	cyan := lipgloss.Color("#22D3EE")
 	green := lipgloss.Color("#34D399")

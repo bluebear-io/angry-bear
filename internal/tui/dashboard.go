@@ -18,22 +18,22 @@ import (
 
 // Dashboard is a split-pane view: skills (left), rules+logs (right).
 type Dashboard struct {
-	skills       []scanner.Skill
-	config       engine.Config
-	loadedSkills map[string]*SkillStatus
-	eventLines   []string // Recent event log lines
-	projectRoot  string   // For reading events.log
-	skillCursor  int
-	ruleCursor   int
+	skills           []scanner.Skill
+	config           engine.Config
+	loadedSkills     map[string]*SkillStatus
+	eventLines       []string // Recent event log lines
+	projectRoot      string   // For reading events.log
+	skillCursor      int
+	ruleCursor       int
 	logCursor        int
 	logProjectFilter string // "" = all projects, or specific project name
 	focusPanel       int    // 0=skills, 1=rules, 2=event log
-	editingPath  bool
-	pathBuffer   string
-	pathCurPos   int
-	width        int
-	height       int
-	styles       Styles
+	editingPath      bool
+	pathBuffer       string
+	pathCurPos       int
+	width            int
+	height           int
+	styles           Styles
 }
 
 // NewDashboard creates a new split-pane Dashboard.
@@ -634,7 +634,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	if d.logProjectFilter != "" {
 		filterLabel = " [" + d.logProjectFilter + "]"
 	}
-	title := d.styles.RuleHeader.Render("  EVENT LOG" + filterLabel) + "\n"
+	title := d.styles.RuleHeader.Render("  EVENT LOG"+filterLabel) + "\n"
 
 	if len(d.eventLines) == 0 {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
@@ -643,8 +643,8 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	// Parse all visible events into structured rows
 	type eventRow struct {
 		act, project, sess, agent, tool, skill, path string
-		lineIdx                                       int
-		isBlock, isLoad                                bool
+		lineIdx                                      int
+		isBlock, isLoad                              bool
 	}
 
 	var allRows []eventRow
@@ -663,13 +663,23 @@ func (d Dashboard) renderEventLog(width, height int) string {
 
 		r := eventRow{lineIdx: i}
 		if len(parts) >= 8 {
-			r.project = parts[1]; r.agent = parts[2]; r.sess = parts[3]
-			r.tool = parts[4]; r.path = parts[5]; r.skill = parts[7]
+			r.project = parts[1]
+			r.agent = parts[2]
+			r.sess = parts[3]
+			r.tool = parts[4]
+			r.path = parts[5]
+			r.skill = parts[7]
 		} else if len(parts) >= 7 {
-			r.agent = parts[1]; r.sess = parts[2]; r.tool = parts[3]
-			r.path = parts[4]; r.skill = parts[6]
+			r.agent = parts[1]
+			r.sess = parts[2]
+			r.tool = parts[3]
+			r.path = parts[4]
+			r.skill = parts[6]
 		} else if len(parts) >= 6 {
-			r.agent = parts[1]; r.tool = parts[2]; r.path = parts[3]; r.skill = parts[5]
+			r.agent = parts[1]
+			r.tool = parts[2]
+			r.path = parts[3]
+			r.skill = parts[5]
 		} else {
 			continue
 		}
@@ -699,20 +709,38 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
 	}
 	for _, r := range allRows {
-		if len(r.act) > colW["act"] { colW["act"] = len(r.act) }
-		if len(r.project) > colW["project"] { colW["project"] = len(r.project) }
-		if len(r.sess) > colW["sess"] { colW["sess"] = len(r.sess) }
-		if len(r.agent) > colW["agent"] { colW["agent"] = len(r.agent) }
-		if len(r.tool) > colW["tool"] { colW["tool"] = len(r.tool) }
-		if len(r.skill) > colW["skill"] { colW["skill"] = len(r.skill) }
-		if len(r.path) > colW["path"] { colW["path"] = len(r.path) }
+		if len(r.act) > colW["act"] {
+			colW["act"] = len(r.act)
+		}
+		if len(r.project) > colW["project"] {
+			colW["project"] = len(r.project)
+		}
+		if len(r.sess) > colW["sess"] {
+			colW["sess"] = len(r.sess)
+		}
+		if len(r.agent) > colW["agent"] {
+			colW["agent"] = len(r.agent)
+		}
+		if len(r.tool) > colW["tool"] {
+			colW["tool"] = len(r.tool)
+		}
+		if len(r.skill) > colW["skill"] {
+			colW["skill"] = len(r.skill)
+		}
+		if len(r.path) > colW["path"] {
+			colW["path"] = len(r.path)
+		}
 	}
 
 	// Cap path width to fill remaining space
 	used := colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
 	maxPath := width - used - 4
-	if maxPath < 10 { maxPath = 10 }
-	if colW["path"] > maxPath { colW["path"] = maxPath }
+	if maxPath < 10 {
+		maxPath = 10
+	}
+	if colW["path"] > maxPath {
+		colW["path"] = maxPath
+	}
 
 	// Build format string
 	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
@@ -725,19 +753,29 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	// Scrolling
 	var b strings.Builder
 	visible := height - 4
-	if visible < 3 { visible = 3 }
+	if visible < 3 {
+		visible = 3
+	}
 
 	if d.logCursor >= len(allRows) && len(allRows) > 0 {
 		d.logCursor = len(allRows) - 1
 	}
 	start := len(allRows) - visible
-	if start < 0 { start = 0 }
+	if start < 0 {
+		start = 0
+	}
 	if d.focusPanel == 2 {
-		if d.logCursor < start { start = d.logCursor }
-		if d.logCursor >= start+visible { start = d.logCursor - visible + 1 }
+		if d.logCursor < start {
+			start = d.logCursor
+		}
+		if d.logCursor >= start+visible {
+			start = d.logCursor - visible + 1
+		}
 	}
 	end := start + visible
-	if end > len(allRows) { end = len(allRows) }
+	if end > len(allRows) {
+		end = len(allRows)
+	}
 
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
@@ -753,13 +791,19 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 
 		var sty lipgloss.Style
-		if r.isBlock { sty = red } else if r.isLoad { sty = cyan } else { sty = green }
+		if r.isBlock {
+			sty = red
+		} else if r.isLoad {
+			sty = cyan
+		} else {
+			sty = green
+		}
 
 		focused := fi == d.logCursor && d.focusPanel == 2
 		plain := fmt.Sprintf(fmtStr, r.act, r.project, r.sess, r.agent, r.tool, r.skill, path)
 
 		if focused {
-			b.WriteString(d.styles.Selected.Render("▸" + plain[1:]) + "\n")
+			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")
 		} else {
 			b.WriteString(sty.Render(plain) + "\n")
 		}

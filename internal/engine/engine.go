@@ -69,14 +69,11 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 
 	// Check which matched skills have NOT been invoked.
 	var missing []string
-	sourceSet := make(map[string]bool)
-
 	for _, mr := range matched {
 		if invokedSkills != nil && invokedSkills[mr.Rule.Skill] {
 			continue
 		}
 		missing = append(missing, mr.Rule.Skill)
-		sourceSet[mr.Source] = true
 	}
 
 	if len(missing) == 0 {
@@ -84,11 +81,6 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 	}
 
 	// Build the human-readable reason string.
-	sources := make([]string, 0, len(sourceSet))
-	for src := range sourceSet {
-		sources = append(sources, src)
-	}
-
 	// Build skill names with load instructions.
 	quotedSkills := make([]string, len(missing))
 	loadInstructions := make([]string, len(missing))

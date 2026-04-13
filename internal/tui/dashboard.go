@@ -245,6 +245,10 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			return d, func() tea.Msg { return saveRequestMsg{} }
 
+		case "P":
+			// Switch project — return to project picker
+			return d, func() tea.Msg { return switchProjectMsg{} }
+
 		case "q":
 			return d, tea.Quit
 		}

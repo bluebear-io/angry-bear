@@ -44,6 +44,18 @@ func NewRootCommand() *cobra.Command {
 // tuiRunE launches the interactive TUI when care-bare is run with no subcommand.
 // First shows a project picker, then loads the selected project's config and skills.
 func tuiRunE(cmd *cobra.Command, args []string) error {
+	for {
+		tui.SwitchRequested = false
+		if err := tuiRunOnce(cmd, args); err != nil {
+			return err
+		}
+		if !tui.SwitchRequested {
+			return nil
+		}
+	}
+}
+
+func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	// 1. Discover all projects on the machine via adapter registry.
 	registry := adapter.NewRegistry()
 	projects, err := registry.ScanAllProjects()

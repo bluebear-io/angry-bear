@@ -27,6 +27,12 @@ type loadedSkillsUpdatedMsg struct {
 // eventsUpdatedMsg is pushed when events.log changes.
 type eventsUpdatedMsg struct{}
 
+// SwitchRequested is set to true when the user presses P to switch projects.
+var SwitchRequested bool
+
+// switchProjectMsg triggers returning to the project picker.
+type switchProjectMsg struct{}
+
 // viewState identifies which view is currently active in the TUI.
 type viewState int
 
@@ -270,6 +276,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.dashboard.height = msg.Height
 		return a, nil
 
+	case switchProjectMsg:
+		SwitchRequested = true
+		return a, tea.Quit
+
 	case tea.KeyMsg:
 		// ctrl+c always quits, from any view.
 		if msg.String() == "ctrl+c" {
@@ -417,14 +427,14 @@ func (a App) helpBar() string {
 		switch a.dashboard.focusPanel {
 		case 0:
 			text = key("↑↓", "navigate") + sep + key("tab/→", "rules") + sep +
-				key("enter/a", "add rules") + sep + key("s", "save") + sep + key("q", "quit")
+				key("enter/a", "add rules") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 1:
 			text = key("↑↓", "navigate") + sep + key("tab", "logs") + sep + key("←", "skills") + sep +
 				key("t", "tool") + sep + key("p", "path") + sep + key("g", "agent") + sep +
-				key("d", "del") + sep + key("s", "save") + sep + key("q", "quit")
+				key("d", "del") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
 			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
-				key("enter", "jump to rule") + sep + key("s", "save") + sep + key("q", "quit")
+				key("enter", "jump to rule") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help

@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // Message types for communication with the App.

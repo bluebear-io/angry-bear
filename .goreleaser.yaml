@@ -1,11 +1,11 @@
 version: 2
 
-project_name: care-bare
+project_name: care-bear
 
 builds:
-  - id: care-bare
-    main: ./cmd/care-bare/
-    binary: care-bare
+  - id: care-bear
+    main: ./cmd/care-bear/
+    binary: care-bear
     env:
       - CGO_ENABLED=0
     flags:
@@ -60,24 +60,24 @@ changelog:
       - "^test:"
 
 brews:
-  - name: care-bare
+  - name: care-bear
     repository:
       owner: Blue-Bear-Security
-      name: homebrew-care-bare
+      name: homebrew-care-bear
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: https://github.com/Blue-Bear-Security/care-bare
+    homepage: https://github.com/Blue-Bear-Security/care-bear
     description: "Enforce skill-loading requirements for AI coding agents"
     license: "Apache-2.0"
     install: |
-      bin.install "care-bare"
+      bin.install "care-bear"
     test: |
-      system "#{bin}/care-bare", "version"
+      system "#{bin}/care-bear", "version"
 
 release:
   github:
     owner: Blue-Bear-Security
-    name: care-bare
+    name: care-bear
   draft: false
   prerelease: auto
   name_template: "{{ .Tag }}"

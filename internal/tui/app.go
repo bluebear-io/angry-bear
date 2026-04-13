@@ -1,4 +1,4 @@
-// app.go defines the root Bubble Tea model for the care-bare TUI.
+// app.go defines the root Bubble Tea model for the care-bear TUI.
 // It manages view transitions between the dashboard, rule editor, and tree picker,
 // and holds shared state (config, skills, terminal dimensions).
 package tui
@@ -14,9 +14,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 )
 
 // loadedSkillsUpdatedMsg is pushed when the state directory changes.
@@ -77,9 +77,9 @@ type App struct {
 	globalConfig    *engine.GlobalConfig          // Global config (skill_ttl, state_ttl, etc.)
 	configPath      string                        // Path to the config file for saving
 	projectRoot     string                        // Actual project root (for path tree in rule editor)
-	repoConfigDir   string                        // Path to ~/.care-bare/repos/{hash}-{slug}/ (empty if no repo)
+	repoConfigDir   string                        // Path to ~/.care-bear/repos/{hash}-{slug}/ (empty if no repo)
 	availablePaths  []string                      // All local checkout paths for this repo
-	stateDir        string                        // Path to .care-bare/state/ for watching
+	stateDir        string                        // Path to .care-bear/state/ for watching
 	skills          []scanner.Skill               // Discovered skills from the scanner
 	loadedSkills    map[string]*state.SkillStatus // Skills loaded in active sessions, with agent info
 	switchRequested bool                          // True when user pressed P to switch projects
@@ -101,7 +101,7 @@ func (a App) SwitchRequested() bool {
 
 // NewApp creates a new TUI application model with the given config, config path,
 // discovered skills, and currently loaded skills from session state.
-// repoConfigDir is the path to ~/.care-bare/repos/{hash}-{slug}/ (may be empty).
+// repoConfigDir is the path to ~/.care-bear/repos/{hash}-{slug}/ (may be empty).
 // availablePaths lists all local checkout directories for this repo (may be nil).
 func NewApp(
 	cfg engine.Config,
@@ -159,7 +159,7 @@ func (a App) Init() tea.Cmd {
 		cmds = append(cmds, watchStateDir(a.stateDir))
 		// Watch global events.log for real-time updates
 		home, _ := os.UserHomeDir()
-		eventsLog := filepath.Join(home, ".care-bare", "events.log")
+		eventsLog := filepath.Join(home, ".care-bear", "events.log")
 		cmds = append(cmds, watchEventsLog(eventsLog))
 	}
 	if len(cmds) == 0 {
@@ -254,7 +254,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.dashboard.logScroll.Cursor = len(a.dashboard.eventLines) - 1
 		}
 		home, _ := os.UserHomeDir()
-		eventsLog := filepath.Join(home, ".care-bare", "events.log")
+		eventsLog := filepath.Join(home, ".care-bear", "events.log")
 		return a, watchEventsLog(eventsLog)
 
 	case tea.WindowSizeMsg:
@@ -288,28 +288,33 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.ruleEditor.Init()
 
 	case ruleSubmittedMsg:
-		// Single rule submitted (edit mode)
+		// Single rule submitted (edit mode) — save and return to dashboard
 		if msg.rule != nil {
 			if msg.ruleIndex >= 0 && msg.ruleIndex < len(a.config.Tools) {
 				a.config.Tools[msg.ruleIndex] = *msg.rule
 			} else {
 				a.config.Tools = append(a.config.Tools, *msg.rule)
 			}
-			a.ruleEditor.SetExistingRules(a.config.Tools)
-			return a, a.ruleEditor.SwitchToConfirm()
+			a.view = viewDashboard
+			a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
+			a.dashboard.LoadEventLog("")
+			a.dashboard.width = a.width
+			a.dashboard.height = a.height
+			a.statusMsg = "Rule saved!"
+			return a, saveConfig(a.config, a.configPath)
 		}
 		return a, nil
 
 	case rulesSubmittedMsg:
-		// Multiple rules submitted — add to config AND save to disk immediately
-		for _, rule := range msg.rules {
-			r := rule
-			a.config.Tools = append(a.config.Tools, r)
-		}
-		a.ruleEditor.SetExistingRules(a.config.Tools)
-		// Save to disk right away, then switch to confirm
-		confirmCmd := a.ruleEditor.SwitchToConfirm()
-		return a, tea.Batch(saveConfig(a.config, a.configPath), confirmCmd)
+		// Multiple rules submitted — save and return to dashboard
+		a.config.Tools = append(a.config.Tools, msg.rules...)
+		a.view = viewDashboard
+		a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
+		a.dashboard.LoadEventLog("")
+		a.dashboard.width = a.width
+		a.dashboard.height = a.height
+		a.statusMsg = fmt.Sprintf("%d rules saved!", len(msg.rules))
+		return a, saveConfig(a.config, a.configPath)
 
 	case ruleEditorDoneMsg:
 		// Editor is done (cancel or finished adding rules) — return to dashboard
@@ -413,7 +418,7 @@ func (a App) View() string {
 		name := filepath.Base(a.projectRoot)
 		projectLabel = "  " + a.styles.Description.Render(name+" — "+a.projectRoot)
 	}
-	title := a.styles.Header.Render("care-bare") + projectLabel
+	title := a.styles.Header.Render("care-bear") + projectLabel
 
 	switch a.view {
 	case viewDashboard:
@@ -477,7 +482,7 @@ func (a App) helpBar() string {
 }
 
 // saveGlobalConfig writes the global config (config.json) to disk.
-// When level is "global", it writes to ~/.care-bare/config.json.
+// When level is "global", it writes to ~/.care-bear/config.json.
 // When level is "project", it writes alongside the enforcement config file.
 func saveGlobalConfig(cfg *engine.GlobalConfig, level string, enforcementConfigPath string) tea.Cmd {
 	return func() tea.Msg {
@@ -487,7 +492,7 @@ func saveGlobalConfig(cfg *engine.GlobalConfig, level string, enforcementConfigP
 			if err != nil {
 				return saveResultMsg{err: fmt.Errorf("getting home dir: %w", err)}
 			}
-			dir := filepath.Join(home, ".care-bare")
+			dir := filepath.Join(home, ".care-bear")
 			err = os.MkdirAll(dir, 0o755)
 			if err != nil {
 				return saveResultMsg{err: fmt.Errorf("creating global config dir: %w", err)}

@@ -154,7 +154,7 @@ func TestSetRegistryDefaults_AppliedToNewRegistry(t *testing.T) {
 		SetRegistryDefaults(origHome, origBin)
 	})
 
-	SetRegistryDefaults("/test/home", "/test/bin/care-bare")
+	SetRegistryDefaults("/test/home", "/test/bin/care-bear")
 
 	reg := NewRegistry()
 
@@ -170,8 +170,8 @@ func TestSetRegistryDefaults_AppliedToNewRegistry(t *testing.T) {
 	if ca.HomeDir != "/test/home" {
 		t.Errorf("ClaudeAdapter.HomeDir = %q, want %q", ca.HomeDir, "/test/home")
 	}
-	if ca.BinaryPath != "/test/bin/care-bare" {
-		t.Errorf("ClaudeAdapter.BinaryPath = %q, want %q", ca.BinaryPath, "/test/bin/care-bare")
+	if ca.BinaryPath != "/test/bin/care-bear" {
+		t.Errorf("ClaudeAdapter.BinaryPath = %q, want %q", ca.BinaryPath, "/test/bin/care-bear")
 	}
 
 	// Verify cursor adapter got the defaults
@@ -186,8 +186,8 @@ func TestSetRegistryDefaults_AppliedToNewRegistry(t *testing.T) {
 	if cua.HomeDir != "/test/home" {
 		t.Errorf("CursorAdapter.HomeDir = %q, want %q", cua.HomeDir, "/test/home")
 	}
-	if cua.BinaryPath != "/test/bin/care-bare" {
-		t.Errorf("CursorAdapter.BinaryPath = %q, want %q", cua.BinaryPath, "/test/bin/care-bare")
+	if cua.BinaryPath != "/test/bin/care-bear" {
+		t.Errorf("CursorAdapter.BinaryPath = %q, want %q", cua.BinaryPath, "/test/bin/care-bear")
 	}
 }
 
@@ -284,7 +284,7 @@ func TestScanAllProjects_EmptyProjectDirs(t *testing.T) {
 	t.Cleanup(func() {
 		SetRegistryDefaults(origHome, origBin)
 	})
-	SetRegistryDefaults(tmpDir, "care-bare")
+	SetRegistryDefaults(tmpDir, "care-bear")
 
 	// Create empty projects dirs for both agents
 	for _, agent := range []string{".claude", ".cursor"} {
@@ -312,7 +312,7 @@ func TestScanAllProjects_MergesAgentsForSameProject(t *testing.T) {
 	t.Cleanup(func() {
 		SetRegistryDefaults(origHome, origBin)
 	})
-	SetRegistryDefaults(tmpDir, "care-bare")
+	SetRegistryDefaults(tmpDir, "care-bear")
 
 	// Create a real project directory
 	projectPath := filepath.Join(tmpDir, "shared-project")
@@ -360,7 +360,7 @@ func TestScanAllProjects_SortsResultsByName(t *testing.T) {
 	t.Cleanup(func() {
 		SetRegistryDefaults(origHome, origBin)
 	})
-	SetRegistryDefaults(tmpDir, "care-bare")
+	SetRegistryDefaults(tmpDir, "care-bear")
 
 	// Create two project directories
 	projectA := filepath.Join(tmpDir, "alpha-project")
@@ -421,7 +421,7 @@ func TestScanAllProjects_MissingProjectDirs(t *testing.T) {
 	t.Cleanup(func() {
 		SetRegistryDefaults(origHome, origBin)
 	})
-	SetRegistryDefaults(tmpDir, "care-bare")
+	SetRegistryDefaults(tmpDir, "care-bear")
 
 	// Don't create any .claude or .cursor dirs -- should handle gracefully
 	reg := NewRegistry()
@@ -442,7 +442,7 @@ func TestScanAllProjects_AgentsSorted(t *testing.T) {
 	t.Cleanup(func() {
 		SetRegistryDefaults(origHome, origBin)
 	})
-	SetRegistryDefaults(tmpDir, "care-bare")
+	SetRegistryDefaults(tmpDir, "care-bear")
 
 	// Create a project visible to both agents
 	projectPath := filepath.Join(tmpDir, "multi-agent-project")

@@ -1,4 +1,4 @@
-// rm.go implements the care-bare rm command for removing enforcement rules.
+// rm.go implements the care-bear rm command for removing enforcement rules.
 // It removes all rules for a given skill, or a subset when --tool and --path
 // filters are provided.
 package cli
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -24,8 +24,8 @@ Removes all rules matching the given skill name. Use --tool and --path flags
 to narrow which rules are removed.
 
 Examples:
-  care-bare rm linear
-  care-bare rm go-standards --tool Edit --path "**/*.go"`,
+  care-bear rm linear
+  care-bear rm go-standards --tool Edit --path "**/*.go"`,
 		Args:              cobra.ExactArgs(1),
 		RunE:              runRm,
 		ValidArgsFunction: completeSkillNames,

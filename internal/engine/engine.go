@@ -1,5 +1,5 @@
 // engine.go contains the ShouldBlock function, the core enforcement decision
-// maker for care-bare. It is a pure function with no side effects that
+// maker for care-bear. It is a pure function with no side effects that
 // determines whether a tool invocation should be blocked based on enforcement
 // rules and the set of skills already invoked in the session.
 package engine
@@ -90,7 +90,7 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 	}
 
 	reason := fmt.Sprintf(
-		"Blocked by care-bare skill enforcement. Required skills not loaded: %s. "+
+		"Blocked by care-bear skill enforcement. Required skills not loaded: %s. "+
 			"Load them by running: %s",
 		strings.Join(quotedSkills, ", "),
 		strings.Join(loadInstructions, "  "),

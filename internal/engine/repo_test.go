@@ -56,7 +56,7 @@ func TestRepoConfigDir(t *testing.T) {
 	}
 
 	dir := RepoConfigDir("/home/user", repo)
-	expected := "/home/user/.care-bare/repos/5ce4353d-Blue-Bear-Security-blueden"
+	expected := "/home/user/.care-bear/repos/5ce4353d-Blue-Bear-Security-blueden"
 	if dir != expected {
 		t.Errorf("RepoConfigDir = %q, want %q", dir, expected)
 	}

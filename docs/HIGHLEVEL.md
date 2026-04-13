@@ -1,4 +1,4 @@
-# care-bare — How It Works
+# care-bear — How It Works
 
 This document explains the complete flow: how hooks intercept agent actions, how enforcement decisions are made, how state is tracked per session, and how the TUI provides observability.
 
@@ -8,9 +8,9 @@ This document explains the complete flow: how hooks intercept agent actions, how
 AI Agent (Claude Code / Cursor / future agents)
     |
     | Agent performs a tool call (Edit, Write, Bash, etc.)
-    | Agent's hook system sends JSON to care-bare via stdin
+    | Agent's hook system sends JSON to care-bear via stdin
     v
-care-bare hook (PreToolUse)
+care-bear hook (PreToolUse)
     |
     +-- 1. Parse agent-specific JSON via adapter
     +-- 2. Detect skill invocations → record in session state
@@ -50,16 +50,16 @@ Each rule says: "Before using `tool` on files matching `path` for `agent`, the s
 
 ### Config Locations (priority order)
 
-1. **Repo-keyed config**: `~/.care-bare/repos/{hash}-{slug}/skill_enforcement.json` — per-repo rules stored outside the project directory
-2. **Project-level**: `{project}/.care-bare/skill_enforcement.json` — checked into the repo
-3. **User-level**: `~/.care-bare/skill_enforcement.json` — personal defaults
+1. **Repo-keyed config**: `~/.care-bear/repos/{hash}-{slug}/skill_enforcement.json` — per-repo rules stored outside the project directory
+2. **Project-level**: `{project}/.care-bear/skill_enforcement.json` — checked into the repo
+3. **User-level**: `~/.care-bear/skill_enforcement.json` — personal defaults
 
 ## Session State
 
 State is tracked per-session using JSON files on disk:
 
 ```
-{project}/.care-bare/state/
+{project}/.care-bear/state/
   {session-id}.json     # Session state
   {session-id}.lock     # Advisory lock for concurrency safety
 ```
@@ -133,12 +133,12 @@ Projects are identified by their Git repository, not their local directory:
 
 - `git remote get-url origin` → normalize SSH/HTTPS/token URLs → `org/repo` slug
 - Same repo checked out in multiple directories is treated as one project
-- Config stored at `~/.care-bare/repos/{hash}-{slug}/` — keyed by repo identity
+- Config stored at `~/.care-bear/repos/{hash}-{slug}/` — keyed by repo identity
 - Users can set a preferred checkout path in `preferences.json`
 
 ## Global Event Log
 
-All enforcement decisions are logged to `~/.care-bare/events.log`:
+All enforcement decisions are logged to `~/.care-bear/events.log`:
 
 ```
 2024-01-01T10:30:00Z | Blue-Bear-Security/blueden | claude | abc12 | Edit | services/bff/handler.py | BLOCK | backend-python-standards

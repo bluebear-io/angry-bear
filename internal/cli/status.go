@@ -1,4 +1,4 @@
-// status.go implements the care-bare status command.
+// status.go implements the care-bear status command.
 // It displays enforcement rules, active sessions, discovered skills,
 // and detected AI agent integrations for the current project.
 package cli
@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +25,7 @@ func NewStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show enforcement rules and session state",
-		Long: `Display the current care-bare enforcement configuration including:
+		Long: `Display the current care-bear enforcement configuration including:
 - Configured enforcement rules and their sources
 - Active sessions and their invoked skills
 - Discovered skill definitions from configured paths
@@ -53,8 +53,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Load and display enforcement rules.
 	printEnforcementRules(out, projectRoot)
 
-	// List active sessions from .care-bare/state/.
-	stateDir := filepath.Join(projectRoot, ".care-bare", "state")
+	// List active sessions from .care-bear/state/.
+	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
 	printActiveSessions(out, stateDir, sessionFilter)
 
 	// Discover and display skills from configured paths.

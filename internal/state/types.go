@@ -1,4 +1,4 @@
-// Package state provides file-system based session state management for care-bare.
+// Package state provides file-system based session state management for care-bear.
 // It tracks which skills have been invoked per session using JSON files on disk.
 package state
 

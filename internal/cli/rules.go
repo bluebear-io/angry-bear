@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 	"github.com/spf13/cobra"
@@ -45,8 +46,13 @@ func runRules(cmd *cobra.Command, args []string) error {
 	skillFilter, _ := cmd.Flags().GetString("skill")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
-	// Resolve config path.
-	configPath, err := resolveConfigPath(cmd)
+	// Resolve config path — use the canonical resolver that checks repo-keyed dir first.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting working directory: %w", err)
+	}
+	projectRoot := engine.ResolveProjectRoot(cwd)
+	configPath, err := ResolveConfigForProject(projectRoot)
 	if err != nil {
 		return err
 	}

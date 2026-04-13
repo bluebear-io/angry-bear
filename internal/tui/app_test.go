@@ -56,8 +56,8 @@ func TestDashboardNavigation(t *testing.T) {
 	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if app.dashboard.skillCursor != 1 {
-		t.Errorf("expected cursor=1, got %d", app.dashboard.skillCursor)
+	if app.dashboard.skillScroll.Cursor != 1 {
+		t.Errorf("expected cursor=1, got %d", app.dashboard.skillScroll.Cursor)
 	}
 }
 
@@ -223,22 +223,22 @@ func TestLogPanelNavigation(t *testing.T) {
 	// Down
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if app.dashboard.logCursor != 1 {
-		t.Errorf("expected logCursor=1, got %d", app.dashboard.logCursor)
+	if app.dashboard.logScroll.Cursor != 1 {
+		t.Errorf("expected logCursor=1, got %d", app.dashboard.logScroll.Cursor)
 	}
 
 	// Down again
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if app.dashboard.logCursor != 2 {
-		t.Errorf("expected logCursor=2, got %d", app.dashboard.logCursor)
+	if app.dashboard.logScroll.Cursor != 2 {
+		t.Errorf("expected logCursor=2, got %d", app.dashboard.logScroll.Cursor)
 	}
 
 	// Up
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyUp})
 	app = m.(App)
-	if app.dashboard.logCursor != 1 {
-		t.Errorf("expected logCursor=1, got %d", app.dashboard.logCursor)
+	if app.dashboard.logScroll.Cursor != 1 {
+		t.Errorf("expected logCursor=1, got %d", app.dashboard.logScroll.Cursor)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestJumpToLogEntry(t *testing.T) {
 		"2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | linear",
 	}
 	app.dashboard.focusPanel = 2
-	app.dashboard.logCursor = 0
+	app.dashboard.logScroll.Cursor = 0
 
 	// Press enter — should jump to "linear" skill
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -299,8 +299,8 @@ func TestJumpToLogEntry(t *testing.T) {
 	if app.dashboard.focusPanel != 1 {
 		t.Errorf("expected focusPanel=1 (rules), got %d", app.dashboard.focusPanel)
 	}
-	if app.dashboard.skillCursor != 1 { // linear is second skill (go-coding, linear, testing)
-		t.Errorf("expected skillCursor=1 (linear), got %d", app.dashboard.skillCursor)
+	if app.dashboard.skillScroll.Cursor != 1 { // linear is second skill (go-coding, linear, testing)
+		t.Errorf("expected skillCursor=1 (linear), got %d", app.dashboard.skillScroll.Cursor)
 	}
 }
 

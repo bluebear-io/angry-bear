@@ -251,7 +251,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.dashboard.LoadEventLog("")
 		// Auto-scroll to the newest event
 		if len(a.dashboard.eventLines) > 0 {
-			a.dashboard.logCursor = len(a.dashboard.eventLines) - 1
+			a.dashboard.logScroll.Cursor = len(a.dashboard.eventLines) - 1
 		}
 		home, _ := os.UserHomeDir()
 		eventsLog := filepath.Join(home, ".care-bare", "events.log")

@@ -65,10 +65,9 @@ type RuleEditor struct {
 	existingRules []engine.Rule
 	projectRoot   string
 
-	items     []listItem
-	cursor    int
-	scrollTop int
-	height    int
+	items  []listItem
+	scroll ScrollView
+	height int
 
 	addAnother    bool
 	confirmCursor int // 0=Yes, 1=No
@@ -352,7 +351,7 @@ func (re RuleEditor) Init() tea.Cmd {
 		re.items = re.buildItems()
 	}
 	// Start cursor on first selectable item (skip section header)
-	re.cursor = 1
+	re.scroll.Cursor = 1
 	return nil
 }
 
@@ -384,17 +383,21 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "up", "k":
-		re.moveCursor(-1)
+		re.scroll.MoveUp(len(re.items), func(i int) bool {
+			return re.items[i].typ == itemSectionHeader
+		})
 		return re, nil
 
 	case "down", "j":
-		re.moveCursor(1)
+		re.scroll.MoveDown(len(re.items), func(i int) bool {
+			return re.items[i].typ == itemSectionHeader
+		})
 		return re, nil
 
 	case " ", "x":
 		// Toggle selection
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
+		if re.scroll.Cursor >= 0 && re.scroll.Cursor < len(re.items) {
+			item := &re.items[re.scroll.Cursor]
 			if item.typ == itemCheckbox {
 				item.selected = !item.selected
 			} else if item.typ == itemTreeDir {
@@ -406,27 +409,26 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter", "right", "l":
 		// Expand directory (or no-op on non-dirs)
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
+		if re.scroll.Cursor >= 0 && re.scroll.Cursor < len(re.items) {
+			item := &re.items[re.scroll.Cursor]
 			if item.typ == itemTreeDir && !item.expanded {
-				re.expandDir(re.cursor)
+				re.expandDir(re.scroll.Cursor)
 			}
 		}
 		return re, nil
 
 	case "left", "h":
 		// Collapse directory, or jump to parent
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
+		if re.scroll.Cursor >= 0 && re.scroll.Cursor < len(re.items) {
+			item := &re.items[re.scroll.Cursor]
 			if item.typ == itemTreeDir && item.expanded {
 				// Collapse this dir
-				re.collapseDir(re.cursor)
+				re.collapseDir(re.scroll.Cursor)
 			} else if item.indent > 0 {
 				// Jump up to parent dir
-				for i := re.cursor - 1; i >= 0; i-- {
+				for i := re.scroll.Cursor - 1; i >= 0; i-- {
 					if re.items[i].typ == itemTreeDir && re.items[i].indent < item.indent {
-						re.cursor = i
-						re.ensureVisible()
+						re.scroll.Cursor = i
 						break
 					}
 				}
@@ -482,7 +484,7 @@ func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Yes — reset and add more
 			re.phase = phaseEdit
 			re.deselectAll()
-			re.cursor = 1
+			re.scroll.Cursor = 1
 			return re, nil
 		}
 		// No — back to dashboard
@@ -492,7 +494,7 @@ func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y", "Y":
 		re.phase = phaseEdit
 		re.deselectAll()
-		re.cursor = 1
+		re.scroll.Cursor = 1
 		return re, nil
 	case "n", "N", "esc":
 		return re, func() tea.Msg {
@@ -502,37 +504,13 @@ func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return re, nil
 }
 
-// moveCursor moves up or down, skipping section headers.
-func (re *RuleEditor) moveCursor(delta int) {
-	next := re.cursor + delta
-	// Skip section headers
-	for next >= 0 && next < len(re.items) && re.items[next].typ == itemSectionHeader {
-		next += delta
+// viewportHeight returns the number of visible rows for the item list.
+func (re *RuleEditor) viewportHeight() int {
+	h := re.height - 8 // header + summary + help
+	if h < 5 {
+		h = 20
 	}
-	if next >= 0 && next < len(re.items) {
-		re.cursor = next
-	}
-	re.ensureVisible()
-}
-
-// ensureVisible adjusts scrollTop so cursor is visible.
-// If all items fit on screen, scrollTop stays at 0 (no scrolling).
-func (re *RuleEditor) ensureVisible() {
-	visible := re.height - 8
-	if visible < 5 {
-		visible = 20
-	}
-	// If all items fit on screen, never scroll
-	if len(re.items) <= visible {
-		re.scrollTop = 0
-		return
-	}
-	if re.cursor < re.scrollTop {
-		re.scrollTop = re.cursor
-	}
-	if re.cursor >= re.scrollTop+visible {
-		re.scrollTop = re.cursor - visible + 1
-	}
+	return h
 }
 
 // selectedValues returns all selected values for a given section.
@@ -576,26 +554,19 @@ func (re RuleEditor) View() string {
 		len(tools), len(paths), len(agents), count,
 	))
 
-	// Render list — if all items fit, show everything (no scrolling)
+	// Render visible portion of list using shared ScrollView
 	var b strings.Builder
-	visible := re.height - 8
-	if visible < 5 || len(re.items) <= visible {
-		visible = len(re.items)
-		re.scrollTop = 0
-	}
-	end := re.scrollTop + visible
-	if end > len(re.items) {
-		end = len(re.items)
-	}
+	vpHeight := re.viewportHeight()
+	start, end := re.scroll.VisibleRange(len(re.items), vpHeight)
 
 	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))                   // green
 	uncheck := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))                 // gray
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA")) // violet
 	treeArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24"))               // yellow
 
-	for i := re.scrollTop; i < end; i++ {
+	for i := start; i < end; i++ {
 		item := re.items[i]
-		focused := i == re.cursor
+		focused := i == re.scroll.Cursor
 		indent := strings.Repeat("  ", item.indent)
 
 		var line string

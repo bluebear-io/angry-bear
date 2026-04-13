@@ -292,6 +292,57 @@ func TestJumpToLogEntry(t *testing.T) {
 	}
 }
 
+func TestPadToHeight(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		height    int
+		wantLines int
+	}{
+		{
+			name:      "shorter content gets padded",
+			content:   "line1\nline2",
+			height:    5,
+			wantLines: 5,
+		},
+		{
+			name:      "exact height unchanged",
+			content:   "line1\nline2\nline3",
+			height:    3,
+			wantLines: 3,
+		},
+		{
+			name:      "longer content gets truncated",
+			content:   "line1\nline2\nline3\nline4\nline5",
+			height:    3,
+			wantLines: 3,
+		},
+		{
+			name:      "trailing newline handled",
+			content:   "line1\nline2\n",
+			height:    4,
+			wantLines: 4,
+		},
+		{
+			name:      "empty content padded",
+			content:   "",
+			height:    3,
+			wantLines: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := padToHeight(tt.content, tt.height)
+			lines := strings.Split(result, "\n")
+			if len(lines) != tt.wantLines {
+				t.Errorf("padToHeight(%q, %d) = %d lines; want %d lines\nresult: %q",
+					tt.content, tt.height, len(lines), tt.wantLines, result)
+			}
+		})
+	}
+}
+
 func TestSwitchProjectKey(t *testing.T) {
 	app := NewApp(testConfig(), "/tmp/test.json", testSkills(), nil)
 

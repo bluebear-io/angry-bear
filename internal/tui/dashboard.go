@@ -625,6 +625,19 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		}
 	}
 
+	// Show scroll indicators if not all skills are visible
+	if len(d.skills) > visible {
+		indicator := d.styles.Description.Render(
+			fmt.Sprintf("  [%d/%d]", d.skillCursor+1, len(d.skills)))
+		if scrollStart > 0 {
+			indicator += d.styles.Description.Render(" ↑")
+		}
+		if end < len(d.skills) {
+			indicator += d.styles.Description.Render(" ↓")
+		}
+		b.WriteString(indicator + "\n")
+	}
+
 	return title + b.String()
 }
 

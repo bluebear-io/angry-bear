@@ -394,8 +394,8 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return re, nil
 
-	case "ctrl+s":
-		// Save rules
+	case "ctrl+s", "s":
+		// Save rules (s is an alias since many terminals intercept ctrl+s)
 		tools := re.selectedValues("tools")
 		paths := re.selectedValues("paths")
 		agents := re.selectedValues("agents")
@@ -476,10 +476,16 @@ func (re *RuleEditor) moveCursor(delta int) {
 }
 
 // ensureVisible adjusts scrollTop so cursor is visible.
+// If all items fit on screen, scrollTop stays at 0 (no scrolling).
 func (re *RuleEditor) ensureVisible() {
 	visible := re.height - 8
 	if visible < 5 {
 		visible = 20
+	}
+	// If all items fit on screen, never scroll
+	if len(re.items) <= visible {
+		re.scrollTop = 0
+		return
 	}
 	if re.cursor < re.scrollTop {
 		re.scrollTop = re.cursor
@@ -530,11 +536,12 @@ func (re RuleEditor) View() string {
 		len(tools), len(paths), len(agents), count,
 	))
 
-	// Render list
+	// Render list — if all items fit, show everything (no scrolling)
 	var b strings.Builder
 	visible := re.height - 8
-	if visible < 5 {
+	if visible < 5 || len(re.items) <= visible {
 		visible = len(re.items)
+		re.scrollTop = 0
 	}
 	end := re.scrollTop + visible
 	if end > len(re.items) {
@@ -588,7 +595,7 @@ func (re RuleEditor) View() string {
 	help := keyStyle.Render("↑↓") + helpStyle.Render(" navigate") + "  " +
 		keyStyle.Render("space") + helpStyle.Render(" toggle") + "  " +
 		keyStyle.Render("←→") + helpStyle.Render(" expand/collapse") + "  " +
-		keyStyle.Render("ctrl+s") + helpStyle.Render(" save") + "  " +
+		keyStyle.Render("s") + helpStyle.Render(" save") + "  " +
 		keyStyle.Render("esc") + helpStyle.Render(" cancel")
 
 	return header + "\n" + summary + "\n\n" + b.String() + "\n" + help

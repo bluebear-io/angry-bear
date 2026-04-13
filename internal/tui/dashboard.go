@@ -247,15 +247,31 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, func() tea.Msg { return saveRequestMsg{} }
 
 		case "f":
-			// Toggle project filter in event log
+			// Cycle project filter: all → project1 → project2 → ... → all
 			if d.focusPanel == 2 {
+				projects := d.uniqueLogProjects()
+				if len(projects) == 0 {
+					return d, nil
+				}
 				if d.logProjectFilter == "" {
-					// Set filter to current project
-					if d.skillCursor < len(d.skills) {
-						d.logProjectFilter = filepath.Base(d.projectRoot)
-					}
+					d.logProjectFilter = projects[0]
 				} else {
-					d.logProjectFilter = "" // Clear filter
+					// Find current and move to next
+					found := false
+					for i, p := range projects {
+						if p == d.logProjectFilter {
+							if i+1 < len(projects) {
+								d.logProjectFilter = projects[i+1]
+							} else {
+								d.logProjectFilter = "" // Back to all
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						d.logProjectFilter = ""
+					}
 				}
 				d.logCursor = 0
 			}
@@ -779,6 +795,23 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	return title + b.String()
+}
+
+// uniqueLogProjects extracts unique project names from event lines.
+func (d *Dashboard) uniqueLogProjects() []string {
+	seen := make(map[string]bool)
+	var projects []string
+	for _, line := range d.eventLines {
+		parts := strings.Split(line, " | ")
+		if len(parts) >= 2 {
+			proj := strings.TrimSpace(parts[1])
+			if proj != "" && !seen[proj] {
+				seen[proj] = true
+				projects = append(projects, proj)
+			}
+		}
+	}
+	return projects
 }
 
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.

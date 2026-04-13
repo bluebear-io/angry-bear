@@ -786,35 +786,53 @@ func (d *Dashboard) uniqueLogProjects() []string {
 }
 
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.
+// Works with the filtered log view used by renderEventLog.
 func (d *Dashboard) jumpToLogEntry() {
-	if d.logCursor < 0 || d.logCursor >= len(d.eventLines) {
+	// Build the same filtered list as renderEventLog
+	var filtered []string
+	for _, line := range d.eventLines {
+		if d.logProjectFilter != "" {
+			parts := strings.Split(line, " | ")
+			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
+				continue
+			}
+		}
+		filtered = append(filtered, line)
+	}
+
+	if d.logCursor < 0 || d.logCursor >= len(filtered) {
 		return
 	}
 
-	line := d.eventLines[d.logCursor]
+	line := filtered[d.logCursor]
 	parts := strings.Split(line, " | ")
-	if len(parts) < 6 {
-		return
-	}
-
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])
 	}
 
+	// Extract skill from the right column based on format
 	skill := ""
-	if len(parts) > 5 {
+	if len(parts) >= 8 {
+		// 8-col: timestamp|project|agent|session|tool|path|action|skill
+		skill = parts[7]
+	} else if len(parts) >= 7 {
+		// 7-col: timestamp|agent|session|tool|path|action|skill
+		skill = parts[6]
+	} else if len(parts) >= 6 {
+		// 6-col: timestamp|agent|tool|path|action|skill
 		skill = parts[5]
 	}
-	// For SKILL-LOAD events, the skill name is in parts[2] (tool column)
-	if strings.Contains(line, "SKILL-LOAD") {
-		skill = parts[2]
+
+	// Skills can be comma-separated (e.g., "linear,sst-architect") — use first one
+	if strings.Contains(skill, ",") {
+		skill = strings.Split(skill, ",")[0]
 	}
 
 	if skill == "" {
 		return
 	}
 
-	// Find the skill in the skills list
+	// Find the skill in the skills list and jump to it
 	for i, s := range d.skills {
 		if s.Name == skill {
 			d.skillCursor = i

@@ -64,6 +64,18 @@ make install  # Install to $GOPATH/bin
 4. Verify `make lint test` still passes
 5. Check coverage hasn't dropped below 80%
 
+## Documentation — Always Up to Date
+
+**Every code change that adds, removes, or modifies user-facing behavior MUST update the relevant docs in the same PR:**
+
+- **README.md** — CLI commands, install methods, feature descriptions, configuration reference
+- **CLAUDE.md** — coding standards, architecture rules, if they change
+- **docs/HIGHLEVEL.md** — architecture, enforcement flow, state management
+- **CONTRIBUTING.md** — PR process, adapter guide, testing requirements
+- **CLI --help text** — command descriptions, flag descriptions, examples
+
+If you add a new command, it goes in README. If you change config format, it goes in README + HIGHLEVEL.md. If you change enforcement behavior, it goes in HIGHLEVEL.md. No exceptions — stale docs are worse than no docs.
+
 ## PR Requirements
 
 - All CI checks must pass (Lint, Test, Build, GoReleaser Check)

@@ -31,15 +31,14 @@ cd care-bare && make install
 ## Quick Start
 
 ```bash
-# 1. Initialize in your project
+# Add enforcement rules — hooks auto-install on first use
 cd your-project
-care-bare init
+care-bare add    # Interactive mode — pick skill, tools, paths, agents
 
-# 2. Add enforcement rules
+# Or one-liner
 care-bare add go-standards --tool Edit,Write --path "**/*.go"
-care-bare add linear --tool Edit,Write --path "**"
 
-# 3. That's it — agents are now enforced
+# That's it — agents are now enforced
 ```
 
 When an AI agent tries to edit a Go file without loading `go-standards`:
@@ -103,7 +102,6 @@ The TUI provides:
 ### Project Management
 
 ```bash
-care-bare init          # Initialize care-bare in current project
 care-bare status        # Show rules, sessions, skills, agent integrations
 care-bare doctor        # Check installation health
 care-bare clean         # Clean expired session state

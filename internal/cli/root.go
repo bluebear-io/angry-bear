@@ -32,7 +32,6 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.PersistentFlags().Bool("verbose", false, "Enable debug logging to stderr")
 
 	rootCmd.AddCommand(NewHookCommand())
-	rootCmd.AddCommand(NewInitCommand())
 	rootCmd.AddCommand(NewStatusCommand())
 	rootCmd.AddCommand(NewCleanCommand())
 	rootCmd.AddCommand(NewDoctorCommand())

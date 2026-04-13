@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
 
@@ -27,18 +29,20 @@ var validAgentNames = []string{"claude", "cursor", "*"}
 // them to the config file.
 func NewAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "add <skill>",
+		Use:   "add [skill]",
 		Short: "Add enforcement rules for a skill",
 		Long: `Add enforcement rules for a skill.
 
-Creates rules from the cartesian product of --tool, --path, and --agent values.
-Duplicate rules (identical tool+path+skill+agent) are skipped.
+With no arguments, launches an interactive picker to select skill, tools,
+paths, and agents. With arguments, creates rules from the cartesian product
+of --tool, --path, and --agent values.
 
 Examples:
+  care-bare add                    # Interactive mode
   care-bare add go-standards --tool Edit,Write --path "**/*.go" --agent claude
   care-bare add linear --tool Edit --path "**/*.py,**/*.ts"
   care-bare add sst-architect --path "bluebear-backend/stacks/**"`,
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		RunE:              runAdd,
 		ValidArgsFunction: completeSkillNames,
 	}
@@ -54,19 +58,33 @@ Examples:
 	return cmd
 }
 
-// runAdd is the main handler for the add command. It parses flags, generates
-// rules from the cartesian product, loads existing config, deduplicates, and saves.
+// runAdd is the main handler for the add command. With no args, launches
+// interactive mode. With a skill name arg, uses flags for one-liner mode.
 func runAdd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-	skillName := args[0]
 
-	toolFlag, _ := cmd.Flags().GetString("tool")
-	pathFlag, _ := cmd.Flags().GetString("path")
-	agentFlag, _ := cmd.Flags().GetString("agent")
+	// Auto-install hooks on first use
+	ensureHooksInstalled()
 
-	tools := splitCSV(toolFlag)
-	paths := splitCSV(pathFlag)
-	agents := splitCSV(agentFlag)
+	var skillName string
+	var tools, paths, agents []string
+
+	if len(args) == 0 {
+		// Interactive mode
+		var err error
+		skillName, tools, paths, agents, err = runAddInteractive(cmd)
+		if err != nil {
+			return err
+		}
+	} else {
+		skillName = args[0]
+		toolFlag, _ := cmd.Flags().GetString("tool")
+		pathFlag, _ := cmd.Flags().GetString("path")
+		agentFlag, _ := cmd.Flags().GetString("agent")
+		tools = splitCSV(toolFlag)
+		paths = splitCSV(pathFlag)
+		agents = splitCSV(agentFlag)
+	}
 
 	// Generate the cartesian product of tools x paths x agents.
 	var newRules []engine.Rule
@@ -283,4 +301,129 @@ func completeAgentNames(cmd *cobra.Command, args []string, toComplete string) ([
 		}
 	}
 	return matches, cobra.ShellCompDirectiveNoFileComp
+}
+
+// runAddInteractive launches an interactive form to select skill, tools, paths, agents.
+func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents []string, err error) {
+	// Discover available skills
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil, nil, nil, fmt.Errorf("getting working directory: %w", err)
+	}
+	projectRoot := engine.ResolveProjectRoot(cwd)
+	globalCfg, _ := engine.LoadGlobalConfig(projectRoot)
+
+	var skillPaths []string
+	for _, sp := range globalCfg.SkillPaths {
+		if filepath.IsAbs(sp) {
+			skillPaths = append(skillPaths, sp)
+		} else {
+			skillPaths = append(skillPaths, filepath.Join(projectRoot, sp))
+		}
+	}
+	discoveredSkills, _ := scanner.ScanSkills(skillPaths)
+
+	// Build skill options
+	skillOpts := make([]huh.Option[string], 0, len(discoveredSkills)+1)
+	for _, s := range discoveredSkills {
+		label := s.Name
+		if s.Description != "" {
+			label = s.Name + "  — " + s.Description
+			if len(label) > 70 {
+				label = label[:67] + "..."
+			}
+		}
+		skillOpts = append(skillOpts, huh.NewOption(label, s.Name))
+	}
+	if len(skillOpts) == 0 {
+		return "", nil, nil, nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
+	}
+
+	// Build tool options
+	toolOpts := make([]huh.Option[string], len(validToolNames))
+	for i, t := range validToolNames {
+		toolOpts[i] = huh.NewOption(t, t)
+	}
+
+	// Build agent options
+	agentOpts := make([]huh.Option[string], len(validAgentNames))
+	for i, a := range validAgentNames {
+		agentOpts[i] = huh.NewOption(a, a)
+	}
+
+	var selectedSkill string
+	var selectedTools []string
+	var selectedAgents []string
+	var pathInput string
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select a skill to enforce").
+				Options(skillOpts...).
+				Value(&selectedSkill),
+		),
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select tools to enforce").
+				Description("Which tools require this skill?").
+				Options(toolOpts...).
+				Value(&selectedTools),
+		),
+		huh.NewGroup(
+			huh.NewInput().
+				Title("File path patterns").
+				Description("Comma-separated globs (e.g., **/*.go, stacks/**)").
+				Placeholder("**").
+				Value(&pathInput),
+		),
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select agents").
+				Description("Which agents should enforce this?").
+				Options(agentOpts...).
+				Value(&selectedAgents),
+		),
+	).WithTheme(huh.ThemeDracula())
+
+	err = form.Run()
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
+	// Defaults
+	if len(selectedTools) == 0 {
+		selectedTools = []string{"*"}
+	}
+	if pathInput == "" {
+		pathInput = "**"
+	}
+	if len(selectedAgents) == 0 {
+		selectedAgents = []string{"*"}
+	}
+
+	return selectedSkill, selectedTools, splitCSV(pathInput), selectedAgents, nil
+}
+
+// ensureHooksInstalled checks if care-bare hooks are installed in agent configs.
+// If not, installs them silently. Called on first `care-bare add`.
+func ensureHooksInstalled() {
+	registry := adapter.NewRegistry()
+	for _, name := range registry.Names() {
+		a, err := registry.Get(name)
+		if err != nil {
+			continue
+		}
+		// Check if agent is present on this machine
+		home, err := os.UserHomeDir()
+		if err != nil {
+			continue
+		}
+		configDir := filepath.Join(home, "."+name)
+		if _, err := os.Stat(configDir); err != nil {
+			continue
+		}
+		// Install hook (idempotent)
+		_ = a.InstallHook("")
+	}
 }

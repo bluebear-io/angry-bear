@@ -23,7 +23,7 @@ func TestNewRootCommand_CreatedWithoutError(t *testing.T) {
 func TestNewRootCommand_HasAllSubcommands(t *testing.T) {
 	cmd := NewRootCommand()
 
-	expectedSubcommands := []string{"hook", "init", "status", "clean", "doctor", "version"}
+	expectedSubcommands := []string{"hook", "status", "clean", "doctor", "version", "add", "rules", "rm"}
 	registeredNames := make(map[string]bool)
 	for _, sub := range cmd.Commands() {
 		registeredNames[sub.Name()] = true

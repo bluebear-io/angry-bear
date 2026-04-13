@@ -129,7 +129,7 @@ func TestScanSkillsEmptyDirectory(t *testing.T) {
 func TestScanSkillsNonexistentPath(t *testing.T) {
 	t.Parallel()
 
-	skills, err := ScanSkills([]string{"/tmp/does-not-exist-care-bare-test-99999"})
+	skills, err := ScanSkills([]string{"/tmp/does-not-exist-care-bear-test-99999"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

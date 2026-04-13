@@ -1,4 +1,4 @@
-// Package engine implements the core skill enforcement logic for care-bare.
+// Package engine implements the core skill enforcement logic for care-bear.
 // It handles rule matching, config loading, and the ShouldBlock decision.
 package engine
 
@@ -16,7 +16,7 @@ type Config struct {
 	Tools   []Rule `json:"tools"`
 }
 
-// GlobalConfig represents the global care-bare configuration.
+// GlobalConfig represents the global care-bear configuration.
 type GlobalConfig struct {
 	SkillPaths      []string `json:"skill_paths"`
 	StateTTLHours   int      `json:"state_ttl_hours"`

@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 )
 
 func testSkills() []scanner.Skill {
@@ -467,8 +467,8 @@ func TestApp_ViewSettings(t *testing.T) {
 	if !strings.Contains(output, "SETTINGS") {
 		t.Error("expected SETTINGS in view when in settings mode")
 	}
-	if !strings.Contains(output, "care-bare") {
-		t.Error("expected care-bare header in app view")
+	if !strings.Contains(output, "care-bear") {
+		t.Error("expected care-bear header in app view")
 	}
 }
 
@@ -728,7 +728,7 @@ func TestSaveGlobalConfig_GlobalLevel(t *testing.T) {
 	}
 
 	// Verify the file was written.
-	configPath := tmpHome + "/.care-bare/config.json"
+	configPath := tmpHome + "/.care-bear/config.json"
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("config file not written: %v", err)
@@ -862,7 +862,7 @@ func TestApp_EventsUpdatedMsg(t *testing.T) {
 	t.Setenv("HOME", tmpHome)
 
 	// Create events.log
-	eventsDir := tmpHome + "/.care-bare"
+	eventsDir := tmpHome + "/.care-bear"
 	_ = os.MkdirAll(eventsDir, 0o755)
 	_ = os.WriteFile(eventsDir+"/events.log",
 		[]byte("2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | git\n"),
@@ -874,7 +874,7 @@ func TestApp_EventsUpdatedMsg(t *testing.T) {
 	app = m.(App)
 
 	// After receiving eventsUpdatedMsg, the dashboard should have reloaded events.
-	// The reload reads from ~/.care-bare/events.log.
+	// The reload reads from ~/.care-bear/events.log.
 	if len(app.dashboard.eventLines) != 1 {
 		t.Errorf("expected 1 event line after reload, got %d", len(app.dashboard.eventLines))
 	}

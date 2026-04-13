@@ -1,4 +1,4 @@
-// doctor_test.go contains integration tests for the care-bare doctor command.
+// doctor_test.go contains integration tests for the care-bear doctor command.
 // Tests exercise the command against controlled temporary environments to verify
 // each diagnostic check (config, hooks, state dir, binary, skill paths).
 package cli_test
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/cli"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // runDoctorInDir executes the doctor command with the working directory set
@@ -45,16 +45,16 @@ func runDoctorInDir(t *testing.T, dir string) (string, error) {
 	return outBuf.String(), execErr
 }
 
-// setupHealthyProject creates a fully valid care-bare project in the temp dir
+// setupHealthyProject creates a fully valid care-bear project in the temp dir
 // with valid configs, state directory, a detected agent with hooks, and skills.
 func setupHealthyProject(t *testing.T, dir string) {
 	t.Helper()
 
-	// Create .care-bare/ with valid skill_enforcement.json.
-	careBareDir := filepath.Join(dir, ".care-bare")
+	// Create .care-bear/ with valid skill_enforcement.json.
+	careBareDir := filepath.Join(dir, ".care-bear")
 	err := os.MkdirAll(careBareDir, 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare directory: %v", err)
+		t.Fatalf("failed to create .care-bear directory: %v", err)
 	}
 	enforcementCfg := engine.Config{
 		Version: 1,
@@ -86,13 +86,13 @@ func setupHealthyProject(t *testing.T, dir string) {
 		t.Fatalf("failed to write global config: %v", err)
 	}
 
-	// Create .care-bare/state/ directory.
+	// Create .care-bear/state/ directory.
 	err = os.MkdirAll(filepath.Join(careBareDir, "state"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
 	}
 
-	// Create .claude/ with settings.json containing care-bare hook.
+	// Create .claude/ with settings.json containing care-bear hook.
 	claudeDir := filepath.Join(dir, ".claude")
 	err = os.MkdirAll(claudeDir, 0o755)
 	if err != nil {
@@ -106,7 +106,7 @@ func setupHealthyProject(t *testing.T, dir string) {
 					"hooks": []any{
 						map[string]any{
 							"type":    "command",
-							"command": "care-bare hook --agent claude",
+							"command": "care-bear hook --agent claude",
 						},
 					},
 				},
@@ -137,7 +137,7 @@ func setupHealthyProject(t *testing.T, dir string) {
 
 // TestDoctor_AllPassWhenHealthy verifies that doctor reports all checks as
 // PASS when the project is fully configured. The binary-on-PATH check may
-// fail (care-bare is not installed globally in tests), so we allow that.
+// fail (care-bear is not installed globally in tests), so we allow that.
 func TestDoctor_AllPassWhenHealthy(t *testing.T) {
 	dir := t.TempDir()
 	setupHealthyProject(t, dir)
@@ -145,7 +145,7 @@ func TestDoctor_AllPassWhenHealthy(t *testing.T) {
 	output, _ := runDoctorInDir(t, dir)
 
 	// Verify header.
-	if !strings.Contains(output, "care-bare doctor") {
+	if !strings.Contains(output, "care-bear doctor") {
 		t.Errorf("expected doctor header, got: %s", output)
 	}
 
@@ -184,7 +184,7 @@ func TestDoctor_FailsWhenHookNotInstalled(t *testing.T) {
 	dir := t.TempDir()
 	setupHealthyProject(t, dir)
 
-	// Overwrite settings.json without the care-bare hook.
+	// Overwrite settings.json without the care-bear hook.
 	settings := map[string]any{
 		"hooks": map[string]any{},
 	}
@@ -207,8 +207,8 @@ func TestDoctor_FailsWhenHookNotInstalled(t *testing.T) {
 	if !strings.Contains(output, "[FAIL] Hook installed: claude") {
 		t.Errorf("expected hook FAIL, got: %s", output)
 	}
-	if !strings.Contains(output, "care-bare add") {
-		t.Errorf("expected fix hint mentioning 'care-bare add', got: %s", output)
+	if !strings.Contains(output, "care-bear add") {
+		t.Errorf("expected fix hint mentioning 'care-bear add', got: %s", output)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestDoctor_FailsWhenConfigHasJSONErrors(t *testing.T) {
 
 	// Overwrite skill_enforcement.json with malformed JSON.
 	err := os.WriteFile(
-		filepath.Join(dir, ".care-bare", "skill_enforcement.json"),
+		filepath.Join(dir, ".care-bear", "skill_enforcement.json"),
 		[]byte("{not valid json"),
 		0o644,
 	)
@@ -249,7 +249,7 @@ func TestDoctor_FailsWhenStateDirectoryNotWritable(t *testing.T) {
 	setupHealthyProject(t, dir)
 
 	// Make state directory read-only.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.Chmod(stateDir, 0o444)
 	if err != nil {
 		t.Fatalf("failed to make state directory read-only: %v", err)
@@ -289,7 +289,7 @@ func TestDoctor_FailsWhenSkillPathsDoNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal config: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(dir, ".care-bare", "config.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(dir, ".care-bear", "config.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -336,13 +336,13 @@ func TestDoctor_FailsWhenSkillPathExistsButEmpty(t *testing.T) {
 }
 
 // TestDoctor_MissingStateDirectory verifies that doctor reports FAIL when
-// the .care-bare/state/ directory does not exist.
+// the .care-bear/state/ directory does not exist.
 func TestDoctor_MissingStateDirectory(t *testing.T) {
 	dir := t.TempDir()
 	setupHealthyProject(t, dir)
 
 	// Remove the state directory.
-	err := os.RemoveAll(filepath.Join(dir, ".care-bare", "state"))
+	err := os.RemoveAll(filepath.Join(dir, ".care-bear", "state"))
 	if err != nil {
 		t.Fatalf("failed to remove state directory: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestDoctor_UnsupportedConfigVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal config: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(dir, ".care-bare", "skill_enforcement.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(dir, ".care-bear", "skill_enforcement.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestDoctor_MalformedGlobalConfig(t *testing.T) {
 
 	// Overwrite config.json with malformed JSON.
 	err := os.WriteFile(
-		filepath.Join(dir, ".care-bare", "config.json"),
+		filepath.Join(dir, ".care-bear", "config.json"),
 		[]byte("{invalid json"),
 		0o644,
 	)
@@ -484,7 +484,7 @@ func TestDoctor_EnforcementConfigPermissionDenied(t *testing.T) {
 	setupHealthyProject(t, dir)
 
 	// Make skill_enforcement.json unreadable.
-	cfgPath := filepath.Join(dir, ".care-bare", "skill_enforcement.json")
+	cfgPath := filepath.Join(dir, ".care-bear", "skill_enforcement.json")
 	err := os.Chmod(cfgPath, 0o000)
 	if err != nil {
 		t.Fatalf("failed to make config unreadable: %v", err)
@@ -506,13 +506,13 @@ func TestDoctor_EnforcementConfigPermissionDenied(t *testing.T) {
 }
 
 // TestDoctor_StateDirectoryIsFile verifies that doctor reports FAIL when
-// .care-bare/state is a file instead of a directory.
+// .care-bear/state is a file instead of a directory.
 func TestDoctor_StateDirectoryIsFile(t *testing.T) {
 	dir := t.TempDir()
 	setupHealthyProject(t, dir)
 
 	// Remove the state directory and replace it with a file.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.RemoveAll(stateDir)
 	if err != nil {
 		t.Fatalf("failed to remove state dir: %v", err)
@@ -543,7 +543,7 @@ func TestDoctor_GlobalConfigPermissionDenied(t *testing.T) {
 	setupHealthyProject(t, dir)
 
 	// Make config.json unreadable.
-	cfgPath := filepath.Join(dir, ".care-bare", "config.json")
+	cfgPath := filepath.Join(dir, ".care-bear", "config.json")
 	err := os.Chmod(cfgPath, 0o000)
 	if err != nil {
 		t.Fatalf("failed to make config unreadable: %v", err)
@@ -589,7 +589,7 @@ func TestDoctor_AbsoluteSkillPath(t *testing.T) {
 		DefaultAgent:  "*",
 	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
-	err = os.WriteFile(filepath.Join(dir, ".care-bare", "config.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(dir, ".care-bear", "config.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config.json: %v", err)
 	}
@@ -607,7 +607,7 @@ func TestDoctor_NoConfigFilesIsAcceptable(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create only the state directory (minimal setup).
-	err := os.MkdirAll(filepath.Join(dir, ".care-bare", "state"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".care-bear", "state"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
 	}

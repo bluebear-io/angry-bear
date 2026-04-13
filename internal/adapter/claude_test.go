@@ -270,7 +270,7 @@ func TestClaudeInstallHook_CreatesSettingsWhenMissing(t *testing.T) {
 		t.Fatalf("failed to create .claude dir: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -281,9 +281,9 @@ func TestClaudeInstallHook_CreatesSettingsWhenMissing(t *testing.T) {
 		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	// Verify it contains the care-bare hook entry
-	if !strings.Contains(string(data), "care-bare hook --agent claude") {
-		t.Errorf("settings.json missing care-bare hook command:\n%s", data)
+	// Verify it contains the care-bear hook entry
+	if !strings.Contains(string(data), "care-bear hook --agent claude") {
+		t.Errorf("settings.json missing care-bear hook command:\n%s", data)
 	}
 }
 
@@ -315,7 +315,7 @@ func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Fatalf("failed to write existing settings: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -330,9 +330,9 @@ func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
 	if !strings.Contains(content, "some-existing-hook.sh") {
 		t.Errorf("existing Bash hook was removed:\n%s", content)
 	}
-	// care-bare hook must be present
-	if !strings.Contains(content, "care-bare hook --agent claude") {
-		t.Errorf("care-bare hook not added:\n%s", content)
+	// care-bear hook must be present
+	if !strings.Contains(content, "care-bear hook --agent claude") {
+		t.Errorf("care-bear hook not added:\n%s", content)
 	}
 	// enabledPlugins must be preserved
 	if !strings.Contains(content, "linear@claude-plugins-official") {
@@ -347,7 +347,7 @@ func TestClaudeInstallHook_Idempotent(t *testing.T) {
 		t.Fatalf("failed to create .claude dir: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 
 	// Install twice
 	if err := adapter.InstallHook(tmpDir); err != nil {
@@ -363,10 +363,10 @@ func TestClaudeInstallHook_Idempotent(t *testing.T) {
 		t.Fatalf("failed to read settings.json: %v", err)
 	}
 
-	// Count occurrences of "care-bare hook" -- should be exactly 1
-	count := strings.Count(string(data), "care-bare hook --agent claude")
+	// Count occurrences of "care-bear hook" -- should be exactly 1
+	count := strings.Count(string(data), "care-bear hook --agent claude")
 	if count != 1 {
-		t.Errorf("care-bare hook appears %d times, want 1:\n%s", count, data)
+		t.Errorf("care-bear hook appears %d times, want 1:\n%s", count, data)
 	}
 }
 
@@ -374,7 +374,7 @@ func TestClaudeInstallHook_CreatesClaudeDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Don't pre-create .claude dir -- InstallHook should handle it
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestClaudeInstallHook_CorrectJSONStructure(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -446,8 +446,8 @@ func TestClaudeInstallHook_CorrectJSONStructure(t *testing.T) {
 	if hookEntry["type"] != "command" {
 		t.Errorf("type = %v, want %q", hookEntry["type"], "command")
 	}
-	if hookEntry["command"] != "/usr/local/bin/care-bare hook --agent claude" {
-		t.Errorf("command = %v, want %q", hookEntry["command"], "/usr/local/bin/care-bare hook --agent claude")
+	if hookEntry["command"] != "/usr/local/bin/care-bear hook --agent claude" {
+		t.Errorf("command = %v, want %q", hookEntry["command"], "/usr/local/bin/care-bear hook --agent claude")
 	}
 }
 
@@ -465,7 +465,7 @@ func TestClaudeInstallHook_MalformedExistingJSON(t *testing.T) {
 		t.Fatalf("failed to write malformed settings: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	err := adapter.InstallHook(tmpDir)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON, got nil")
@@ -479,7 +479,7 @@ func TestClaudeInstallHook_TrailingNewline(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -829,22 +829,22 @@ func TestClaudeParseInput_EmptyJSON(t *testing.T) {
 
 func TestResolveCareBareCommand_WithExplicitPath(t *testing.T) {
 	t.Parallel()
-	result := resolveCareBareCommand("/explicit/path/care-bare")
-	if result != "/explicit/path/care-bare" {
-		t.Errorf("resolveCareBareCommand = %q, want %q", result, "/explicit/path/care-bare")
+	result := resolveCareBareCommand("/explicit/path/care-bear")
+	if result != "/explicit/path/care-bear" {
+		t.Errorf("resolveCareBareCommand = %q, want %q", result, "/explicit/path/care-bear")
 	}
 }
 
 func TestResolveCareBareCommand_EmptyFallsBackToExecutable(t *testing.T) {
 	t.Parallel()
-	// When empty string is passed, it should resolve to os.Executable or "care-bare"
+	// When empty string is passed, it should resolve to os.Executable or "care-bear"
 	result := resolveCareBareCommand("")
 	if result == "" {
 		t.Error("resolveCareBareCommand returned empty string")
 	}
-	// Should return either an absolute path or "care-bare" fallback
-	if result != "care-bare" && !filepath.IsAbs(result) {
-		t.Errorf("resolveCareBareCommand = %q, expected absolute path or 'care-bare'", result)
+	// Should return either an absolute path or "care-bear" fallback
+	if result != "care-bear" && !filepath.IsAbs(result) {
+		t.Errorf("resolveCareBareCommand = %q, expected absolute path or 'care-bear'", result)
 	}
 }
 
@@ -990,13 +990,13 @@ func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
 			"hooks": []any{
 				map[string]any{
 					"type":    "command",
-					"command": "/usr/bin/care-bare hook --agent claude",
+					"command": "/usr/bin/care-bear hook --agent claude",
 				},
 			},
 		},
 	}
 	if !careBareHookExists(entries) {
-		t.Error("expected true when care-bare hook exists")
+		t.Error("expected true when care-bear hook exists")
 	}
 }
 
@@ -1014,7 +1014,7 @@ func TestCareBareHookExists_IgnoresUnrelatedHooks(t *testing.T) {
 		},
 	}
 	if careBareHookExists(entries) {
-		t.Error("expected false when no care-bare hook is present")
+		t.Error("expected false when no care-bear hook is present")
 	}
 }
 

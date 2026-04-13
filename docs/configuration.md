@@ -1,23 +1,23 @@
 # Configuration Reference
 
-This document provides a complete reference for all care-bare configuration files, their fields, default values, and merge behavior.
+This document provides a complete reference for all care-bear configuration files, their fields, default values, and merge behavior.
 
 ## Config File Locations
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `skill_enforcement.json` | `~/.care-bare/skill_enforcement.json` | User-level enforcement rules (apply to all projects) |
-| `skill_enforcement.json` | `.care-bare/skill_enforcement.json` | Project-level enforcement rules (shared via version control) |
-| `config.json` | `.care-bare/config.json` | Project-level global settings (skill paths, TTL, ignore patterns) |
-| `state/` | `.care-bare/state/` | Session state files (auto-managed, should be gitignored) |
+| `skill_enforcement.json` | `~/.care-bear/skill_enforcement.json` | User-level enforcement rules (apply to all projects) |
+| `skill_enforcement.json` | `.care-bear/skill_enforcement.json` | Project-level enforcement rules (shared via version control) |
+| `config.json` | `.care-bear/config.json` | Project-level global settings (skill paths, TTL, ignore patterns) |
+| `state/` | `.care-bear/state/` | Session state files (auto-managed, should be gitignored) |
 
-User-level configs live in `~/.care-bare/`. Project-level configs live in `.care-bare/` at the project root. care-bare resolves the project root by walking up from the current directory looking for `.care-bare/`, then `.git/`, and falls back to the current directory itself.
+User-level configs live in `~/.care-bear/`. Project-level configs live in `.care-bear/` at the project root. care-bear resolves the project root by walking up from the current directory looking for `.care-bear/`, then `.git/`, and falls back to the current directory itself.
 
 ---
 
 ## `skill_enforcement.json`
 
-This file defines which skills must be loaded before specific tools can operate on specific file paths. It is the core configuration file for care-bare enforcement.
+This file defines which skills must be loaded before specific tools can operate on specific file paths. It is the core configuration file for care-bear enforcement.
 
 ### Schema
 
@@ -39,7 +39,7 @@ This file defines which skills must be loaded before specific tools can operate 
 
 #### `version` (int, required)
 
-Config schema version. Must be `1`. Future versions may introduce breaking changes with migration tooling. care-bare returns an error for any version other than `1`.
+Config schema version. Must be `1`. Future versions may introduce breaking changes with migration tooling. care-bear returns an error for any version other than `1`.
 
 #### `tools` (array of objects)
 
@@ -160,7 +160,7 @@ Valid values:
 
 ## `config.json`
 
-This file configures global care-bare behavior: where to find skills, how long session state lives, and which directories to ignore in the TUI.
+This file configures global care-bear behavior: where to find skills, how long session state lives, and which directories to ignore in the TUI.
 
 ### Schema
 
@@ -195,7 +195,7 @@ Relative paths are resolved from the project root. Absolute paths are used as-is
 
 Number of hours before session state files expire and become eligible for pruning. When a session state file's modification time exceeds this TTL, it is removed during the next prune cycle.
 
-Pruning happens automatically (throttled to at most once per hour) after each hook invocation, or manually via `care-bare clean`.
+Pruning happens automatically (throttled to at most once per hour) after each hook invocation, or manually via `care-bear clean`.
 
 #### `default_agent` (string)
 
@@ -213,30 +213,30 @@ Directory names to hide in the TUI tree picker when browsing for file paths. The
 
 ## Config Merge Behavior
 
-Rules from all config sources accumulate. care-bare loads configs in this order:
+Rules from all config sources accumulate. care-bear loads configs in this order:
 
-1. **User-level:** `~/.care-bare/skill_enforcement.json`
-2. **Project-level:** Walk up from the current directory, collecting `.care-bare/skill_enforcement.json` files at each level, stopping at the filesystem root or user home directory.
+1. **User-level:** `~/.care-bear/skill_enforcement.json`
+2. **Project-level:** Walk up from the current directory, collecting `.care-bear/skill_enforcement.json` files at each level, stopping at the filesystem root or user home directory.
 
 All discovered rules apply simultaneously. There is no override or priority mechanism. If two rules match the same tool+path+agent combination but require different skills, both skills must be loaded before the operation is allowed.
 
-Each rule tracks its source file path. You can see which file each rule came from via `care-bare status`.
+Each rule tracks its source file path. You can see which file each rule came from via `care-bear status`.
 
 ---
 
 ## `.gitignore` Recommendations
 
-The `care-bare init` command automatically adds `.care-bare/state/` to your `.gitignore`. If you set up care-bare manually, add this entry yourself:
+The `care-bear init` command automatically adds `.care-bear/state/` to your `.gitignore`. If you set up care-bear manually, add this entry yourself:
 
 ```gitignore
-# care-bare state (generated, do not commit)
-.care-bare/state/
+# care-bear state (generated, do not commit)
+.care-bear/state/
 ```
 
 The following files **should be committed** to version control so enforcement rules are shared with the team:
 
-- `.care-bare/skill_enforcement.json` -- enforcement rules
-- `.care-bare/config.json` -- global settings
+- `.care-bear/skill_enforcement.json` -- enforcement rules
+- `.care-bear/config.json` -- global settings
 
 ---
 

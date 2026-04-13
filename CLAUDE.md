@@ -1,8 +1,8 @@
-# care-bare — Agent Guidelines
+# care-bear — Agent Guidelines
 
 ## Overview
 
-care-bare enforces skill-loading requirements for AI coding agents. Before modifying any code, read `docs/HIGHLEVEL.md` to understand how enforcement, state management, and the adapter architecture work.
+care-bear enforces skill-loading requirements for AI coding agents. Before modifying any code, read `docs/HIGHLEVEL.md` to understand how enforcement, state management, and the adapter architecture work.
 
 ## Repository Structure
 
@@ -14,7 +14,7 @@ internal/
   state/       File-based session state with advisory locks and atomic writes
   scanner/     Skill discovery from configured paths
   tui/         Charmbracelet TUI (dashboard, rule editor, tree picker, settings)
-cmd/care-bare/ Entry point — wires dependencies, nothing else
+cmd/care-bear/ Entry point — wires dependencies, nothing else
 ```
 
 ## Architecture Rules
@@ -50,7 +50,7 @@ This project follows strict Go coding standards:
 ## Development
 
 ```bash
-make build    # Build binary to bin/care-bare
+make build    # Build binary to bin/care-bear
 make test     # Run all tests with race detection
 make lint     # Run golangci-lint
 make install  # Install to $GOPATH/bin

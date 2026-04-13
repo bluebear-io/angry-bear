@@ -1,26 +1,26 @@
 # Architecture
 
-This document describes the internal architecture of care-bare for contributors and advanced users.
+This document describes the internal architecture of care-bear for contributors and advanced users.
 
 ## Overview
 
-care-bare is a single Go binary with no runtime dependencies. It operates in two modes:
+care-bear is a single Go binary with no runtime dependencies. It operates in two modes:
 
-1. **Interactive TUI** — a machine-level terminal dashboard (launched with `care-bare`) that discovers all projects across all AI agents, lets you pick one, and configure enforcement rules.
-2. **Headless hook** — a pre-tool-use hook (launched with `care-bare hook`) that reads JSON from stdin, evaluates enforcement rules, and writes allow/deny JSON to stdout.
+1. **Interactive TUI** — a machine-level terminal dashboard (launched with `care-bear`) that discovers all projects across all AI agents, lets you pick one, and configure enforcement rules.
+2. **Headless hook** — a pre-tool-use hook (launched with `care-bear hook`) that reads JSON from stdin, evaluates enforcement rules, and writes allow/deny JSON to stdout.
 
 The CLI is an **observability and configuration tool**. All enforcement work is done by the hooks.
 
 ### Trust Model
 
-care-bare is a developer productivity tool, not a security perimeter. It assumes a trusted local environment where the goal is team discipline — ensuring agents load the right context before modifying files.
+care-bear is a developer productivity tool, not a security perimeter. It assumes a trusted local environment where the goal is team discipline — ensuring agents load the right context before modifying files.
 
 ## Project Structure
 
 ```
-care-bare/
+care-bear/
   cmd/
-    care-bare/
+    care-bear/
       main.go              # Entry point: sets version info + binary path, calls cli.Execute()
   internal/
     adapter/               # Agent-specific logic (ALL agent knowledge lives here)
@@ -117,14 +117,14 @@ The deny message includes load instructions: `/skill-name (or read .claude/skill
 ### Config Loading
 
 Two levels, both accumulate (no override):
-1. User-level: `~/.care-bare/skill_enforcement.json`
-2. Project-level: walk up from cwd, collect all `.care-bare/skill_enforcement.json`
+1. User-level: `~/.care-bear/skill_enforcement.json`
+2. Project-level: walk up from cwd, collect all `.care-bear/skill_enforcement.json`
 
 ### Path Handling
 
 - Relative globs auto-prefix with `**/` 
 - File paths from agents normalized to repo-relative, forward-slash format
-- Project root: walk up looking for `.care-bare/`, fall back to `.git/`, fall back to cwd
+- Project root: walk up looking for `.care-bear/`, fall back to `.git/`, fall back to cwd
 
 ## State Manager (`internal/state/`)
 
@@ -149,11 +149,11 @@ Tracks which skills are loaded per session per agent.
 ### Pruning
 - TTL-based (default 24h) using file mtime
 - Throttled to max once per hour during hook calls
-- `care-bare clean` bypasses throttle
+- `care-bear clean` bypasses throttle
 
 ## Event Logging
 
-Every hook invocation is logged to `.care-bare/events.log`:
+Every hook invocation is logged to `.care-bear/events.log`:
 
 ```
 2026-04-12T11:57:01Z | cursor | Write      | console/src/app/layout.tsx  | BLOCK | git
@@ -167,7 +167,7 @@ Every hook invocation is logged to `.care-bare/events.log`:
 AI Agent fires PreToolUse
     |
     v
-care-bare hook --agent <name>
+care-bear hook --agent <name>
     |
     +-- 1. Read stdin (5MB limit)
     +-- 2. Select adapter (--agent flag or auto-detect)
@@ -202,7 +202,7 @@ Multi-select rule builder with one continuous scrollable list:
 - `ctrl+s` saves, `esc` cancels
 
 ### Real-time Updates
-- **fsnotify** watches `.care-bare/state/` for skill load changes
+- **fsnotify** watches `.care-bear/state/` for skill load changes
 - Badges update live when agents load skills in other sessions
 
 ## Hooks Installation

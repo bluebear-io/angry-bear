@@ -9,7 +9,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // registryDefaultHomeDir and registryDefaultBinaryPath are applied to
@@ -118,7 +118,7 @@ type MergedProject struct {
 // logic stays inside each adapter's ScanProjects().
 //
 // After merging, if a repo has multiple local paths, ScanAllProjects checks
-// for a preferred path in ~/.care-bare/repos/{hash}-{slug}/preferences.json
+// for a preferred path in ~/.care-bear/repos/{hash}-{slug}/preferences.json
 // and uses it as the primary Path when valid.
 func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
 	// Key by repo slug (Git identity), not by local path

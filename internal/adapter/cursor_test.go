@@ -306,7 +306,7 @@ func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -317,9 +317,9 @@ func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
 		t.Fatalf("hooks.json not created: %v", err)
 	}
 
-	// Verify it contains the care-bare hook entry
-	if !strings.Contains(string(data), "care-bare hook --agent cursor") {
-		t.Errorf("hooks.json missing care-bare hook command:\n%s", data)
+	// Verify it contains the care-bear hook entry
+	if !strings.Contains(string(data), "care-bear hook --agent cursor") {
+		t.Errorf("hooks.json missing care-bear hook command:\n%s", data)
 	}
 
 	// Verify it contains version field
@@ -339,7 +339,7 @@ func TestCursorInstallHook_RegistersAllRequiredHookTypes(t *testing.T) {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Fatalf("failed to write existing hooks.json: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -416,9 +416,9 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 	if !strings.Contains(content, "lint-on-save.sh") {
 		t.Errorf("existing beforeFileEdit hook was removed:\n%s", content)
 	}
-	// care-bare hook must be present
-	if !strings.Contains(content, "care-bare hook --agent cursor") {
-		t.Errorf("care-bare hook not added:\n%s", content)
+	// care-bear hook must be present
+	if !strings.Contains(content, "care-bear hook --agent cursor") {
+		t.Errorf("care-bear hook not added:\n%s", content)
 	}
 }
 
@@ -429,7 +429,7 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 		t.Fatalf("failed to create .cursor dir: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 
 	// Install twice
 	if err := adapter.InstallHook(tmpDir); err != nil {
@@ -445,10 +445,10 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 		t.Fatalf("failed to read hooks.json: %v", err)
 	}
 
-	// Count occurrences of "care-bare hook" -- should be exactly 5 (one per hook type)
-	count := strings.Count(string(data), "care-bare hook --agent cursor")
+	// Count occurrences of "care-bear hook" -- should be exactly 5 (one per hook type)
+	count := strings.Count(string(data), "care-bear hook --agent cursor")
 	if count != 5 {
-		t.Errorf("care-bare hook appears %d times, want 5 (one per hook type):\n%s", count, data)
+		t.Errorf("care-bear hook appears %d times, want 5 (one per hook type):\n%s", count, data)
 	}
 }
 
@@ -456,7 +456,7 @@ func TestCursorInstallHook_CreatesCursorDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Don't pre-create .cursor dir -- InstallHook should handle it
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
 		t.Fatalf("failed to write existing hooks.json: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -506,10 +506,10 @@ func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
 	hooks := config["hooks"].(map[string]any)
 	preToolUse := hooks["preToolUse"].([]any)
 
-	// care-bare should be the first entry (prepended)
+	// care-bear should be the first entry (prepended)
 	firstEntry := preToolUse[0].(map[string]any)
-	if !strings.Contains(firstEntry["command"].(string), "care-bare hook") {
-		t.Errorf("care-bare hook is not the first entry in preToolUse, first is: %v", firstEntry)
+	if !strings.Contains(firstEntry["command"].(string), "care-bear hook") {
+		t.Errorf("care-bear hook is not the first entry in preToolUse, first is: %v", firstEntry)
 	}
 
 	// existing-tool should be the second entry
@@ -528,7 +528,7 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -571,7 +571,7 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 			t.Errorf("hook type %q entry is not a map", hookType)
 			continue
 		}
-		wantCmd := "/usr/local/bin/care-bare hook --agent cursor"
+		wantCmd := "/usr/local/bin/care-bear hook --agent cursor"
 		if entry["command"] != wantCmd {
 			t.Errorf("hook type %q command = %v, want %q", hookType, entry["command"], wantCmd)
 		}
@@ -591,7 +591,7 @@ func TestCursorInstallHook_MalformedExistingJSON(t *testing.T) {
 		t.Fatalf("failed to write malformed hooks.json: %v", err)
 	}
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	err := adapter.InstallHook(tmpDir)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON, got nil")
@@ -605,7 +605,7 @@ func TestCursorInstallHook_TrailingNewline(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -864,12 +864,12 @@ func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
 		},
 		"beforeFileEdit": []any{
 			map[string]any{
-				"command": "/usr/bin/care-bare hook --agent cursor",
+				"command": "/usr/bin/care-bear hook --agent cursor",
 			},
 		},
 	}
 	if !cursorCareBareHookExists(hooks) {
-		t.Error("expected true when care-bare hook exists in any hook type")
+		t.Error("expected true when care-bear hook exists in any hook type")
 	}
 }
 

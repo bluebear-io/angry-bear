@@ -1,4 +1,4 @@
-// engine_test.go contains comprehensive table-driven tests for the care-bare
+// engine_test.go contains comprehensive table-driven tests for the care-bear
 // enforcement engine. Tests cover config loading, rule matching, glob
 // normalization, file path normalization, and project root resolution.
 package engine
@@ -228,12 +228,12 @@ func TestMatchPath(t *testing.T) {
 func TestResolveProjectRoot(t *testing.T) {
 	t.Parallel()
 
-	t.Run("finds nearest care-bare directory", func(t *testing.T) {
+	t.Run("finds nearest care-bear directory", func(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		root := filepath.Join(tmp, "project")
 		sub := filepath.Join(root, "a", "b", "c")
-		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
 		mustMkdirAll(t, sub)
 
 		got := ResolveProjectRoot(sub)
@@ -256,13 +256,13 @@ func TestResolveProjectRoot(t *testing.T) {
 		}
 	})
 
-	t.Run("care-bare takes priority over git", func(t *testing.T) {
+	t.Run("care-bear takes priority over git", func(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
 		root := filepath.Join(tmp, "project")
 		sub := filepath.Join(root, "a", "b")
 		mustMkdirAll(t, filepath.Join(root, ".git"))
-		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
 		mustMkdirAll(t, sub)
 
 		got := ResolveProjectRoot(sub)
@@ -288,7 +288,7 @@ func TestResolveProjectRoot(t *testing.T) {
 		tmp := t.TempDir()
 		root := filepath.Join(tmp, "project")
 		deep := filepath.Join(root, "a", "b", "c", "d", "e")
-		mustMkdirAll(t, filepath.Join(root, ".care-bare"))
+		mustMkdirAll(t, filepath.Join(root, ".care-bear"))
 		mustMkdirAll(t, deep)
 
 		got := ResolveProjectRoot(deep)
@@ -465,7 +465,7 @@ func TestLoadConfig(t *testing.T) {
 		startDir := filepath.Join(tmp, "project")
 
 		// Write malformed JSON
-		dir := filepath.Join(startDir, ".care-bare")
+		dir := filepath.Join(startDir, ".care-bear")
 		mustMkdirAll(t, dir)
 		err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte("{bad json"), 0o644)
 		if err != nil {
@@ -655,7 +655,7 @@ func TestShouldBlock(t *testing.T) {
 		{
 			name: "blocks when required skill not invoked",
 			rules: []MatchedRule{
-				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bear/skill_enforcement.json"},
 			},
 			toolName:      "Edit",
 			filePath:      "",
@@ -667,7 +667,7 @@ func TestShouldBlock(t *testing.T) {
 		{
 			name: "allows when required skill already invoked",
 			rules: []MatchedRule{
-				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bear/skill_enforcement.json"},
 			},
 			toolName:      "Edit",
 			filePath:      "",
@@ -837,8 +837,8 @@ func TestShouldBlock(t *testing.T) {
 		{
 			name: "returns specific reason with skill names and sources",
 			rules: []MatchedRule{
-				{Rule: Rule{Tool: "Edit", Skill: "linear"}, Source: "/home/.care-bare/skill_enforcement.json"},
-				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "linear"}, Source: "/home/.care-bear/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "go-standards"}, Source: "/project/.care-bear/skill_enforcement.json"},
 			},
 			toolName:      "Edit",
 			filePath:      "",
@@ -846,7 +846,7 @@ func TestShouldBlock(t *testing.T) {
 			invokedSkills: map[string]bool{},
 			wantBlocked:   true,
 			wantMissing:   []string{"linear", "go-standards"},
-			wantReasonHas: "care-bare",
+			wantReasonHas: "care-bear",
 		},
 		{
 			name: "handles multiple rules requiring different skills for same file",
@@ -864,8 +864,8 @@ func TestShouldBlock(t *testing.T) {
 		{
 			name: "handles rules from multiple config sources",
 			rules: []MatchedRule{
-				{Rule: Rule{Tool: "Edit", Skill: "user-skill"}, Source: "/home/.care-bare/skill_enforcement.json"},
-				{Rule: Rule{Tool: "Edit", Skill: "project-skill"}, Source: "/project/.care-bare/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "user-skill"}, Source: "/home/.care-bear/skill_enforcement.json"},
+				{Rule: Rule{Tool: "Edit", Skill: "project-skill"}, Source: "/project/.care-bear/skill_enforcement.json"},
 			},
 			toolName:      "Edit",
 			filePath:      "",
@@ -926,10 +926,10 @@ func mustMkdirAll(t *testing.T, path string) {
 }
 
 // writeConfig writes a skill_enforcement.json config file into
-// dir/.care-bare/skill_enforcement.json.
+// dir/.care-bear/skill_enforcement.json.
 func writeConfig(t *testing.T, dir string, cfg Config) {
 	t.Helper()
-	configDir := filepath.Join(dir, ".care-bare")
+	configDir := filepath.Join(dir, ".care-bear")
 	mustMkdirAll(t, configDir)
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -1053,7 +1053,7 @@ func TestNormalizeFilePath_EdgeCases(t *testing.T) {
 func TestLoadConfigFile_VersionZero(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	dir := filepath.Join(tmp, ".care-bare")
+	dir := filepath.Join(tmp, ".care-bear")
 	mustMkdirAll(t, dir)
 	configPath := filepath.Join(dir, "skill_enforcement.json")
 
@@ -1075,7 +1075,7 @@ func TestLoadConfigFile_VersionZero(t *testing.T) {
 func TestLoadConfigFile_EmptyToolsList(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	dir := filepath.Join(tmp, ".care-bare")
+	dir := filepath.Join(tmp, ".care-bear")
 	mustMkdirAll(t, dir)
 	configPath := filepath.Join(dir, "skill_enforcement.json")
 
@@ -1096,7 +1096,7 @@ func TestLoadConfigFile_EmptyToolsList(t *testing.T) {
 func TestLoadConfigFile_MultipleRules(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	dir := filepath.Join(tmp, ".care-bare")
+	dir := filepath.Join(tmp, ".care-bear")
 	mustMkdirAll(t, dir)
 	configPath := filepath.Join(dir, "skill_enforcement.json")
 

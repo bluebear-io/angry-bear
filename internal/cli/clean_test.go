@@ -1,4 +1,4 @@
-// clean_test.go contains integration tests for the care-bare clean command.
+// clean_test.go contains integration tests for the care-bear clean command.
 // Tests exercise the command against real temporary filesystems with controlled
 // state files, verifying TTL-based pruning, --all cleanup, and --session cleanup.
 package cli_test
@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/cli"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
-	"github.com/Blue-Bear-Security/care-bare/internal/state"
+	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/state"
 )
 
 // runCleanInDir executes the clean command with the working directory set
@@ -53,7 +53,7 @@ func runCleanInDir(t *testing.T, dir string, extraArgs ...string) (string, error
 // writeCleanStateFile creates a session state file in the given dir.
 func writeCleanStateFile(t *testing.T, dir, sessionID string, skills []string) {
 	t.Helper()
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -76,10 +76,10 @@ func writeCleanStateFile(t *testing.T, dir, sessionID string, skills []string) {
 // writeDefaultConfig writes a default config.json with the given TTL hours.
 func writeDefaultConfig(t *testing.T, dir string, ttlHours int) {
 	t.Helper()
-	configDir := filepath.Join(dir, ".care-bare")
+	configDir := filepath.Join(dir, ".care-bear")
 	err := os.MkdirAll(configDir, 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bare directory: %v", err)
+		t.Fatalf("failed to create .care-bear directory: %v", err)
 	}
 	cfg := engine.GlobalConfig{
 		SkillPaths:    []string{".claude/skills"},
@@ -110,7 +110,7 @@ func TestClean_RemovesExpiredStateFiles(t *testing.T) {
 	writeCleanStateFile(t, dir, "new-session", []string{"skill-b"})
 
 	// Backdate the old session file beyond the 24-hour TTL.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	oldTime := time.Now().Add(-48 * time.Hour)
 	err := os.Chtimes(filepath.Join(stateDir, "old-session.json"), oldTime, oldTime)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestClean_AllRemovesAllStateFiles(t *testing.T) {
 	}
 
 	// Verify all session files are gone.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	entries, err := os.ReadDir(stateDir)
 	if err != nil {
 		t.Fatalf("failed to read state directory: %v", err)
@@ -180,7 +180,7 @@ func TestClean_SessionRemovesSpecificSession(t *testing.T) {
 	writeCleanStateFile(t, dir, "session-remove", []string{"skill-b"})
 
 	// Also create a lock file for the session being removed.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.WriteFile(filepath.Join(stateDir, "session-remove.lock"), []byte{}, 0o600)
 	if err != nil {
 		t.Fatalf("failed to write lock file: %v", err)
@@ -214,9 +214,9 @@ func TestClean_SessionRemovesSpecificSession(t *testing.T) {
 func TestClean_HandlesEmptyStateDirectory(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create the .care-bare/state/ directory but no session files.
+	// Create the .care-bear/state/ directory but no session files.
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -253,7 +253,7 @@ func TestClean_MutuallyExclusiveFlags(t *testing.T) {
 	dir := t.TempDir()
 
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -275,7 +275,7 @@ func TestClean_InvalidSessionID(t *testing.T) {
 	dir := t.TempDir()
 
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
@@ -301,7 +301,7 @@ func TestClean_AllSkipsDirectoriesAndHiddenFiles(t *testing.T) {
 	writeCleanStateFile(t, dir, "session-real", []string{"skill-a"})
 
 	// Add a subdirectory and a hidden file to the state dir.
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.Mkdir(filepath.Join(stateDir, "subdir"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create subdirectory: %v", err)
@@ -340,14 +340,14 @@ func TestClean_MalformedGlobalConfig(t *testing.T) {
 	dir := t.TempDir()
 
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
 	}
 
 	// Write malformed config.json.
-	err = os.WriteFile(filepath.Join(dir, ".care-bare", "config.json"), []byte("{bad json"), 0o644)
+	err = os.WriteFile(filepath.Join(dir, ".care-bear", "config.json"), []byte("{bad json"), 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config.json: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestClean_AllWithNoSessions(t *testing.T) {
 	dir := t.TempDir()
 
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	stateDir := filepath.Join(dir, ".care-bare", "state")
+	stateDir := filepath.Join(dir, ".care-bear", "state")
 	err := os.MkdirAll(stateDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)

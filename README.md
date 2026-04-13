@@ -1,31 +1,31 @@
-# care-bare
+# care-bear
 
 <p align="center">
-  <img src="assets/logo.png" alt="care-bare" width="400">
+  <img src="assets/logo.png" alt="care-bear" width="400">
 </p>
 
-[![CI](https://github.com/Blue-Bear-Security/care-bare/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/care-bare/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/Blue-Bear-Security/care-bare)
+[![CI](https://github.com/Blue-Bear-Security/care-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/care-bear/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/Blue-Bear-Security/care-bear)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Blue-Bear-Security/care-bare)](https://goreportcard.com/report/github.com/Blue-Bear-Security/care-bare)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Blue-Bear-Security/care-bear)](https://goreportcard.com/report/github.com/Blue-Bear-Security/care-bear)
 
 **Enforce skill-loading requirements for AI coding agents.**
 
-care-bare prevents AI coding agents (Claude Code, Cursor, and more) from modifying files until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
+care-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifying files until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
 
 ## Install
 
 ```bash
 # Homebrew
-brew tap Blue-Bear-Security/care-bare
-brew install care-bare
+brew tap Blue-Bear-Security/care-bear
+brew install care-bear
 
 # Go
-go install github.com/Blue-Bear-Security/care-bare/cmd/care-bare@latest
+go install github.com/Blue-Bear-Security/care-bear/cmd/care-bear@latest
 
 # From source
-git clone https://github.com/Blue-Bear-Security/care-bare.git
-cd care-bare && make install
+git clone https://github.com/Blue-Bear-Security/care-bear.git
+cd care-bear && make install
 ```
 
 ## Quick Start
@@ -33,10 +33,10 @@ cd care-bare && make install
 ```bash
 # Add enforcement rules — hooks auto-install on first use
 cd your-project
-care-bare add    # Interactive mode — pick skill, tools, paths, agents
+care-bear add    # Interactive mode — pick skill, tools, paths, agents
 
 # Or one-liner
-care-bare add go-standards --tool Edit,Write --path "**/*.go"
+care-bear add go-standards --tool Edit,Write --path "**/*.go"
 
 # That's it — agents are now enforced
 ```
@@ -44,7 +44,7 @@ care-bare add go-standards --tool Edit,Write --path "**/*.go"
 When an AI agent tries to edit a Go file without loading `go-standards`:
 
 ```
-Blocked by care-bare skill enforcement.
+Blocked by care-bear skill enforcement.
 Required skills not loaded: "go-standards".
 Load them by running: /go-standards
 ```
@@ -57,39 +57,39 @@ The agent loads the skill, retries, and succeeds.
 
 ```bash
 # Add rules (cartesian product of tools × paths × agents)
-care-bare add <skill> [--tool Edit,Write] [--path "**/*.go"] [--agent claude]
+care-bear add <skill> [--tool Edit,Write] [--path "**/*.go"] [--agent claude]
 
 # List all rules (or filter by skill)
-care-bare rules [--skill <name>] [--json]
+care-bear rules [--skill <name>] [--json]
 
 # Remove rules
-care-bare rm <skill> [--tool Edit] [--path "**/*.go"]
+care-bear rm <skill> [--tool Edit] [--path "**/*.go"]
 ```
 
 **Examples:**
 
 ```bash
 # Require "sst-architect" before editing any stack file
-care-bare add sst-architect --tool Edit,Write --path "stacks/**"
+care-bear add sst-architect --tool Edit,Write --path "stacks/**"
 
 # Require "linear" for all edits by all agents
-care-bare add linear
+care-bear add linear
 
 # List rules as JSON (for scripting)
-care-bare rules --json
+care-bear rules --json
 
 # Remove all rules for a skill
-care-bare rm old-skill
+care-bear rm old-skill
 
 # Remove only specific rules
-care-bare rm go-standards --tool Bash --path "scripts/**"
+care-bear rm go-standards --tool Bash --path "scripts/**"
 ```
 
 ### Interactive TUI
 
 ```bash
 # Launch the dashboard — discovers all projects across all agents
-care-bare
+care-bear
 ```
 
 The TUI provides:
@@ -102,24 +102,24 @@ The TUI provides:
 ### Project Management
 
 ```bash
-care-bare status        # Show rules, sessions, skills, agent integrations
-care-bare doctor        # Check installation health
-care-bare clean         # Clean expired session state
-care-bare clean --all   # Remove all session state
-care-bare version       # Print version info
+care-bear status        # Show rules, sessions, skills, agent integrations
+care-bear doctor        # Check installation health
+care-bear clean         # Clean expired session state
+care-bear clean --all   # Remove all session state
+care-bear version       # Print version info
 ```
 
 ### Shell Completions
 
 ```bash
 # Zsh
-care-bare completion zsh > "${fpath[1]}/_care-bare"
+care-bear completion zsh > "${fpath[1]}/_care-bear"
 
 # Bash
-care-bare completion bash > /etc/bash_completion.d/care-bare
+care-bear completion bash > /etc/bash_completion.d/care-bear
 
 # Fish
-care-bare completion fish > ~/.config/fish/completions/care-bare.fish
+care-bear completion fish > ~/.config/fish/completions/care-bear.fish
 ```
 
 Tab-complete skill names, tool names, and agent names.
@@ -133,7 +133,7 @@ AI Agent (Claude Code / Cursor)
     |
     | PreToolUse event (JSON via stdin)
     v
-care-bare hook
+care-bear hook
     |
     +-- Parse input (adapter normalizes agent-specific format)
     +-- Check skill invocation → record in session state
@@ -148,8 +148,8 @@ care-bare hook
 
 ### Skill Loading
 
-- **Claude Code**: Agent runs `/skill-name` (native Skill tool) — care-bare records it
-- **Cursor**: Agent reads `.claude/skills/skill-name/SKILL.md` — care-bare auto-detects and records it
+- **Claude Code**: Agent runs `/skill-name` (native Skill tool) — care-bear records it
+- **Cursor**: Agent reads `.claude/skills/skill-name/SKILL.md` — care-bear auto-detects and records it
 
 ### Skill TTL
 
@@ -163,7 +163,7 @@ Skills can expire after a configurable time, forcing agents to re-read guideline
 
 ### Project Identity
 
-Projects are identified by Git repository (not directory path). The same repo checked out in multiple locations is treated as one project. Config is stored at `~/.care-bare/repos/{hash}/`.
+Projects are identified by Git repository (not directory path). The same repo checked out in multiple locations is treated as one project. Config is stored at `~/.care-bear/repos/{hash}/`.
 
 See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture documentation.
 
@@ -200,7 +200,7 @@ See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture documen
 }
 ```
 
-Two tiers: `~/.care-bare/config.json` (global defaults) and `{project}/.care-bare/config.json` (project overrides).
+Two tiers: `~/.care-bear/config.json` (global defaults) and `{project}/.care-bear/config.json` (project overrides).
 
 ## Supported Agents
 
@@ -232,7 +232,7 @@ Register it in `registry.go` and you're done. The engine, TUI, and all commands 
 ## Architecture
 
 ```
-care-bare/
+care-bear/
   internal/
     adapter/     # Agent-specific logic (Claude, Cursor, future agents)
     cli/         # Cobra commands (hook, init, status, clean, doctor, add, rules, rm)
@@ -240,7 +240,7 @@ care-bare/
     state/       # File-based session state with locking
     scanner/     # Skill discovery from configured paths
     tui/         # Charmbracelet TUI (dashboard, rule editor, settings, tree picker)
-  cmd/care-bare/ # Entry point
+  cmd/care-bear/ # Entry point
   assets/        # Logo and static assets
 ```
 

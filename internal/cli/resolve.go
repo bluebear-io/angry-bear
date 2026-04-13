@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bare/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 )
 
 // ResolveConfigForProject determines the config file path for a given project
-// root directory. It checks repo-keyed config dir first (~/.care-bare/repos/{hash}/),
-// then falls back to project-level ({projectRoot}/.care-bare/).
+// root directory. It checks repo-keyed config dir first (~/.care-bear/repos/{hash}/),
+// then falls back to project-level ({projectRoot}/.care-bear/).
 //
 // This is the canonical way to find the config file for any project root and
 // should be used by all commands that need to read or write config.
@@ -30,7 +30,7 @@ func ResolveConfigForProject(projectRoot string) (string, error) {
 	}
 
 	// Fall back to project-level config.
-	return filepath.Join(projectRoot, ".care-bare", "skill_enforcement.json"), nil
+	return filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json"), nil
 }
 
 // HookSetupResult reports what happened during hook installation.
@@ -40,7 +40,7 @@ type HookSetupResult struct {
 	Warnings  []string // Errors during installation
 }
 
-// EnsureHooksInstalled checks if care-bare hooks are installed in agent configs.
+// EnsureHooksInstalled checks if care-bear hooks are installed in agent configs.
 // If not, installs them and reports what happened. Idempotent — safe to call
 // on every CLI invocation.
 func EnsureHooksInstalled() HookSetupResult {
@@ -76,7 +76,7 @@ func EnsureHooksInstalled() HookSetupResult {
 	return result
 }
 
-// hookAlreadyInstalled checks if care-bare hook is already in the agent's config.
+// hookAlreadyInstalled checks if care-bear hook is already in the agent's config.
 func hookAlreadyInstalled(a adapter.HookAdapter, home string) bool {
 	var configPath string
 	switch a.Name() {
@@ -91,7 +91,7 @@ func hookAlreadyInstalled(a adapter.HookAdapter, home string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(data), "care-bare hook")
+	return strings.Contains(string(data), "care-bear hook")
 }
 
 // PrintHookSetup logs hook installation results to stderr on first run.

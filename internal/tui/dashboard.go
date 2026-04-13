@@ -123,6 +123,47 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return d, nil
 
+		// Page up/down — jump by a screenful in the log panel
+		case "pgup":
+			if d.focusPanel == 2 {
+				d.logCursor -= d.logPageSize()
+				if d.logCursor < 0 {
+					d.logCursor = 0
+				}
+			}
+			return d, nil
+
+		case "pgdown":
+			if d.focusPanel == 2 {
+				d.logCursor += d.logPageSize()
+				max := len(d.eventLines) - 1
+				if max < 0 {
+					max = 0
+				}
+				if d.logCursor > max {
+					d.logCursor = max
+				}
+			}
+			return d, nil
+
+		// Cmd+Up / Home — jump to top of logs
+		case "home", "ctrl+up":
+			if d.focusPanel == 2 {
+				d.logCursor = 0
+			}
+			return d, nil
+
+		// Cmd+Down / End — jump to bottom of logs
+		case "end", "ctrl+down":
+			if d.focusPanel == 2 {
+				max := len(d.eventLines) - 1
+				if max < 0 {
+					max = 0
+				}
+				d.logCursor = max
+			}
+			return d, nil
+
 		// Tab cycles: skills(0) → rules(1) → logs(2) → skills(0)
 		case "tab":
 			d.focusPanel = (d.focusPanel + 1) % 3
@@ -627,6 +668,20 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	}
 
 	return b.String()
+}
+
+// logPageSize returns the number of visible log rows for page up/down jumps.
+func (d *Dashboard) logPageSize() int {
+	logsHeight := d.height - 5
+	if logsHeight < 5 {
+		logsHeight = 10
+	}
+	// Approximate: logs get ~50-100% of panel, minus header lines
+	visible := logsHeight/2 - 4
+	if visible < 5 {
+		visible = 5
+	}
+	return visible
 }
 
 // padToHeight ensures content has exactly `height` lines.

@@ -277,6 +277,10 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return d, nil
 
+		case "c":
+			// Open settings view
+			return d, func() tea.Msg { return openSettingsMsg{} }
+
 		case "P":
 			// Switch project — return to project picker
 			return d, func() tea.Msg { return switchProjectMsg{} }

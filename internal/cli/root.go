@@ -166,7 +166,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	loadedSkills := collectLoadedSkills(filepath.Join(projectRoot, ".care-bare", "state"))
 
 	// 7. Create TUI model and load event log.
-	model := tui.NewApp(cfg, configPath, skills, loadedSkills)
+	model := tui.NewApp(cfg, configPath, skills, loadedSkills, globalCfg)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = p.Run()

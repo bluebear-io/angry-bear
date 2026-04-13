@@ -78,10 +78,18 @@ func (m *StateManager) RecordSkillWithAgent(sessionID, skillName, agent string) 
 		state.Agent = agent
 	}
 
-	// Check if skill is already recorded (idempotent).
+	// Initialize timestamps map if nil (backward compat with old state files).
+	if state.SkillTimestamps == nil {
+		state.SkillTimestamps = make(map[string]string)
+	}
+
+	// Always update the timestamp for this skill (refreshes TTL on reload).
+	state.SkillTimestamps[skillName] = time.Now().UTC().Format(time.RFC3339)
+
+	// Check if skill is already recorded (idempotent for the list).
 	for _, s := range state.InvokedSkills {
 		if s == skillName {
-			return nil
+			return writeStateFile(stPath, state)
 		}
 	}
 
@@ -142,6 +150,57 @@ func (m *StateManager) GetInvokedSkills(sessionID string) (map[string]bool, erro
 
 	for _, s := range state.InvokedSkills {
 		result[s] = true
+	}
+	return result, nil
+}
+
+// GetFreshSkills returns invoked skills that are still within the given TTL.
+// If ttl is zero, all skills are returned (no expiry). Skills without a recorded
+// timestamp (from older state files) are always considered fresh.
+func (m *StateManager) GetFreshSkills(sessionID string, ttl time.Duration) (map[string]bool, error) {
+	if ttl == 0 {
+		return m.GetInvokedSkills(sessionID)
+	}
+
+	err := ValidateSessionID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	lock := NewFileLock(m.lockPath(sessionID))
+	err = lock.TryRLock()
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Unlock()
+
+	st, err := readStateFile(m.statePath(sessionID))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]bool)
+	if st == nil {
+		return result, nil
+	}
+
+	now := time.Now().UTC()
+	for _, skill := range st.InvokedSkills {
+		ts, hasTS := st.SkillTimestamps[skill]
+		if !hasTS {
+			// No timestamp recorded (old state file) — treat as fresh.
+			result[skill] = true
+			continue
+		}
+		loadedAt, parseErr := time.Parse(time.RFC3339, ts)
+		if parseErr != nil {
+			// Unparseable timestamp — treat as fresh to fail open.
+			result[skill] = true
+			continue
+		}
+		if now.Sub(loadedAt) <= ttl {
+			result[skill] = true
+		}
 	}
 	return result, nil
 }

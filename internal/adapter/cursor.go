@@ -258,6 +258,56 @@ func cursorCareBareHookExists(hooks map[string]any) bool {
 	return false
 }
 
+// UninstallHook removes all care-bare hooks from Cursor's global hooks config.
+func (a *CursorAdapter) UninstallHook() error {
+	hooksPath := a.GlobalConfigPath()
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading hooks.json: %w", err)
+	}
+
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("parsing hooks.json: %w", err)
+	}
+
+	hooks, ok := config["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// For each hook type, filter out care-bare entries
+	for hookType, hookList := range hooks {
+		arr, ok := hookList.([]any)
+		if !ok {
+			continue
+		}
+		var filtered []any
+		for _, entry := range arr {
+			entryMap, ok := entry.(map[string]any)
+			if !ok {
+				filtered = append(filtered, entry)
+				continue
+			}
+			if cmd, ok := entryMap["command"].(string); ok && strings.Contains(cmd, "care-bare hook") {
+				continue // skip care-bare entries
+			}
+			filtered = append(filtered, entry)
+		}
+		hooks[hookType] = filtered
+	}
+
+	output, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling hooks.json: %w", err)
+	}
+	output = append(output, '\n')
+	return os.WriteFile(hooksPath, output, 0o644)
+}
+
 // DetectSkillInvocation checks if the input represents a skill invocation.
 // Cursor does not have a native Skill tool like Claude Code, so this always
 // returns ("", false).

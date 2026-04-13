@@ -280,9 +280,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case openRuleEditorMsg:
 		a.view = viewRuleEditor
 		a.ruleEditor = NewRuleEditor(msg.skillName, msg.existing, msg.ruleIndex, a.styles)
+		a.ruleEditor.height = a.height
 		a.ruleEditor.SetExistingRules(a.config.Tools)
-		// Use the actual project root for path discovery (not derived from config path,
-		// which may point to ~/.care-bare/repos/ for repo-based configs)
 		if a.projectRoot != "" {
 			a.ruleEditor.SetProjectRoot(a.projectRoot)
 		}

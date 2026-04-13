@@ -77,7 +77,11 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 		opts := make([]huh.Option[string], len(projects))
 		for i, p := range projects {
 			agents := strings.Join(p.Agents, ", ")
-			label := fmt.Sprintf("%s  (%s)", p.Path, agents)
+			copies := ""
+			if len(p.LocalPaths) > 1 {
+				copies = fmt.Sprintf(", %d copies", len(p.LocalPaths))
+			}
+			label := fmt.Sprintf("%s  (%s%s)", p.Name, agents, copies)
 			opts[i] = huh.NewOption(label, p.Path)
 		}
 
@@ -99,8 +103,23 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 		projectRoot = selectedPath
 	}
 
-	// 2. Load enforcement config.
-	rules, err := engine.LoadConfig(projectRoot)
+	// 2. Resolve repo identity and load config from repo-keyed dir.
+	repo := engine.ResolveRepoIdentity(projectRoot)
+	var repoConfigDir string
+	if repo != nil {
+		home, _ := os.UserHomeDir()
+		repoConfigDir = engine.RepoConfigDir(home, repo)
+		os.MkdirAll(repoConfigDir, 0755)
+	}
+
+	// Load rules: repo config dir first, then project-level fallback
+	var rules []engine.MatchedRule
+	if repoConfigDir != "" {
+		rules, _ = engine.LoadConfigFromDir(repoConfigDir)
+	}
+	if len(rules) == 0 {
+		rules, err = engine.LoadConfig(projectRoot)
+	}
 	if err != nil {
 		return fmt.Errorf("loading enforcement config: %w", err)
 	}
@@ -114,7 +133,11 @@ func tuiRunOnce(cmd *cobra.Command, args []string) error {
 	// Determine the config file path for saving.
 	configPath, _ := cmd.Flags().GetString("config")
 	if configPath == "" {
-		configPath = filepath.Join(projectRoot, ".care-bare", "skill_enforcement.json")
+		if repoConfigDir != "" {
+			configPath = filepath.Join(repoConfigDir, "skill_enforcement.json")
+		} else {
+			configPath = filepath.Join(projectRoot, ".care-bare", "skill_enforcement.json")
+		}
 	}
 
 	// 3. Load global config for skill paths.

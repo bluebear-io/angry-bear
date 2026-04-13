@@ -93,9 +93,18 @@ func runHook(cmd *cobra.Command, args []string) error {
 		"cwd", hookInput.Cwd,
 	)
 
-	// Step 4: Resolve project root.
+	// Step 4: Resolve project root and repo identity.
 	projectRoot := engine.ResolveProjectRoot(hookInput.Cwd)
 	logger.Debug("resolved project root", "root", projectRoot)
+
+	repo := engine.ResolveRepoIdentity(projectRoot)
+	repoConfigDir := ""
+	if repo != nil {
+		home, _ := os.UserHomeDir()
+		repoConfigDir = engine.RepoConfigDir(home, repo)
+		os.MkdirAll(repoConfigDir, 0755)
+		logger.Debug("resolved repo identity", "slug", repo.Slug, "configDir", repoConfigDir)
+	}
 
 	// Step 5: Check for skill invocation (short-circuit).
 	skillName, isSkill := hookAdapter.DetectSkillInvocation(hookInput)
@@ -134,10 +143,18 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 6: Load enforcement config.
-	// Use a fake home dir that doesn't contain configs to avoid picking up
-	// the developer's own user-level config during testing. In production,
-	// LoadConfig uses the real home directory by default.
-	rules, err := engine.LoadConfig(projectRoot)
+	// Priority: repo-keyed config dir > project-level .care-bare/
+	var rules []engine.MatchedRule
+	if repoConfigDir != "" {
+		rules, err = engine.LoadConfigFromDir(repoConfigDir)
+		if err != nil {
+			logger.Warn("failed to load repo config, trying project config", "error", err)
+			rules = nil
+		}
+	}
+	if len(rules) == 0 {
+		rules, err = engine.LoadConfig(projectRoot)
+	}
 	if err != nil {
 		// Malformed JSON is surfaced as an error; other config errors fail open.
 		logger.Warn("failed to load config, allowing operation", "error", err)
@@ -275,6 +292,9 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 	os.MkdirAll(logDir, 0755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)
+	if repo := engine.ResolveRepoIdentity(projectRoot); repo != nil {
+		projectName = repo.Slug
+	}
 	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | SKILL-LOAD | %-40s | LOAD  | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		projectName,
@@ -303,6 +323,9 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	os.MkdirAll(logDir, 0755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)
+	if repo := engine.ResolveRepoIdentity(projectRoot); repo != nil {
+		projectName = repo.Slug
+	}
 
 	decision := "ALLOW"
 	if result.Blocked {

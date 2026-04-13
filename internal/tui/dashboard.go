@@ -378,8 +378,10 @@ func (d Dashboard) View() string {
 	}
 
 	// Split right panel: top = rules (60%), bottom = event log (40%)
-	rulesHeight := panelHeight * 55 / 100
-	logsHeight := panelHeight - rulesHeight - 3 // account for borders
+	// Two bordered panels stacked: each adds 2 rows of border
+	// Total right side inner height must match left panel inner height
+	rulesHeight := (panelHeight - 4) * 55 / 100  // 55% of inner space
+	logsHeight := panelHeight - 4 - rulesHeight   // remaining inner space
 
 	left := d.renderSkillList(leftWidth, panelHeight)
 	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)

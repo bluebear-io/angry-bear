@@ -285,35 +285,38 @@ func resolveCheckoutPath(selectedPath string, project *adapter.MergedProject, lo
 	return chosenPath, nil
 }
 
-// printLogo displays the care-bare ASCII bear logo before the project picker.
+// printLogo displays the care-bare Unicode bear logo before the project picker.
+// Uses Unicode block characters for higher resolution rendering.
 func printLogo() {
-	blue := "\033[38;5;69m"
-	heart := "\033[38;5;204m"
-	cyan := "\033[38;5;87m"
-	dim := "\033[38;5;245m"
-	bold := "\033[1m"
-	reset := "\033[0m"
+	b := "\033[38;5;69m"  // blue
+	d := "\033[38;5;25m"  // dark blue
+	w := "\033[38;5;255m" // white (eyes)
+	h := "\033[38;5;204m" // pink (heart)
+	c := "\033[38;5;87m"  // cyan
+	g := "\033[38;5;245m" // gray
+	B := "\033[1m"        // bold
+	r := "\033[0m"        // reset
 
-	bear := []string{
-		blue + "         ,---.   ,---." + reset,
-		blue + "        / .-. \\ / .-. \\" + reset,
-		blue + "        | | | | | | | |" + reset,
-		blue + "        \\ `-' / \\ `-' /" + reset,
-		blue + "    .----`---'---`---'----." + reset,
-		blue + "   /                       \\" + reset,
-		blue + "  |    " + bold + "o" + reset + blue + "             " + bold + "o" + reset + blue + "    |" + reset,
-		blue + "  |          ___          |" + reset,
-		blue + "  |         (" + heart + " \u2665 " + blue + ")         |" + reset,
-		blue + "   \\         ---         /" + reset,
-		blue + "    `-------.___.-------'" + reset,
+	lines := []string{
+		d + "        \u2588\u2588\u2588\u2588\u2588\u2588\u2557" + r + "     " + d + "\u2588\u2588\u2588\u2588\u2588\u2588\u2557" + r,
+		d + "       \u2588\u2588\u2554\u2550\u2550\u2550\u2588\u2588\u2557" + r + "   " + d + "\u2588\u2588\u2554\u2550\u2550\u2550\u2588\u2588\u2557" + r,
+		d + "       \u2588\u2588\u2551   \u2588\u2588\u2551" + r + "   " + d + "\u2588\u2588\u2551   \u2588\u2588\u2551" + r,
+		d + "       \u255a\u2588\u2588\u2588\u2588\u2588\u2554\u255d" + r + "   " + d + "\u255a\u2588\u2588\u2588\u2588\u2588\u2554\u255d" + r,
+		b + "    \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + r,
+		b + "   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + r,
+		b + "   \u2588\u2588\u2588\u2588" + w + B + " \u25cf " + r + b + "\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + w + B + " \u25cf " + r + b + "\u2588\u2588\u2588\u2588" + r,
+		b + "   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + h + "\u2665" + r + b + "\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + r,
+		b + "   \u2588\u2588\u2588\u2588\u2588\u2588\u2588" + d + "\u2580\u2580\u2580\u2580\u2580" + r + b + "\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + r,
+		b + "    \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588" + r,
+		b + "      \u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580" + r,
 	}
 
-	for _, line := range bear {
+	for _, line := range lines {
 		fmt.Fprintln(os.Stderr, line)
 	}
-	fmt.Fprintf(os.Stderr, "\n    %s\u2665%s %s%scare-bare%s  %sby Blue Bear Security%s\n", heart, reset, bold, cyan, reset, dim, reset)
-	fmt.Fprintf(os.Stderr, "    %sSkill enforcement for AI coding agents%s\n", dim, reset)
-	fmt.Fprintf(os.Stderr, "    %s%s%s\n\n", dim, version, reset)
+	fmt.Fprintf(os.Stderr, "\n    %s\u2665%s %s%scare-bare%s  %sby Blue Bear Security%s\n", h, r, B, c, r, g, r)
+	fmt.Fprintf(os.Stderr, "    %sSkill enforcement for AI coding agents%s\n", g, r)
+	fmt.Fprintf(os.Stderr, "    %s%s%s\n\n", g, version, r)
 }
 
 // Execute runs the root command.

@@ -656,3 +656,163 @@ func TestRecordSkillWithAgent_UpdatesAgent(t *testing.T) {
 		t.Errorf("expected 2 skills, got %d", len(state.InvokedSkills))
 	}
 }
+
+// TestClean_InvalidSessionID verifies that Clean rejects invalid session IDs.
+func TestClean_InvalidSessionID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	if err := mgr.Clean("../evil"); err == nil {
+		t.Error("Clean(../evil) returned nil, want error for path traversal")
+	}
+	if err := mgr.Clean(""); err == nil {
+		t.Error("Clean(\"\") returned nil, want error for empty session ID")
+	}
+}
+
+// TestClean_RemovesStateFileOnly verifies that Clean works when only a state file
+// exists (no lock file).
+func TestClean_RemovesStateFileOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	if err := mgr.RecordSkill("sess-clean", "my-skill"); err != nil {
+		t.Fatalf("RecordSkill() returned error: %v", err)
+	}
+
+	// No lock file exists (normal case after lock release).
+	if err := mgr.Clean("sess-clean"); err != nil {
+		t.Fatalf("Clean() returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "sess-clean.json")); !os.IsNotExist(err) {
+		t.Error("state file still exists after Clean()")
+	}
+}
+
+// TestClean_RemovesLockFileOnly verifies that Clean works when only a lock file
+// exists (state file was already removed or never created).
+func TestClean_RemovesLockFileOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	// Create only a lock file (no state file).
+	lockPath := filepath.Join(dir, "orphan-lock.lock")
+	if err := os.WriteFile(lockPath, []byte{}, 0o600); err != nil {
+		t.Fatalf("failed to create lock file: %v", err)
+	}
+
+	if err := mgr.Clean("orphan-lock"); err != nil {
+		t.Fatalf("Clean() returned error: %v", err)
+	}
+
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Error("lock file still exists after Clean()")
+	}
+}
+
+// TestGetFreshSkills_UnparseableTimestampTreatedAsFresh verifies that skills
+// with unparseable timestamps are treated as fresh (fail open).
+func TestGetFreshSkills_UnparseableTimestampTreatedAsFresh(t *testing.T) {
+	dir := t.TempDir()
+
+	state := SessionState{
+		SessionID:     "sess-bad-ts",
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		InvokedSkills: []string{"broken-ts-skill"},
+		SkillTimestamps: map[string]string{
+			"broken-ts-skill": "not-a-valid-time",
+		},
+	}
+	data, _ := json.Marshal(state)
+	_ = os.WriteFile(filepath.Join(dir, "sess-bad-ts.json"), data, 0o600)
+
+	mgr := NewStateManager(dir)
+	skills, err := mgr.GetFreshSkills("sess-bad-ts", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+
+	if !skills["broken-ts-skill"] {
+		t.Error("skill with unparseable timestamp should be treated as fresh")
+	}
+}
+
+// TestGetFreshSkills_ExpiredSkillFiltered verifies that skills with timestamps
+// older than the TTL are filtered out.
+func TestGetFreshSkills_ExpiredSkillFiltered(t *testing.T) {
+	dir := t.TempDir()
+
+	oldTime := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
+	state := SessionState{
+		SessionID:     "sess-expired",
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		InvokedSkills: []string{"expired-skill"},
+		SkillTimestamps: map[string]string{
+			"expired-skill": oldTime,
+		},
+	}
+	data, _ := json.Marshal(state)
+	_ = os.WriteFile(filepath.Join(dir, "sess-expired.json"), data, 0o600)
+
+	mgr := NewStateManager(dir)
+	skills, err := mgr.GetFreshSkills("sess-expired", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+
+	if skills["expired-skill"] {
+		t.Error("expired skill should NOT be in fresh skills map")
+	}
+	if len(skills) != 0 {
+		t.Errorf("expected empty map, got %v", skills)
+	}
+}
+
+// TestGetFreshSkills_ZeroTTLDelegatesToGetInvokedSkills verifies that a zero
+// TTL returns all skills regardless of timestamps.
+func TestGetFreshSkills_ZeroTTLReturnsAllSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	oldTime := time.Now().UTC().Add(-100 * time.Hour).Format(time.RFC3339)
+	state := SessionState{
+		SessionID:     "sess-no-ttl",
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		InvokedSkills: []string{"ancient-skill"},
+		SkillTimestamps: map[string]string{
+			"ancient-skill": oldTime,
+		},
+	}
+	data, _ := json.Marshal(state)
+	_ = os.WriteFile(filepath.Join(dir, "sess-no-ttl.json"), data, 0o600)
+
+	mgr := NewStateManager(dir)
+	skills, err := mgr.GetFreshSkills("sess-no-ttl", 0)
+	if err != nil {
+		t.Fatalf("GetFreshSkills failed: %v", err)
+	}
+
+	if !skills["ancient-skill"] {
+		t.Error("with zero TTL, all skills should be returned regardless of age")
+	}
+}
+
+// TestGetFreshSkills_InvalidSessionID verifies that GetFreshSkills rejects
+// invalid session IDs.
+func TestGetFreshSkills_InvalidSessionID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	_, err := mgr.GetFreshSkills("../evil", 30*time.Minute)
+	if err == nil {
+		t.Error("expected error for path traversal session ID")
+	}
+}

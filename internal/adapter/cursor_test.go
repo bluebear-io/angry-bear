@@ -522,11 +522,457 @@ func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
 	}
 }
 
+// --- InstallHook JSON structure tests ---
+
+func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "/usr/local/bin/care-bare"}
+	if err := adapter.InstallHook(tmpDir); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	hooksPath := filepath.Join(tmpDir, ".cursor", "hooks.json")
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("failed to read hooks.json: %v", err)
+	}
+
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("hooks.json is invalid JSON: %v", err)
+	}
+
+	// Verify version field
+	if config["version"] != float64(1) {
+		t.Errorf("version = %v, want 1", config["version"])
+	}
+
+	hooks, ok := config["hooks"].(map[string]any)
+	if !ok {
+		t.Fatal("missing 'hooks' key in config")
+	}
+
+	// Verify each hook type has the correct command
+	expectedTypes := []string{"preToolUse", "beforeFileEdit", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
+	for _, hookType := range expectedTypes {
+		arr, ok := hooks[hookType].([]any)
+		if !ok {
+			t.Errorf("hook type %q not found or not an array", hookType)
+			continue
+		}
+		if len(arr) != 1 {
+			t.Errorf("hook type %q has %d entries, want 1", hookType, len(arr))
+			continue
+		}
+		entry, ok := arr[0].(map[string]any)
+		if !ok {
+			t.Errorf("hook type %q entry is not a map", hookType)
+			continue
+		}
+		wantCmd := "/usr/local/bin/care-bare hook --agent cursor"
+		if entry["command"] != wantCmd {
+			t.Errorf("hook type %q command = %v, want %q", hookType, entry["command"], wantCmd)
+		}
+	}
+}
+
+func TestCursorInstallHook_MalformedExistingJSON(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("failed to create .cursor dir: %v", err)
+	}
+
+	hooksPath := filepath.Join(cursorDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte("{broken json!!!"), 0o644); err != nil {
+		t.Fatalf("failed to write malformed hooks.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	err := adapter.InstallHook(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "parsing existing hooks.json") {
+		t.Errorf("error = %q, want it to mention parsing failure", err.Error())
+	}
+}
+
+func TestCursorInstallHook_TrailingNewline(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
+	if err := adapter.InstallHook(tmpDir); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".cursor", "hooks.json"))
+	if err != nil {
+		t.Fatalf("failed to read hooks.json: %v", err)
+	}
+
+	if !strings.HasSuffix(string(data), "\n") {
+		t.Error("hooks.json does not end with trailing newline")
+	}
+}
+
+// --- Tool name normalization ---
+
+func TestCursorParseInput_ToolNameNormalization(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		toolName string
+		want     string
+	}{
+		{"edit_file maps to Edit", "edit_file", "Edit"},
+		{"write_file maps to Write", "write_file", "Write"},
+		{"read_file maps to Read", "read_file", "Read"},
+		{"create_file maps to Write", "create_file", "Write"},
+		{"delete_file maps to Write", "delete_file", "Write"},
+		{"list_dir maps to Glob", "list_dir", "Glob"},
+		{"search_files maps to Grep", "search_files", "Grep"},
+		{"codebase_search maps to Grep", "codebase_search", "Grep"},
+		{"grep_search maps to Grep", "grep_search", "Grep"},
+		{"run_terminal_command maps to Bash", "run_terminal_command", "Bash"},
+		{"terminal maps to Bash", "terminal", "Bash"},
+		{"unknown_tool preserved as-is", "unknown_tool", "unknown_tool"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			jsonStr := `{"hook_event_name":"preToolUse","conversation_id":"x","cursor_version":"0.48.1","tool_name":"` + tt.toolName + `"}`
+			adapter := &CursorAdapter{}
+
+			input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if input.ToolName != tt.want {
+				t.Errorf("ToolName = %q, want %q", input.ToolName, tt.want)
+			}
+		})
+	}
+}
+
+func TestCursorParseInput_HookEventNameFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		eventName string
+		want      string
+	}{
+		{"beforeFileEdit maps to Edit", "beforeFileEdit", "Edit"},
+		{"beforeShellExecution maps to Bash", "beforeShellExecution", "Bash"},
+		{"beforeReadFile maps to Read", "beforeReadFile", "Read"},
+		{"beforeMCPExecution maps to Agent", "beforeMCPExecution", "Agent"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// No tool_name field -- should fallback to hook_event_name mapping
+			jsonStr := `{"hook_event_name":"` + tt.eventName + `","conversation_id":"x","cursor_version":"0.48.1"}`
+			adapter := &CursorAdapter{}
+
+			input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if input.ToolName != tt.want {
+				t.Errorf("ToolName = %q, want %q (fallback from hook_event_name)", input.ToolName, tt.want)
+			}
+		})
+	}
+}
+
+// --- ParseInput edge cases ---
+
+func TestCursorParseInput_FallbackToSessionIDWhenNoConversationID(t *testing.T) {
+	t.Parallel()
+	// When conversation_id is absent, should fall back to session_id
+	jsonStr := `{"hook_event_name":"preToolUse","session_id":"fallback-session","cursor_version":"0.48.1"}`
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.SessionID != "fallback-session" {
+		t.Errorf("SessionID = %q, want %q (should fallback to session_id)", input.SessionID, "fallback-session")
+	}
+}
+
+func TestCursorParseInput_FilePathFromToolInput(t *testing.T) {
+	t.Parallel()
+	// When file_path is in tool_input (preToolUse format)
+	jsonStr := `{"hook_event_name":"preToolUse","conversation_id":"x","cursor_version":"0.48.1","tool_input":{"file_path":"nested/path.go"}}`
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.FilePath != "nested/path.go" {
+		t.Errorf("FilePath = %q, want %q (should extract from tool_input.file_path)", input.FilePath, "nested/path.go")
+	}
+}
+
+func TestCursorParseInput_PathFromToolInput(t *testing.T) {
+	t.Parallel()
+	// When "path" is in tool_input (Grep/Glob style)
+	jsonStr := `{"hook_event_name":"preToolUse","conversation_id":"x","cursor_version":"0.48.1","tool_input":{"path":"src/"}}`
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.FilePath != "src/" {
+		t.Errorf("FilePath = %q, want %q (should extract from tool_input.path)", input.FilePath, "src/")
+	}
+}
+
+func TestCursorParseInput_TopLevelFilePathPriority(t *testing.T) {
+	t.Parallel()
+	// Top-level file_path should take priority over tool_input.file_path
+	jsonStr := `{"hook_event_name":"preToolUse","conversation_id":"x","cursor_version":"0.48.1","file_path":"top-level.go","tool_input":{"file_path":"nested.go"}}`
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.FilePath != "top-level.go" {
+		t.Errorf("FilePath = %q, want %q (top-level should take priority)", input.FilePath, "top-level.go")
+	}
+}
+
+func TestCursorParseInput_EmptyJSON(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.Agent != "cursor" {
+		t.Errorf("Agent = %q, want %q", input.Agent, "cursor")
+	}
+	if input.SessionID != "" {
+		t.Errorf("SessionID = %q, want empty", input.SessionID)
+	}
+	if input.ToolName != "" {
+		t.Errorf("ToolName = %q, want empty", input.ToolName)
+	}
+}
+
+// --- FormatDeny additional fields ---
+
+func TestCursorFormatDeny_IncludesAllFields(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+	reason := "blocked by policy"
+
+	result, err := adapter.FormatDeny(reason)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("FormatDeny returned invalid JSON: %v", err)
+	}
+
+	// Check all expected fields
+	if parsed["continue"] != false {
+		t.Errorf("continue = %v, want false", parsed["continue"])
+	}
+	if parsed["permission"] != "deny" {
+		t.Errorf("permission = %v, want %q", parsed["permission"], "deny")
+	}
+	if parsed["userMessage"] != reason {
+		t.Errorf("userMessage = %v, want %q", parsed["userMessage"], reason)
+	}
+	if parsed["agentMessage"] != reason {
+		t.Errorf("agentMessage = %v, want %q", parsed["agentMessage"], reason)
+	}
+}
+
+func TestCursorFormatAllow_NoExtraFields(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+
+	result, err := adapter.FormatAllow()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("FormatAllow returned invalid JSON: %v", err)
+	}
+	// Should only have "continue" field
+	if len(parsed) != 1 {
+		t.Errorf("FormatAllow has %d fields, want 1 (only 'continue')", len(parsed))
+	}
+}
+
+// --- cursorCareBareHookExists tests ---
+
+func TestCursorCareBareHookExists_EmptyHooksMap(t *testing.T) {
+	t.Parallel()
+	if cursorCareBareHookExists(map[string]any{}) {
+		t.Error("expected false for empty hooks map")
+	}
+}
+
+func TestCursorCareBareHookExists_MalformedEntries(t *testing.T) {
+	t.Parallel()
+	hooks := map[string]any{
+		"preToolUse": "not an array",
+		"beforeFileEdit": []any{
+			"not a map",
+			42,
+		},
+		"beforeShellExecution": []any{
+			map[string]any{
+				// missing "command" key
+				"type": "webhook",
+			},
+		},
+	}
+	if cursorCareBareHookExists(hooks) {
+		t.Error("expected false for malformed entries")
+	}
+}
+
+func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
+	t.Parallel()
+	hooks := map[string]any{
+		"preToolUse": []any{
+			map[string]any{
+				"command": "some-other-tool",
+			},
+		},
+		"beforeFileEdit": []any{
+			map[string]any{
+				"command": "/usr/bin/care-bare hook --agent cursor",
+			},
+		},
+	}
+	if !cursorCareBareHookExists(hooks) {
+		t.Error("expected true when care-bare hook exists in any hook type")
+	}
+}
+
+// --- GlobalConfigPath tests ---
+
+func TestCursorGlobalConfigPath_WithHomeDir(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{HomeDir: "/custom/home"}
+	got := adapter.GlobalConfigPath()
+	want := filepath.Join("/custom/home", ".cursor", "hooks.json")
+	if got != want {
+		t.Errorf("GlobalConfigPath() = %q, want %q", got, want)
+	}
+}
+
+// --- ScanProjects tests ---
+
+func TestCursorScanProjects_EmptyProjectsDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	projectsDir := filepath.Join(tmpDir, ".cursor", "projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("failed to create projects dir: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("got %d projects, want 0", len(projects))
+	}
+}
+
+func TestCursorScanProjects_MissingProjectsDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if projects != nil {
+		t.Errorf("got %v, want nil for missing projects dir", projects)
+	}
+}
+
+func TestCursorScanProjects_WithSessionsIndex(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a real project directory
+	projectPath := filepath.Join(tmpDir, "myproject")
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Create encoded project dir under .cursor/projects/
+	encodedDir := filepath.Join(tmpDir, ".cursor", "projects", "encoded-cursor-project")
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("failed to create encoded dir: %v", err)
+	}
+
+	indexJSON := `{"entries":[{"projectPath":"` + projectPath + `"}]}`
+	if err := os.WriteFile(filepath.Join(encodedDir, "sessions-index.json"), []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("failed to write sessions-index.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	projects, err := adapter.ScanProjects()
+	if err != nil {
+		t.Fatalf("ScanProjects failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("got %d projects, want 1", len(projects))
+	}
+	if projects[0].Path != projectPath {
+		t.Errorf("Path = %q, want %q", projects[0].Path, projectPath)
+	}
+	if projects[0].Agent != "cursor" {
+		t.Errorf("Agent = %q, want %q", projects[0].Agent, "cursor")
+	}
+}
+
 // --- ConfigPath test ---
 
 func TestCursorConfigPath(t *testing.T) {
+	t.Parallel()
 	adapter := &CursorAdapter{}
 	if adapter.ConfigPath() != ".cursor/hooks.json" {
 		t.Errorf("ConfigPath() = %q, want %q", adapter.ConfigPath(), ".cursor/hooks.json")
+	}
+}
+
+// --- Name test ---
+
+func TestCursorName(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+	if adapter.Name() != "cursor" {
+		t.Errorf("Name() = %q, want %q", adapter.Name(), "cursor")
 	}
 }

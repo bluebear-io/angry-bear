@@ -56,9 +56,9 @@ type Dashboard struct {
 	loadedSkills map[string]*state.SkillStatus
 	eventLines   []string // Recent event log lines
 	projectRoot  string   // For reading events.log
-	skillCursor  int
-	ruleCursor   int
-	logCursor    int
+	skillScroll  ScrollView
+	ruleScroll   ScrollView
+	logScroll    ScrollView
 	focusPanel   int // 0=skills, 1=rules, 2=event log
 	editingPath  bool
 	pathBuffer   string
@@ -94,10 +94,10 @@ type indexedRule struct {
 
 // rulesForSkill returns rules matching the currently selected skill.
 func (d *Dashboard) rulesForSkill() []indexedRule {
-	if d.skillCursor >= len(d.skills) {
+	if d.skillScroll.Cursor >= len(d.skills) {
 		return nil
 	}
-	name := d.skills[d.skillCursor].Name
+	name := d.skills[d.skillScroll.Cursor].Name
 	var rules []indexedRule
 	for i, r := range d.config.Tools {
 		if r.Skill == name {
@@ -125,42 +125,41 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		// Navigation — up/down within current panel
 		case "up", "k":
+			noSkip := func(int) bool { return false }
 			switch d.focusPanel {
 			case 0:
-				if d.skillCursor > 0 {
-					d.skillCursor--
-					d.ruleCursor = 0
+				prev := d.skillScroll.Cursor
+				d.skillScroll.MoveUp(len(d.skills), noSkip)
+				if d.skillScroll.Cursor != prev {
+					d.ruleScroll.Cursor = 0
 				}
 			case 1:
-				if d.ruleCursor > 0 {
-					d.ruleCursor--
-				}
+				d.ruleScroll.MoveUp(len(d.rulesForSkill()), noSkip)
 			case 2:
 				if d.filterMode {
 					d.cycleFilterValue(-1)
-				} else if d.logCursor > 0 {
-					d.logCursor--
+				} else {
+					d.logScroll.MoveUp(len(d.eventLines), noSkip)
 				}
 			}
 			return d, nil
 
 		case "down", "j":
+			noSkip := func(int) bool { return false }
 			switch d.focusPanel {
 			case 0:
-				if d.skillCursor < len(d.skills)-1 {
-					d.skillCursor++
-					d.ruleCursor = 0
+				prev := d.skillScroll.Cursor
+				d.skillScroll.MoveDown(len(d.skills), noSkip)
+				if d.skillScroll.Cursor != prev {
+					d.ruleScroll.Cursor = 0
 				}
 			case 1:
-				rules := d.rulesForSkill()
-				if d.ruleCursor < len(rules)-1 {
-					d.ruleCursor++
-				}
+				d.ruleScroll.MoveDown(len(d.rulesForSkill()), noSkip)
 			case 2:
 				if d.filterMode {
 					d.cycleFilterValue(1)
-				} else if d.logCursor < len(d.eventLines)-1 {
-					d.logCursor++
+				} else {
+					d.logScroll.MoveDown(len(d.eventLines), noSkip)
 				}
 			}
 			return d, nil
@@ -168,41 +167,27 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Page up/down — jump by a screenful in the log panel
 		case "pgup":
 			if d.focusPanel == 2 {
-				d.logCursor -= d.logPageSize()
-				if d.logCursor < 0 {
-					d.logCursor = 0
-				}
+				d.logScroll.PageUp(d.logPageSize())
 			}
 			return d, nil
 
 		case "pgdown":
 			if d.focusPanel == 2 {
-				d.logCursor += d.logPageSize()
-				max := len(d.eventLines) - 1
-				if max < 0 {
-					max = 0
-				}
-				if d.logCursor > max {
-					d.logCursor = max
-				}
+				d.logScroll.PageDown(len(d.eventLines), d.logPageSize())
 			}
 			return d, nil
 
 		// Cmd+Up / Home — jump to top of logs
 		case "home", "ctrl+up":
 			if d.focusPanel == 2 {
-				d.logCursor = 0
+				d.logScroll.JumpTop()
 			}
 			return d, nil
 
 		// Cmd+Down / End — jump to bottom of logs
 		case "end", "ctrl+down":
 			if d.focusPanel == 2 {
-				max := len(d.eventLines) - 1
-				if max < 0 {
-					max = 0
-				}
-				d.logCursor = max
+				d.logScroll.JumpBottom(len(d.eventLines))
 			}
 			return d, nil
 
@@ -223,7 +208,7 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if d.focusPanel == 0 {
 				d.focusPanel = 1
-				d.ruleCursor = 0
+				d.ruleScroll.Cursor = 0
 			}
 			return d, nil
 
@@ -243,10 +228,10 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch d.focusPanel {
 			case 0:
 				// Skills panel: open rule editor
-				if d.skillCursor < len(d.skills) {
+				if d.skillScroll.Cursor < len(d.skills) {
 					return d, func() tea.Msg {
 						return openRuleEditorMsg{
-							skillName: d.skills[d.skillCursor].Name,
+							skillName: d.skills[d.skillScroll.Cursor].Name,
 							ruleIndex: -1,
 							existing:  nil,
 						}
@@ -260,10 +245,10 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "a":
 			// Add rules for current skill
-			if d.skillCursor < len(d.skills) {
+			if d.skillScroll.Cursor < len(d.skills) {
 				return d, func() tea.Msg {
 					return openRuleEditorMsg{
-						skillName: d.skills[d.skillCursor].Name,
+						skillName: d.skills[d.skillScroll.Cursor].Name,
 						ruleIndex: -1,
 						existing:  nil,
 					}
@@ -275,12 +260,12 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d":
 			if d.focusPanel == 1 {
 				rules := d.rulesForSkill()
-				if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
-					idx := rules[d.ruleCursor].configIndex
+				if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
+					idx := rules[d.ruleScroll.Cursor].configIndex
 					d.config.Tools = append(d.config.Tools[:idx], d.config.Tools[idx+1:]...)
 					rules = d.rulesForSkill()
-					if d.ruleCursor >= len(rules) && d.ruleCursor > 0 {
-						d.ruleCursor--
+					if d.ruleScroll.Cursor >= len(rules) && d.ruleScroll.Cursor > 0 {
+						d.ruleScroll.Cursor--
 					}
 				}
 			}
@@ -290,8 +275,8 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Cycle tool on selected rule
 			if d.focusPanel == 1 {
 				rules := d.rulesForSkill()
-				if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
-					idx := rules[d.ruleCursor].configIndex
+				if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
+					idx := rules[d.ruleScroll.Cursor].configIndex
 					d.config.Tools[idx].Tool = nextTool(d.config.Tools[idx].Tool)
 				}
 			}
@@ -301,8 +286,8 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Cycle agent on selected rule
 			if d.focusPanel == 1 {
 				rules := d.rulesForSkill()
-				if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
-					idx := rules[d.ruleCursor].configIndex
+				if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
+					idx := rules[d.ruleScroll.Cursor].configIndex
 					d.config.Tools[idx].Agent = nextAgent(d.config.Tools[idx].Agent)
 				}
 			}
@@ -312,9 +297,9 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Edit path inline
 			if d.focusPanel == 1 {
 				rules := d.rulesForSkill()
-				if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
+				if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
 					d.editingPath = true
-					d.pathBuffer = rules[d.ruleCursor].rule.Path
+					d.pathBuffer = rules[d.ruleScroll.Cursor].rule.Path
 					d.pathCurPos = len(d.pathBuffer)
 				}
 			}
@@ -324,12 +309,12 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Duplicate selected rule
 			if d.focusPanel == 1 {
 				rules := d.rulesForSkill()
-				if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
-					dup := rules[d.ruleCursor].rule
+				if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
+					dup := rules[d.ruleScroll.Cursor].rule
 					d.config.Tools = append(d.config.Tools, dup)
 					// Move cursor to the new duplicate
 					newRules := d.rulesForSkill()
-					d.ruleCursor = len(newRules) - 1
+					d.ruleScroll.Cursor = len(newRules) - 1
 				}
 			}
 			return d, nil
@@ -355,7 +340,7 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if d.focusPanel == 2 {
 				d.logFilters = make(map[filterCol]string)
 				d.filterMode = false
-				d.logCursor = 0
+				d.logScroll.Cursor = 0
 			}
 			return d, nil
 
@@ -363,7 +348,7 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if d.focusPanel == 2 {
 				d.filterMode = false
 				d.logFilters = make(map[filterCol]string)
-				d.logCursor = 0
+				d.logScroll.Cursor = 0
 				return d, nil
 			}
 
@@ -388,8 +373,8 @@ func (d Dashboard) updatePathEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Commit the edit
 		rules := d.rulesForSkill()
-		if d.ruleCursor >= 0 && d.ruleCursor < len(rules) {
-			idx := rules[d.ruleCursor].configIndex
+		if d.ruleScroll.Cursor >= 0 && d.ruleScroll.Cursor < len(rules) {
+			idx := rules[d.ruleScroll.Cursor].configIndex
 			d.config.Tools[idx].Path = d.pathBuffer
 		}
 		d.editingPath = false
@@ -535,25 +520,15 @@ func (d Dashboard) renderSkillList(width, height int) string {
 	title := d.styles.RuleHeader.Render("SKILLS") + "\n\n"
 
 	var b strings.Builder
-	scrollStart := 0
 	visible := height - 3
 	if visible < 1 {
 		visible = len(d.skills)
 	}
-	if d.skillCursor >= scrollStart+visible {
-		scrollStart = d.skillCursor - visible + 1
-	}
-	if d.skillCursor < scrollStart {
-		scrollStart = d.skillCursor
-	}
-	end := scrollStart + visible
-	if end > len(d.skills) {
-		end = len(d.skills)
-	}
+	scrollStart, end := d.skillScroll.VisibleRange(len(d.skills), visible)
 
 	for i := scrollStart; i < end; i++ {
 		skill := d.skills[i]
-		focused := i == d.skillCursor && d.focusPanel == 0
+		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 
 		ruleCount := 0
 		for _, r := range d.config.Tools {
@@ -610,7 +585,7 @@ func (d Dashboard) renderSkillList(width, height int) string {
 			}
 			line := d.styles.Selected.Render(" ▸ " + name + suffix)
 			b.WriteString(line + "\n")
-		} else if i == d.skillCursor {
+		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName
 			if loadedTag != "" {
 				nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
@@ -625,16 +600,29 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		}
 	}
 
+	// Show scroll indicators if not all skills are visible
+	if len(d.skills) > visible {
+		indicator := d.styles.Description.Render(
+			fmt.Sprintf("  [%d/%d]", d.skillScroll.Cursor+1, len(d.skills)))
+		if scrollStart > 0 {
+			indicator += d.styles.Description.Render(" ↑")
+		}
+		if end < len(d.skills) {
+			indicator += d.styles.Description.Render(" ↓")
+		}
+		b.WriteString(indicator + "\n")
+	}
+
 	return title + b.String()
 }
 
 // renderRulePanel renders the right panel with full description and rules.
 func (d Dashboard) renderRulePanel(width, height int) string {
-	if d.skillCursor >= len(d.skills) {
+	if d.skillScroll.Cursor >= len(d.skills) {
 		return ""
 	}
 
-	skill := d.skills[d.skillCursor]
+	skill := d.skills[d.skillScroll.Cursor]
 	rules := d.rulesForSkill()
 
 	var b strings.Builder
@@ -659,8 +647,16 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	header := fmt.Sprintf("  %-10s %-28s %s", "TOOL", "PATH", "AGENT")
 	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
 
-	for i, ir := range rules {
-		focused := i == d.ruleCursor && d.focusPanel == 1
+	// Scrolling for rules list
+	visibleRules := height - 7
+	if visibleRules < 3 {
+		visibleRules = 3
+	}
+	ruleStart, ruleEnd := d.ruleScroll.VisibleRange(len(rules), visibleRules)
+
+	for i := ruleStart; i < ruleEnd; i++ {
+		ir := rules[i]
+		focused := i == d.ruleScroll.Cursor && d.focusPanel == 1
 
 		toolStr := ir.rule.Tool
 		pathStr := ir.rule.Path
@@ -693,6 +689,19 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 			agent := d.styles.Agent.Render(agentStr)
 			b.WriteString("  " + tool + " " + path + " " + agent + "\n")
 		}
+	}
+
+	// Scroll indicator for rules
+	if len(rules) > visibleRules {
+		indicator := d.styles.Description.Render(
+			fmt.Sprintf("  [%d/%d]", d.ruleScroll.Cursor+1, len(rules)))
+		if ruleStart > 0 {
+			indicator += d.styles.Description.Render(" ↑")
+		}
+		if ruleEnd < len(rules) {
+			indicator += d.styles.Description.Render(" ↓")
+		}
+		b.WriteString(indicator + "\n")
 	}
 
 	// Context help for right panel when focused
@@ -867,32 +876,13 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
-	// Scrolling
+	// Scrolling — use shared ScrollView
 	var b strings.Builder
 	visible := height - 4
 	if visible < 3 {
 		visible = 3
 	}
-
-	if d.logCursor >= len(allRows) && len(allRows) > 0 {
-		d.logCursor = len(allRows) - 1
-	}
-	start := len(allRows) - visible
-	if start < 0 {
-		start = 0
-	}
-	if d.focusPanel == 2 {
-		if d.logCursor < start {
-			start = d.logCursor
-		}
-		if d.logCursor >= start+visible {
-			start = d.logCursor - visible + 1
-		}
-	}
-	end := start + visible
-	if end > len(allRows) {
-		end = len(allRows)
-	}
+	start, end := d.logScroll.VisibleRange(len(allRows), visible)
 
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
@@ -916,7 +906,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 			sty = green
 		}
 
-		focused := fi == d.logCursor && d.focusPanel == 2
+		focused := fi == d.logScroll.Cursor && d.focusPanel == 2
 		plain := fmt.Sprintf(fmtStr, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
 
 		if focused {
@@ -989,7 +979,7 @@ func (d *Dashboard) cycleFilterValue(direction int) {
 	} else {
 		d.logFilters[d.filterCursor] = options[idx]
 	}
-	d.logCursor = 0
+	d.logScroll.Cursor = 0
 }
 
 // matchesFilters checks if a row passes all active filters.
@@ -1023,11 +1013,11 @@ func (d *Dashboard) matchesFilters(act, project, sess, agent, tool, skill string
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.
 // Works with the filtered log view used by renderEventLog.
 func (d *Dashboard) jumpToLogEntry() {
-	if d.logCursor < 0 || d.logCursor >= len(d.eventLines) {
+	if d.logScroll.Cursor < 0 || d.logScroll.Cursor >= len(d.eventLines) {
 		return
 	}
 
-	ev, ok := parseEventLine(d.eventLines[d.logCursor], d.logCursor)
+	ev, ok := parseEventLine(d.eventLines[d.logScroll.Cursor], d.logScroll.Cursor)
 	if !ok {
 		return
 	}
@@ -1046,9 +1036,9 @@ func (d *Dashboard) jumpToLogEntry() {
 	// Find the skill in the skills list and jump to it.
 	for i, s := range d.skills {
 		if s.Name == skill {
-			d.skillCursor = i
+			d.skillScroll.Cursor = i
 			d.focusPanel = 1
-			d.ruleCursor = 0
+			d.ruleScroll.Cursor = 0
 			return
 		}
 	}

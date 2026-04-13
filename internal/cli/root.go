@@ -66,9 +66,10 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 	}
 
 	var projectRoot string
+	var selectedProject *adapter.MergedProject
 
 	if len(projects) == 0 {
-		// No projects found — fall back to cwd
+		// No projects found -- fall back to cwd
 		cwd, err := os.Getwd()
 		if err != nil {
 			return false, fmt.Errorf("getting working directory: %w", err)
@@ -98,11 +99,24 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 			),
 		).WithTheme(huh.ThemeDracula())
 
-		err := form.Run()
+		err = form.Run()
 		if err != nil {
 			return false, err
 		}
-		projectRoot = selectedPath
+
+		// Find the matching MergedProject for available paths.
+		for i := range projects {
+			if projects[i].Path == selectedPath {
+				selectedProject = &projects[i]
+				break
+			}
+		}
+
+		// For multi-checkout repos without a preferred path, let user pick.
+		projectRoot, err = resolveCheckoutPath(selectedPath, selectedProject, logger)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	// 2. Resolve repo identity and load config from repo-keyed dir.
@@ -114,7 +128,8 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 			logger.Warn("failed to get home directory for repo config", "error", err)
 		} else {
 			repoConfigDir = engine.RepoConfigDir(home, repo)
-			if err := os.MkdirAll(repoConfigDir, 0o755); err != nil {
+			err = os.MkdirAll(repoConfigDir, 0o755)
+			if err != nil {
 				logger.Warn("failed to create repo config directory", "path", repoConfigDir, "error", err)
 			}
 		}
@@ -177,8 +192,14 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 	// 6. Collect loaded skills from all active sessions.
 	loadedSkills := state.CollectLoadedSkills(filepath.Join(projectRoot, ".care-bare", "state"))
 
-	// 7. Create TUI model and load event log.
-	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg)
+	// 7. Build available local paths list for the TUI settings view.
+	var availablePaths []string
+	if selectedProject != nil {
+		availablePaths = selectedProject.LocalPaths
+	}
+
+	// 8. Create TUI model and load event log.
+	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg, repoConfigDir, availablePaths)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -189,6 +210,73 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 		return app.SwitchRequested(), nil
 	}
 	return false, nil
+}
+
+// resolveCheckoutPath handles multi-checkout repos. If a preferred path is already
+// set and valid, it is used. Otherwise, for repos with multiple checkouts, a
+// sub-menu lets the user pick which path to use, then saves the preference.
+func resolveCheckoutPath(selectedPath string, project *adapter.MergedProject, logger *slog.Logger) (string, error) {
+	if project == nil || len(project.LocalPaths) <= 1 {
+		return selectedPath, nil
+	}
+
+	// Check for existing preferred path.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return selectedPath, nil
+	}
+
+	repo := engine.ResolveRepoIdentity(selectedPath)
+	if repo == nil {
+		return selectedPath, nil
+	}
+
+	repoConfigDir := engine.RepoConfigDir(home, repo)
+	prefs, err := engine.LoadRepoPreferences(repoConfigDir)
+	if err != nil {
+		logger.Warn("failed to load repo preferences", "error", err)
+		return selectedPath, nil
+	}
+
+	// If a preferred path exists and is among the discovered paths, use it.
+	if prefs.PreferredPath != "" {
+		for _, lp := range project.LocalPaths {
+			if lp == prefs.PreferredPath {
+				return prefs.PreferredPath, nil
+			}
+		}
+	}
+
+	// No valid preference -- show sub-menu for path selection.
+	pathOpts := make([]huh.Option[string], len(project.LocalPaths))
+	for i, lp := range project.LocalPaths {
+		pathOpts[i] = huh.NewOption(lp, lp)
+	}
+
+	var chosenPath string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(fmt.Sprintf("Multiple checkouts for %s", project.Name)).
+				Description("Select which local copy to use (will be saved as default)").
+				Options(pathOpts...).
+				Value(&chosenPath),
+		),
+	).WithTheme(huh.ThemeDracula())
+
+	err = form.Run()
+	if err != nil {
+		return selectedPath, nil
+	}
+
+	// Save the chosen path as preferred.
+	prefs.PreferredPath = chosenPath
+	err = engine.SaveRepoPreferences(repoConfigDir, prefs)
+	if err != nil {
+		logger.Warn("failed to save repo preferences", "error", err)
+	}
+
+	return chosenPath, nil
 }
 
 // Execute runs the root command.

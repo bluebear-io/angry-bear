@@ -38,6 +38,15 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test -race -coverprofile=coverage.out ./...
+      - name: Check coverage >= 80%
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 80.0" | bc)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below 80% minimum"
+            exit 1
+          fi
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v6

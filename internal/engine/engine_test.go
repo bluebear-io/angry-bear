@@ -940,6 +940,264 @@ func writeConfig(t *testing.T, dir string, cfg Config) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// NormalizeGlob edge cases
+// ---------------------------------------------------------------------------
+
+func TestNormalizeGlob_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{
+			name:    "single filename gets doublestar prefix",
+			pattern: "Makefile",
+			want:    "**/Makefile",
+		},
+		{
+			name:    "dot-prefixed file gets doublestar prefix",
+			pattern: ".gitignore",
+			want:    "**/.gitignore",
+		},
+		{
+			name:    "complex extension pattern",
+			pattern: "*.test.ts",
+			want:    "**/*.test.ts",
+		},
+		{
+			name:    "directory-only pattern",
+			pattern: "src/",
+			want:    "**/src/",
+		},
+		{
+			name:    "doublestar alone at start with extra path",
+			pattern: "**/src/*.go",
+			want:    "**/src/*.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := NormalizeGlob(tt.pattern)
+			if got != tt.want {
+				t.Errorf("NormalizeGlob(%q) = %q, want %q", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NormalizeFilePath edge cases
+// ---------------------------------------------------------------------------
+
+func TestNormalizeFilePath_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		filePath    string
+		projectRoot string
+		want        string
+	}{
+		{
+			name:        "empty project root with absolute path",
+			filePath:    "/some/absolute/path.go",
+			projectRoot: "",
+			want:        "some/absolute/path.go",
+		},
+		{
+			name:        "absolute path not under project root",
+			filePath:    "/other/project/file.go",
+			projectRoot: "/my/project",
+			want:        "other/project/file.go",
+		},
+		{
+			name:        "path with multiple dot-dot segments",
+			filePath:    "a/b/c/../../d/file.go",
+			projectRoot: "/project",
+			want:        "a/d/file.go",
+		},
+		{
+			name:        "project root equals file directory",
+			filePath:    "/project/file.go",
+			projectRoot: "/project",
+			want:        "file.go",
+		},
+		{
+			name:        "mixed separators in both path and root",
+			filePath:    `internal\engine\glob.go`,
+			projectRoot: `/project`,
+			want:        "internal/engine/glob.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := NormalizeFilePath(tt.filePath, tt.projectRoot)
+			if got != tt.want {
+				t.Errorf("NormalizeFilePath(%q, %q) = %q, want %q", tt.filePath, tt.projectRoot, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// loadConfigFile edge case tests
+// ---------------------------------------------------------------------------
+
+func TestLoadConfigFile_VersionZero(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, ".care-bare")
+	mustMkdirAll(t, dir)
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	// version 0 should fail (only version 1 is supported).
+	content := `{"version": 0, "tools": []}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadConfigFile(configPath)
+	if err == nil {
+		t.Fatal("expected error for version 0, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported config version") {
+		t.Errorf("error = %q, want to contain 'unsupported config version'", err.Error())
+	}
+}
+
+func TestLoadConfigFile_EmptyToolsList(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, ".care-bare")
+	mustMkdirAll(t, dir)
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	content := `{"version": 1, "tools": []}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := loadConfigFile(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules, got %d", len(rules))
+	}
+}
+
+func TestLoadConfigFile_MultipleRules(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, ".care-bare")
+	mustMkdirAll(t, dir)
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	cfg := Config{
+		Version: 1,
+		Tools: []Rule{
+			{Tool: "Edit", Path: "*.go", Skill: "go-standards"},
+			{Tool: "Write", Path: "*.py", Skill: "python-standards"},
+			{Tool: "*", Path: "stacks/**", Skill: "sst-architect"},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := loadConfigFile(configPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(rules))
+	}
+
+	// Verify path normalization happened.
+	if rules[0].Rule.Path != "**/*.go" {
+		t.Errorf("rules[0].Path = %q, want **/*.go", rules[0].Rule.Path)
+	}
+	if rules[1].Rule.Path != "**/*.py" {
+		t.Errorf("rules[1].Path = %q, want **/*.py", rules[1].Rule.Path)
+	}
+	// stacks/** already starts with relative so it gets **/ prefix.
+	if rules[2].Rule.Path != "**/stacks/**" {
+		t.Errorf("rules[2].Path = %q, want **/stacks/**", rules[2].Rule.Path)
+	}
+
+	// Verify source is set.
+	for i, r := range rules {
+		if r.Source != configPath {
+			t.Errorf("rules[%d].Source = %q, want %q", i, r.Source, configPath)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ShouldBlock edge cases
+// ---------------------------------------------------------------------------
+
+func TestShouldBlock_NilInvokedSkills(t *testing.T) {
+	t.Parallel()
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Skill: "some-skill"}, Source: "src"},
+	}
+
+	// nil invokedSkills should still trigger block.
+	got := ShouldBlock(rules, "Edit", "", "", nil)
+	if !got.Blocked {
+		t.Error("expected Blocked=true with nil invokedSkills")
+	}
+	if len(got.Missing) != 1 || got.Missing[0] != "some-skill" {
+		t.Errorf("Missing = %v, want [some-skill]", got.Missing)
+	}
+}
+
+func TestShouldBlock_ReasonContainsLoadInstructions(t *testing.T) {
+	t.Parallel()
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Skill: "my-skill"}, Source: "src"},
+	}
+
+	got := ShouldBlock(rules, "Edit", "", "", nil)
+	if !got.Blocked {
+		t.Fatal("expected Blocked=true")
+	}
+	// Reason should include the slash-command instruction.
+	if !strings.Contains(got.Reason, "/my-skill") {
+		t.Errorf("Reason %q does not contain /my-skill load instruction", got.Reason)
+	}
+	// Reason should include the SKILL.md path.
+	if !strings.Contains(got.Reason, ".claude/skills/my-skill/SKILL.md") {
+		t.Errorf("Reason %q does not contain SKILL.md path", got.Reason)
+	}
+}
+
+func TestShouldBlock_GlobPatternError(t *testing.T) {
+	t.Parallel()
+	// A pattern with an unclosed bracket is invalid for doublestar.
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "[unclosed", Skill: "bad-pattern-skill"}, Source: "src"},
+	}
+
+	got := ShouldBlock(rules, "Edit", "somefile.go", "", nil)
+	// The rule should be skipped (not crash), so result should be not blocked.
+	if got.Blocked {
+		t.Error("expected Blocked=false when glob pattern is invalid (rule skipped)")
+	}
+}
+
 // --- MatchedSkills tests ---
 
 func TestMatchedSkills_FindsMatching(t *testing.T) {
@@ -1004,6 +1262,54 @@ func TestMatchedSkills_Deduplicates(t *testing.T) {
 	matched := MatchedSkills(rules, "Edit", "test.go", "*")
 	if len(matched) != 1 {
 		t.Errorf("expected 1 deduplicated match, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_EmptyFilePath(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**/*.go", Skill: "go-skill", Agent: "*"}, Source: "test"},
+	}
+
+	// When filePath is empty but rule requires a path, it should not match.
+	matched := MatchedSkills(rules, "Edit", "", "*")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches with empty filePath, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_GlobPatternError(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "[invalid", Skill: "bad-skill", Agent: "*"}, Source: "test"},
+	}
+
+	// Invalid glob pattern should cause the rule to be skipped (not crash).
+	matched := MatchedSkills(rules, "Edit", "file.go", "*")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches with invalid glob, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_EmptyRules(t *testing.T) {
+	matched := MatchedSkills(nil, "Edit", "file.go", "claude")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches with nil rules, got %v", matched)
+	}
+
+	matched = MatchedSkills([]MatchedRule{}, "Edit", "file.go", "claude")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches with empty rules, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_WildcardPathAndEmptyPath(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "*", Skill: "star-skill", Agent: "*"}, Source: "test"},
+		{Rule: Rule{Tool: "Edit", Path: "", Skill: "empty-skill", Agent: "*"}, Source: "test"},
+	}
+
+	matched := MatchedSkills(rules, "Edit", "any-file.go", "*")
+	if len(matched) != 2 {
+		t.Errorf("expected 2 matches, got %v", matched)
 	}
 }
 

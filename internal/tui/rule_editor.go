@@ -56,7 +56,17 @@ const (
 	phaseAnother
 )
 
-// RuleEditor is a single continuous scrollable list.
+// section identifies which section has keyboard focus.
+type section int
+
+const (
+	sectionTools section = iota
+	sectionPaths
+	sectionAgents
+)
+
+// RuleEditor has three pinned sections: TOOLS, PATHS, AGENTS.
+// TOOLS and AGENTS always show all items. PATHS scrolls independently.
 type RuleEditor struct {
 	skillName     string
 	ruleIndex     int
@@ -65,10 +75,14 @@ type RuleEditor struct {
 	existingRules []engine.Rule
 	projectRoot   string
 
-	items     []listItem
-	cursor    int
-	scrollTop int
-	height    int
+	toolItems   []listItem
+	pathItems   []listItem
+	agentItems  []listItem
+	focus       section    // which section has keyboard focus
+	toolScroll  ScrollView // cursor within tools
+	pathScroll  ScrollView // cursor + scroll within paths
+	agentScroll ScrollView // cursor within agents
+	height      int
 
 	addAnother    bool
 	confirmCursor int // 0=Yes, 1=No
@@ -85,10 +99,12 @@ func NewRuleEditor(skillName string, existing *engine.Rule, ruleIndex int, style
 	return re
 }
 
-// SetProjectRoot sets the project root and builds the item list.
+// SetProjectRoot sets the project root and builds all section item lists.
+// Auto-expands directories containing existing rules so they're visible.
 func (re *RuleEditor) SetProjectRoot(root string) {
 	re.projectRoot = root
-	re.items = re.buildItems()
+	re.buildSections()
+	re.autoExpandSelectedPaths()
 }
 
 // SetExistingRules provides the current ruleset.
@@ -96,66 +112,60 @@ func (re *RuleEditor) SetExistingRules(rules []engine.Rule) {
 	re.existingRules = rules
 }
 
-// buildItems creates the unified list with tools, paths, and agents.
+// buildSections populates the three section item lists.
 // Pre-selects items that already have rules for this skill.
-func (re *RuleEditor) buildItems() []listItem {
-	// Compute what's already selected for this skill
+func (re *RuleEditor) buildSections() {
 	existingTools := make(map[string]bool)
 	existingPaths := make(map[string]bool)
 	existingAgents := make(map[string]bool)
 	for _, r := range re.existingRules {
 		if r.Skill == re.skillName {
 			existingTools[r.Tool] = true
-			existingPaths[r.Path] = true
+			// Strip **/ prefix from NormalizeGlob — tree items use relative paths
+			existingPaths[strings.TrimPrefix(r.Path, "**/")] = true
 			existingAgents[r.Agent] = true
 		}
 	}
 
-	var items []listItem
-
-	// ── TOOLS section ──
-	items = append(items, listItem{typ: itemSectionHeader, label: "TOOLS", section: "tools"})
+	// Tools
+	re.toolItems = nil
 	for _, t := range ToolOptions {
 		label := t
 		if t == "*" {
 			label = "* (all tools)"
 		}
-		items = append(items, listItem{
+		re.toolItems = append(re.toolItems, listItem{
 			typ: itemCheckbox, label: label, value: t, section: "tools",
 			selected: existingTools[t],
 		})
 	}
 
-	// ── PATHS section ──
-	items = append(items, listItem{typ: itemSectionHeader, label: "PATHS", section: "paths"})
-	items = append(items, listItem{
+	// Paths
+	re.pathItems = nil
+	re.pathItems = append(re.pathItems, listItem{
 		typ: itemCheckbox, label: "** (all files)", value: "**", section: "paths",
 		selected: existingPaths["**"],
 	})
-	// Add top-level directories from project as expandable tree nodes
 	pathTreeItems := re.buildPathTree()
-	// Pre-select any paths that match existing rules
 	for i := range pathTreeItems {
 		if existingPaths[pathTreeItems[i].value] {
 			pathTreeItems[i].selected = true
 		}
 	}
-	items = append(items, pathTreeItems...)
+	re.pathItems = append(re.pathItems, pathTreeItems...)
 
-	// ── AGENTS section ──
-	items = append(items, listItem{typ: itemSectionHeader, label: "AGENTS", section: "agents"})
+	// Agents
+	re.agentItems = nil
 	for _, a := range AgentOptions {
 		label := a
 		if a == "*" {
 			label = "* (all agents)"
 		}
-		items = append(items, listItem{
+		re.agentItems = append(re.agentItems, listItem{
 			typ: itemCheckbox, label: label, value: a, section: "agents",
 			selected: existingAgents[a],
 		})
 	}
-
-	return items
 }
 
 // buildPathTree creates expandable directory entries from the project root.
@@ -172,16 +182,22 @@ func (re *RuleEditor) buildPathTree() []listItem {
 	}
 
 	var dirNames []string
+	var fileNames []string
 	for _, e := range entries {
-		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") || DefaultIgnoreSet[e.Name()] {
 			continue
 		}
-		dirNames = append(dirNames, e.Name())
+		if e.IsDir() {
+			dirNames = append(dirNames, e.Name())
+		} else {
+			fileNames = append(fileNames, e.Name())
+		}
 	}
 	sort.Strings(dirNames)
+	sort.Strings(fileNames)
 
+	// Directories first (expandable)
 	for _, name := range dirNames {
-		// Discover children for expand/collapse
 		var children []string
 		subEntries, err := os.ReadDir(filepath.Join(root, name))
 		if err == nil {
@@ -203,99 +219,18 @@ func (re *RuleEditor) buildPathTree() []listItem {
 		})
 	}
 
+	// Files after directories
+	for _, name := range fileNames {
+		items = append(items, listItem{
+			typ:     itemCheckbox,
+			label:   name,
+			value:   name,
+			section: "paths",
+			indent:  0,
+		})
+	}
+
 	return items
-}
-
-// expandDir inserts child directory items after the given index.
-// Children are discovered lazily from the filesystem and are themselves
-// expandable tree dirs if they contain subdirectories.
-func (re *RuleEditor) expandDir(idx int) {
-	item := &re.items[idx]
-	if item.expanded {
-		return
-	}
-	item.expanded = true
-
-	parentPath := strings.TrimSuffix(item.value, "/**")
-
-	root := re.projectRoot
-	if root == "" {
-		root, _ = os.Getwd()
-	}
-
-	// Read children from filesystem
-	absDir := filepath.Join(root, parentPath)
-	entries, err := os.ReadDir(absDir)
-	if err != nil {
-		return
-	}
-
-	var newItems []listItem
-	for _, e := range entries {
-		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		childPath := parentPath + "/" + e.Name()
-
-		// Check if this child has its own subdirectories
-		var grandchildren []string
-		subEntries, err := os.ReadDir(filepath.Join(root, childPath))
-		if err == nil {
-			for _, se := range subEntries {
-				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
-					grandchildren = append(grandchildren, se.Name())
-				}
-			}
-		}
-
-		if len(grandchildren) > 0 {
-			// Has children — make it an expandable tree dir
-			newItems = append(newItems, listItem{
-				typ:      itemTreeDir,
-				label:    e.Name(),
-				value:    childPath + "/**",
-				section:  "paths",
-				indent:   item.indent + 1,
-				children: grandchildren,
-			})
-		} else {
-			// Leaf directory — just a checkbox
-			newItems = append(newItems, listItem{
-				typ:     itemCheckbox,
-				label:   e.Name(),
-				value:   childPath + "/**",
-				section: "paths",
-				indent:  item.indent + 1,
-			})
-		}
-	}
-
-	if len(newItems) == 0 {
-		return
-	}
-
-	// Insert after idx
-	after := make([]listItem, len(re.items[idx+1:]))
-	copy(after, re.items[idx+1:])
-	re.items = append(re.items[:idx+1], newItems...)
-	re.items = append(re.items, after...)
-}
-
-// collapseDir removes child items after the given index.
-func (re *RuleEditor) collapseDir(idx int) {
-	item := &re.items[idx]
-	if !item.expanded {
-		return
-	}
-	item.expanded = false
-
-	// Remove items after idx that have deeper indent
-	removeStart := idx + 1
-	removeEnd := removeStart
-	for removeEnd < len(re.items) && re.items[removeEnd].indent > item.indent {
-		removeEnd++
-	}
-	re.items = append(re.items[:removeStart], re.items[removeEnd:]...)
 }
 
 // SwitchToConfirm transitions to the "add another?" phase.
@@ -308,11 +243,11 @@ func (re *RuleEditor) SwitchToConfirm() tea.Cmd {
 
 // Init returns the initial command.
 func (re RuleEditor) Init() tea.Cmd {
-	if len(re.items) == 0 {
-		re.items = re.buildItems()
+	if len(re.toolItems) == 0 {
+		re.buildSections()
 	}
-	// Start cursor on first selectable item (skip section header)
-	re.cursor = 1
+	re.focus = sectionTools
+	re.toolScroll.Cursor = 0
 	return nil
 }
 
@@ -336,7 +271,37 @@ func (re RuleEditor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return re, nil
 }
 
+// activeItems returns the item list for the focused section.
+func (re *RuleEditor) activeItems() *[]listItem {
+	switch re.focus {
+	case sectionTools:
+		return &re.toolItems
+	case sectionPaths:
+		return &re.pathItems
+	case sectionAgents:
+		return &re.agentItems
+	}
+	return &re.toolItems
+}
+
+// activeScroll returns the ScrollView for the focused section.
+func (re *RuleEditor) activeScroll() *ScrollView {
+	switch re.focus {
+	case sectionTools:
+		return &re.toolScroll
+	case sectionPaths:
+		return &re.pathScroll
+	case sectionAgents:
+		return &re.agentScroll
+	}
+	return &re.toolScroll
+}
+
 func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	items := re.activeItems()
+	sv := re.activeScroll()
+	noSkip := func(int) bool { return false }
+
 	switch msg.String() {
 	case "esc":
 		return re, func() tea.Msg {
@@ -344,49 +309,64 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "up", "k":
-		re.moveCursor(-1)
-		return re, nil
-
-	case "down", "j":
-		re.moveCursor(1)
-		return re, nil
-
-	case " ", "x":
-		// Toggle selection
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
-			if item.typ == itemCheckbox {
-				item.selected = !item.selected
-			} else if item.typ == itemTreeDir {
-				// Space on a dir toggles it as a path selection
-				item.selected = !item.selected
+		if sv.Cursor > 0 {
+			sv.MoveUp(len(*items), noSkip)
+		} else {
+			// At top of section — move to previous section
+			if re.focus > sectionTools {
+				re.focus--
+				newItems := re.activeItems()
+				newSv := re.activeScroll()
+				newSv.Cursor = len(*newItems) - 1
 			}
 		}
 		return re, nil
 
+	case "down", "j":
+		if sv.Cursor < len(*items)-1 {
+			sv.MoveDown(len(*items), noSkip)
+		} else {
+			// At bottom of section — move to next section
+			if re.focus < sectionAgents {
+				re.focus++
+				re.activeScroll().Cursor = 0
+			}
+		}
+		return re, nil
+
+	case "tab":
+		re.focus = (re.focus + 1) % 3
+		return re, nil
+
+	case "shift+tab":
+		re.focus = (re.focus + 2) % 3
+		return re, nil
+
+	case " ", "x":
+		if sv.Cursor >= 0 && sv.Cursor < len(*items) {
+			item := &(*items)[sv.Cursor]
+			item.selected = !item.selected
+		}
+		return re, nil
+
 	case "enter", "right", "l":
-		// Expand directory (or no-op on non-dirs)
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
+		if re.focus == sectionPaths && sv.Cursor >= 0 && sv.Cursor < len(*items) {
+			item := &(*items)[sv.Cursor]
 			if item.typ == itemTreeDir && !item.expanded {
-				re.expandDir(re.cursor)
+				re.expandPathDir(sv.Cursor)
 			}
 		}
 		return re, nil
 
 	case "left", "h":
-		// Collapse directory, or jump to parent
-		if re.cursor >= 0 && re.cursor < len(re.items) {
-			item := &re.items[re.cursor]
+		if re.focus == sectionPaths && sv.Cursor >= 0 && sv.Cursor < len(*items) {
+			item := &(*items)[sv.Cursor]
 			if item.typ == itemTreeDir && item.expanded {
-				// Collapse this dir
-				re.collapseDir(re.cursor)
+				re.collapsePathDir(sv.Cursor)
 			} else if item.indent > 0 {
-				// Jump up to parent dir
-				for i := re.cursor - 1; i >= 0; i-- {
-					if re.items[i].typ == itemTreeDir && re.items[i].indent < item.indent {
-						re.cursor = i
-						re.ensureVisible()
+				for i := sv.Cursor - 1; i >= 0; i-- {
+					if re.pathItems[i].typ == itemTreeDir && re.pathItems[i].indent < item.indent {
+						sv.Cursor = i
 						break
 					}
 				}
@@ -394,14 +374,12 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return re, nil
 
-	case "ctrl+s":
-		// Save rules
-		tools := re.selectedValues("tools")
-		paths := re.selectedValues("paths")
-		agents := re.selectedValues("agents")
+	case "ctrl+s", "s":
+		tools := re.selectedFrom(re.toolItems)
+		paths := re.selectedFrom(re.pathItems)
+		agents := re.selectedFrom(re.agentItems)
 
 		if len(tools) == 0 || len(paths) == 0 || len(agents) == 0 {
-			// Don't save if nothing selected
 			return re, nil
 		}
 
@@ -439,20 +417,20 @@ func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return re, nil
 	case "enter", " ":
 		if re.confirmCursor == 0 {
-			// Yes — reset and add more
 			re.phase = phaseEdit
 			re.deselectAll()
-			re.cursor = 1
+			re.focus = sectionTools
+			re.toolScroll.Cursor = 0
 			return re, nil
 		}
-		// No — back to dashboard
 		return re, func() tea.Msg {
 			return ruleEditorDoneMsg{rule: nil, ruleIndex: -1}
 		}
 	case "y", "Y":
 		re.phase = phaseEdit
 		re.deselectAll()
-		re.cursor = 1
+		re.focus = sectionTools
+		re.toolScroll.Cursor = 0
 		return re, nil
 	case "n", "N", "esc":
 		return re, func() tea.Msg {
@@ -462,52 +440,184 @@ func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return re, nil
 }
 
-// moveCursor moves up or down, skipping section headers.
-func (re *RuleEditor) moveCursor(delta int) {
-	next := re.cursor + delta
-	// Skip section headers
-	for next >= 0 && next < len(re.items) && re.items[next].typ == itemSectionHeader {
-		next += delta
-	}
-	if next >= 0 && next < len(re.items) {
-		re.cursor = next
-	}
-	re.ensureVisible()
-}
-
-// ensureVisible adjusts scrollTop so cursor is visible.
-func (re *RuleEditor) ensureVisible() {
-	visible := re.height - 8
-	if visible < 5 {
-		visible = 20
-	}
-	if re.cursor < re.scrollTop {
-		re.scrollTop = re.cursor
-	}
-	if re.cursor >= re.scrollTop+visible {
-		re.scrollTop = re.cursor - visible + 1
-	}
-}
-
-// selectedValues returns all selected values for a given section.
-func (re *RuleEditor) selectedValues(section string) []string {
+// selectedFrom returns selected values from an item list.
+func (re *RuleEditor) selectedFrom(items []listItem) []string {
 	var vals []string
-	for _, item := range re.items {
-		if item.section == section && item.selected {
+	for _, item := range items {
+		if item.selected {
 			vals = append(vals, item.value)
 		}
 	}
 	return vals
 }
 
-// deselectAll clears all selections.
+// deselectAll clears all selections in all sections.
 func (re *RuleEditor) deselectAll() {
-	for i := range re.items {
-		re.items[i].selected = false
+	for i := range re.toolItems {
+		re.toolItems[i].selected = false
+	}
+	for i := range re.pathItems {
+		re.pathItems[i].selected = false
+	}
+	for i := range re.agentItems {
+		re.agentItems[i].selected = false
 	}
 }
 
-// View renders the editor.
+// expandPathDir expands a directory in pathItems at the given index.
+func (re *RuleEditor) expandPathDir(idx int) {
+	item := &re.pathItems[idx]
+	if item.expanded {
+		return
+	}
+	item.expanded = true
+
+	parentPath := strings.TrimSuffix(item.value, "/**")
+	root := re.projectRoot
+	if root == "" {
+		root, _ = os.Getwd()
+	}
+
+	absDir := filepath.Join(root, parentPath)
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return
+	}
+
+	var dirEntries []os.DirEntry
+	var fileEntries []os.DirEntry
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") || DefaultIgnoreSet[e.Name()] {
+			continue
+		}
+		if e.IsDir() {
+			dirEntries = append(dirEntries, e)
+		} else {
+			fileEntries = append(fileEntries, e)
+		}
+	}
+
+	var newItems []listItem
+	for _, e := range dirEntries {
+		childPath := parentPath + "/" + e.Name()
+		var grandchildren []string
+		subEntries, err := os.ReadDir(filepath.Join(root, childPath))
+		if err == nil {
+			for _, se := range subEntries {
+				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
+					grandchildren = append(grandchildren, se.Name())
+				}
+			}
+		}
+		if len(grandchildren) > 0 {
+			newItems = append(newItems, listItem{
+				typ: itemTreeDir, label: e.Name(), value: childPath + "/**",
+				section: "paths", indent: item.indent + 1, children: grandchildren,
+			})
+		} else {
+			newItems = append(newItems, listItem{
+				typ: itemCheckbox, label: e.Name() + "/", value: childPath + "/**",
+				section: "paths", indent: item.indent + 1,
+			})
+		}
+	}
+	for _, e := range fileEntries {
+		childPath := parentPath + "/" + e.Name()
+		newItems = append(newItems, listItem{
+			typ: itemCheckbox, label: e.Name(), value: childPath,
+			section: "paths", indent: item.indent + 1,
+		})
+	}
+
+	if len(newItems) == 0 {
+		return
+	}
+	after := make([]listItem, len(re.pathItems[idx+1:]))
+	copy(after, re.pathItems[idx+1:])
+	re.pathItems = append(re.pathItems[:idx+1], newItems...)
+	re.pathItems = append(re.pathItems, after...)
+}
+
+// collapsePathDir removes child items from pathItems after the given index.
+func (re *RuleEditor) collapsePathDir(idx int) {
+	item := &re.pathItems[idx]
+	if !item.expanded {
+		return
+	}
+	item.expanded = false
+	removeStart := idx + 1
+	removeEnd := removeStart
+	for removeEnd < len(re.pathItems) && re.pathItems[removeEnd].indent > item.indent {
+		removeEnd++
+	}
+	re.pathItems = append(re.pathItems[:removeStart], re.pathItems[removeEnd:]...)
+}
+
+// autoExpandSelectedPaths expands directories to reveal pre-selected paths.
+// Called after buildSections to ensure existing rules are visible.
+func (re *RuleEditor) autoExpandSelectedPaths() {
+	// Collect existing paths, stripping the **/ prefix that NormalizeGlob adds.
+	// Rules store "**/tests/**" but tree items use "tests/**".
+	existingPaths := make(map[string]bool)
+	for _, r := range re.existingRules {
+		if r.Skill == re.skillName {
+			path := r.Path
+			path = strings.TrimPrefix(path, "**/")
+			existingPaths[path] = true
+		}
+	}
+	if len(existingPaths) == 0 {
+		return
+	}
+
+	// Iterate and expand any directory whose children include selected paths.
+	// Repeat until no more expansions needed (handles nested paths).
+	for round := 0; round < 10; round++ {
+		expanded := false
+		for i := 0; i < len(re.pathItems); i++ {
+			item := re.pathItems[i]
+			if item.typ != itemTreeDir || item.expanded {
+				continue
+			}
+			prefix := strings.TrimSuffix(item.value, "/**")
+			for path := range existingPaths {
+				if strings.HasPrefix(path, prefix+"/") && path != item.value {
+					re.expandPathDir(i)
+					expanded = true
+					break
+				}
+			}
+		}
+		if !expanded {
+			break
+		}
+	}
+
+	// Mark matching items as selected
+	for i := range re.pathItems {
+		if existingPaths[re.pathItems[i].value] {
+			re.pathItems[i].selected = true
+		}
+	}
+}
+
+// pathViewportHeight returns how many path rows fit on screen.
+// TOOLS and AGENTS are always fully visible; PATHS gets the rest.
+func (re *RuleEditor) pathViewportHeight() int {
+	// header(1) + summary(1) + blank(1) = 3
+	// tools header(1) + tools items + blank
+	// paths header(1)
+	// agents header(1) + agents items
+	// help(1) + blank(1) = 2
+	fixed := 3 + 1 + len(re.toolItems) + 1 + 1 + 1 + len(re.agentItems) + 2
+	available := re.height - fixed
+	if available < 3 {
+		available = 3
+	}
+	return available
+}
+
+// View renders three pinned sections: TOOLS (full), PATHS (scrollable), AGENTS (full).
 func (re RuleEditor) View() string {
 	if re.phase == phaseAnother {
 		return re.viewConfirm()
@@ -515,10 +625,9 @@ func (re RuleEditor) View() string {
 
 	header := re.styles.Header.Render(" Rules for: " + re.skillName + " ")
 
-	// Summary line
-	tools := re.selectedValues("tools")
-	paths := re.selectedValues("paths")
-	agents := re.selectedValues("agents")
+	tools := re.selectedFrom(re.toolItems)
+	paths := re.selectedFrom(re.pathItems)
+	agents := re.selectedFrom(re.agentItems)
 	count := len(tools) * len(paths) * len(agents)
 
 	summaryStyle := re.styles.Description
@@ -530,39 +639,22 @@ func (re RuleEditor) View() string {
 		len(tools), len(paths), len(agents), count,
 	))
 
-	// Render list
-	var b strings.Builder
-	visible := re.height - 8
-	if visible < 5 {
-		visible = len(re.items)
-	}
-	end := re.scrollTop + visible
-	if end > len(re.items) {
-		end = len(re.items)
-	}
+	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
+	uncheck := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
+	treeArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24"))
+	activeSec := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#A78BFA"))
 
-	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))                   // green
-	uncheck := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))                 // gray
-	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA")) // violet
-	treeArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24"))               // yellow
-
-	for i := re.scrollTop; i < end; i++ {
-		item := re.items[i]
-		focused := i == re.cursor
+	renderItem := func(item listItem, focused bool) string {
 		indent := strings.Repeat("  ", item.indent)
-
 		var line string
 		switch item.typ {
-		case itemSectionHeader:
-			line = "  " + sectionStyle.Render("── "+item.label+" ──")
-
 		case itemCheckbox:
 			box := uncheck.Render("[ ]")
 			if item.selected {
 				box = check.Render("[x]")
 			}
 			line = "  " + indent + box + " " + item.label
-
 		case itemTreeDir:
 			box := uncheck.Render("[ ]")
 			if item.selected {
@@ -574,21 +666,67 @@ func (re RuleEditor) View() string {
 			}
 			line = "  " + indent + box + " " + arrow + " " + item.label + "/"
 		}
-
 		if focused {
 			line = re.styles.Selected.Render(stripAnsi(line))
 		}
-
-		b.WriteString(line + "\n")
+		return line
 	}
 
-	// Help bar
+	var b strings.Builder
+
+	// ── TOOLS (always fully visible) ──
+	if re.focus == sectionTools {
+		b.WriteString("  " + activeSec.Render(" TOOLS ") + "\n")
+	} else {
+		b.WriteString("  " + sectionStyle.Render("── TOOLS ──") + "\n")
+	}
+	for i, item := range re.toolItems {
+		focused := re.focus == sectionTools && i == re.toolScroll.Cursor
+		b.WriteString(renderItem(item, focused) + "\n")
+	}
+
+	// ── PATHS (scrollable) ──
+	if re.focus == sectionPaths {
+		b.WriteString("  " + activeSec.Render(" PATHS ") + "\n")
+	} else {
+		b.WriteString("  " + sectionStyle.Render("── PATHS ──") + "\n")
+	}
+	pathVP := re.pathViewportHeight()
+	pathStart, pathEnd := re.pathScroll.VisibleRange(len(re.pathItems), pathVP)
+	for i := pathStart; i < pathEnd; i++ {
+		focused := re.focus == sectionPaths && i == re.pathScroll.Cursor
+		b.WriteString(renderItem(re.pathItems[i], focused) + "\n")
+	}
+	if len(re.pathItems) > pathVP {
+		indicator := re.styles.Description.Render(
+			fmt.Sprintf("  [%d/%d]", re.pathScroll.Cursor+1, len(re.pathItems)))
+		if pathStart > 0 {
+			indicator += re.styles.Description.Render(" ↑")
+		}
+		if pathEnd < len(re.pathItems) {
+			indicator += re.styles.Description.Render(" ↓")
+		}
+		b.WriteString(indicator + "\n")
+	}
+
+	// ── AGENTS (always fully visible) ──
+	if re.focus == sectionAgents {
+		b.WriteString("  " + activeSec.Render(" AGENTS ") + "\n")
+	} else {
+		b.WriteString("  " + sectionStyle.Render("── AGENTS ──") + "\n")
+	}
+	for i, item := range re.agentItems {
+		focused := re.focus == sectionAgents && i == re.agentScroll.Cursor
+		b.WriteString(renderItem(item, focused) + "\n")
+	}
+
 	helpStyle := re.styles.Help
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
 	help := keyStyle.Render("↑↓") + helpStyle.Render(" navigate") + "  " +
+		keyStyle.Render("tab") + helpStyle.Render(" section") + "  " +
 		keyStyle.Render("space") + helpStyle.Render(" toggle") + "  " +
 		keyStyle.Render("←→") + helpStyle.Render(" expand/collapse") + "  " +
-		keyStyle.Render("ctrl+s") + helpStyle.Render(" save") + "  " +
+		keyStyle.Render("s") + helpStyle.Render(" save") + "  " +
 		keyStyle.Render("esc") + helpStyle.Render(" cancel")
 
 	return header + "\n" + summary + "\n\n" + b.String() + "\n" + help
@@ -598,9 +736,9 @@ func (re RuleEditor) View() string {
 func (re RuleEditor) viewConfirm() string {
 	header := re.styles.Header.Render(" Rules for: " + re.skillName + " ")
 
-	tools := re.selectedValues("tools")
-	paths := re.selectedValues("paths")
-	agents := re.selectedValues("agents")
+	tools := re.selectedFrom(re.toolItems)
+	paths := re.selectedFrom(re.pathItems)
+	agents := re.selectedFrom(re.agentItems)
 	count := len(tools) * len(paths) * len(agents)
 
 	done := re.styles.Success.Render(fmt.Sprintf("  ✓ %d rule(s) added!", count))
@@ -619,9 +757,9 @@ func (re RuleEditor) viewConfirm() string {
 
 // Result returns the currently configured rules (for testing).
 func (re RuleEditor) Result() []engine.Rule {
-	tools := re.selectedValues("tools")
-	paths := re.selectedValues("paths")
-	agents := re.selectedValues("agents")
+	tools := re.selectedFrom(re.toolItems)
+	paths := re.selectedFrom(re.pathItems)
+	agents := re.selectedFrom(re.agentItems)
 	var rules []engine.Rule
 	for _, tool := range tools {
 		for _, path := range paths {

@@ -395,6 +395,212 @@ func TestDoctor_UnsupportedConfigVersion(t *testing.T) {
 	}
 }
 
+// TestDoctor_FailsWhenAgentConfigUnreadable verifies that doctor reports FAIL
+// when a detected agent's config file exists but is unreadable.
+func TestDoctor_FailsWhenAgentConfigUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Make settings.json unreadable.
+	settingsPath := filepath.Join(dir, ".claude", "settings.json")
+	err := os.Chmod(settingsPath, 0o000)
+	if err != nil {
+		t.Fatalf("failed to make settings.json unreadable: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(settingsPath, 0o644) })
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for unreadable config, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] Hook installed: claude") {
+		t.Errorf("expected hook FAIL for unreadable config, got: %s", output)
+	}
+}
+
+// TestDoctor_CursorDetectedNoConfig verifies that doctor reports FAIL when
+// .cursor/ exists but hooks.json does not exist.
+func TestDoctor_CursorDetectedNoConfig(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Create .cursor/ directory but no hooks.json.
+	cursorDir := filepath.Join(dir, ".cursor")
+	err := os.MkdirAll(cursorDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create .cursor directory: %v", err)
+	}
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for missing cursor hooks, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] Hook installed: cursor") {
+		t.Errorf("expected cursor hook FAIL, got: %s", output)
+	}
+	if !strings.Contains(output, "config file not found") {
+		t.Errorf("expected 'config file not found' detail, got: %s", output)
+	}
+}
+
+// TestDoctor_MalformedGlobalConfig verifies that doctor reports FAIL when
+// config.json contains invalid JSON.
+func TestDoctor_MalformedGlobalConfig(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Overwrite config.json with malformed JSON.
+	err := os.WriteFile(
+		filepath.Join(dir, ".care-bare", "config.json"),
+		[]byte("{invalid json"),
+		0o644,
+	)
+	if err != nil {
+		t.Fatalf("failed to write malformed config: %v", err)
+	}
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for malformed config.json, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] Config validity: config.json") {
+		t.Errorf("expected config.json FAIL, got: %s", output)
+	}
+	if !strings.Contains(output, "invalid JSON") {
+		t.Errorf("expected 'invalid JSON' detail, got: %s", output)
+	}
+}
+
+// TestDoctor_EnforcementConfigPermissionDenied verifies that doctor reports
+// FAIL when enforcement config exists but cannot be read due to permissions.
+func TestDoctor_EnforcementConfigPermissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Make skill_enforcement.json unreadable.
+	cfgPath := filepath.Join(dir, ".care-bare", "skill_enforcement.json")
+	err := os.Chmod(cfgPath, 0o000)
+	if err != nil {
+		t.Fatalf("failed to make config unreadable: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(cfgPath, 0o644) })
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for unreadable config, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] Config validity: skill_enforcement.json") {
+		t.Errorf("expected enforcement config FAIL, got: %s", output)
+	}
+	if !strings.Contains(output, "cannot read") {
+		t.Errorf("expected 'cannot read' detail, got: %s", output)
+	}
+}
+
+// TestDoctor_StateDirectoryIsFile verifies that doctor reports FAIL when
+// .care-bare/state is a file instead of a directory.
+func TestDoctor_StateDirectoryIsFile(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Remove the state directory and replace it with a file.
+	stateDir := filepath.Join(dir, ".care-bare", "state")
+	err := os.RemoveAll(stateDir)
+	if err != nil {
+		t.Fatalf("failed to remove state dir: %v", err)
+	}
+	err = os.WriteFile(stateDir, []byte("not a dir"), 0o644)
+	if err != nil {
+		t.Fatalf("failed to create state as file: %v", err)
+	}
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for state file, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] State directory") {
+		t.Errorf("expected state directory FAIL, got: %s", output)
+	}
+	if !strings.Contains(output, "not a directory") {
+		t.Errorf("expected 'not a directory' detail, got: %s", output)
+	}
+}
+
+// TestDoctor_GlobalConfigPermissionDenied verifies that doctor reports FAIL
+// when config.json exists but cannot be read due to permissions.
+func TestDoctor_GlobalConfigPermissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Make config.json unreadable.
+	cfgPath := filepath.Join(dir, ".care-bare", "config.json")
+	err := os.Chmod(cfgPath, 0o000)
+	if err != nil {
+		t.Fatalf("failed to make config unreadable: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(cfgPath, 0o644) })
+
+	output, execErr := runDoctorInDir(t, dir)
+
+	if execErr == nil {
+		t.Fatal("expected doctor to return error for unreadable config, got nil")
+	}
+
+	if !strings.Contains(output, "[FAIL] Config validity: config.json") {
+		t.Errorf("expected config.json FAIL, got: %s", output)
+	}
+	if !strings.Contains(output, "cannot read") {
+		t.Errorf("expected 'cannot read' detail, got: %s", output)
+	}
+}
+
+// TestDoctor_AbsoluteSkillPath verifies that doctor handles absolute skill
+// paths in config.json correctly.
+func TestDoctor_AbsoluteSkillPath(t *testing.T) {
+	dir := t.TempDir()
+	setupHealthyProject(t, dir)
+
+	// Create an absolute skill path with a skill file.
+	absSkillDir := filepath.Join(dir, "shared-skills", "my-skill")
+	err := os.MkdirAll(absSkillDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	skillContent := "---\nname: my-skill\ndescription: A shared skill\n---\nShared skill."
+	err = os.WriteFile(filepath.Join(absSkillDir, "SKILL.md"), []byte(skillContent), 0o644)
+	if err != nil {
+		t.Fatalf("failed to write skill file: %v", err)
+	}
+
+	// Update config.json to include the absolute skill path.
+	cfg := engine.GlobalConfig{
+		SkillPaths:    []string{filepath.Join(dir, "shared-skills")},
+		StateTTLHours: 24,
+		DefaultAgent:  "*",
+	}
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	err = os.WriteFile(filepath.Join(dir, ".care-bare", "config.json"), data, 0o644)
+	if err != nil {
+		t.Fatalf("failed to write config.json: %v", err)
+	}
+
+	output, _ := runDoctorInDir(t, dir)
+
+	if !strings.Contains(output, "[PASS] Skill path:") {
+		t.Errorf("expected absolute skill path PASS, got: %s", output)
+	}
+}
+
 // TestDoctor_NoConfigFilesIsAcceptable verifies that doctor does not fail
 // when no config files exist (defaults are used).
 func TestDoctor_NoConfigFilesIsAcceptable(t *testing.T) {

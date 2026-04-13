@@ -6,6 +6,7 @@ package adapter
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
@@ -113,8 +114,12 @@ type MergedProject struct {
 
 // ScanAllProjects discovers projects from ALL registered adapters, merges
 // duplicates (same path used by multiple agents), and returns sorted results.
-// This is the single entry point for project discovery — all agent-specific
+// This is the single entry point for project discovery -- all agent-specific
 // logic stays inside each adapter's ScanProjects().
+//
+// After merging, if a repo has multiple local paths, ScanAllProjects checks
+// for a preferred path in ~/.care-bare/repos/{hash}-{slug}/preferences.json
+// and uses it as the primary Path when valid.
 func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
 	// Key by repo slug (Git identity), not by local path
 	byRepo := make(map[string]*MergedProject)
@@ -173,10 +178,34 @@ func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
 		}
 	}
 
+	// Resolve preferred paths for multi-checkout repos.
+	homeDir := registryDefaultHomeDir
+	if homeDir == "" {
+		homeDir, _ = os.UserHomeDir()
+	}
+
 	var result []MergedProject
 	for _, p := range byRepo {
 		sort.Strings(p.Agents)
 		sort.Strings(p.LocalPaths)
+		// Apply preferred path for repos with multiple checkouts.
+		if len(p.LocalPaths) > 1 && p.RepoSlug != "" && homeDir != "" {
+			repo := &engine.RepoIdentity{
+				Slug: p.RepoSlug,
+				Hash: engine.ShortHash(p.RepoSlug),
+			}
+			repoDir := engine.RepoConfigDir(homeDir, repo)
+			prefs, err := engine.LoadRepoPreferences(repoDir)
+			if err == nil && prefs.PreferredPath != "" {
+				// Verify the preferred path is among the discovered paths.
+				for _, lp := range p.LocalPaths {
+					if lp == prefs.PreferredPath {
+						p.Path = prefs.PreferredPath
+						break
+					}
+				}
+			}
+		}
 		result = append(result, *p)
 	}
 	sort.Slice(result, func(i, j int) bool {

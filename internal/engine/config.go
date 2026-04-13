@@ -170,45 +170,150 @@ func loadConfigFile(path string) ([]MatchedRule, error) {
 	return rules, nil
 }
 
-// LoadGlobalConfig reads the global config.json from the project root.
-// Returns defaults if the file does not exist.
-func LoadGlobalConfig(projectRoot string) (*GlobalConfig, error) {
-	defaults := &GlobalConfig{
+// RepoPreferences holds per-repo user preferences such as the preferred
+// local checkout path. Stored at ~/.care-bare/repos/{hash}-{slug}/preferences.json.
+type RepoPreferences struct {
+	PreferredPath string `json:"preferred_path"`
+}
+
+// LoadRepoPreferences reads preferences.json from a repo config directory.
+// Returns an empty RepoPreferences (not nil) if the file does not exist.
+func LoadRepoPreferences(repoConfigDir string) (*RepoPreferences, error) {
+	prefsPath := filepath.Join(repoConfigDir, "preferences.json")
+	_, err := os.Stat(prefsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &RepoPreferences{}, nil
+		}
+		return &RepoPreferences{}, nil
+	}
+
+	data, err := os.ReadFile(prefsPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading preferences %s: %w", prefsPath, err)
+	}
+
+	var prefs RepoPreferences
+	err = json.Unmarshal(data, &prefs)
+	if err != nil {
+		return nil, fmt.Errorf("malformed JSON in %s: %w", prefsPath, err)
+	}
+
+	return &prefs, nil
+}
+
+// SaveRepoPreferences writes preferences.json to a repo config directory.
+// Creates the directory if it does not exist.
+func SaveRepoPreferences(repoConfigDir string, prefs *RepoPreferences) error {
+	err := os.MkdirAll(repoConfigDir, 0o755)
+	if err != nil {
+		return fmt.Errorf("creating repo config dir %s: %w", repoConfigDir, err)
+	}
+
+	data, err := json.MarshalIndent(prefs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling preferences: %w", err)
+	}
+
+	prefsPath := filepath.Join(repoConfigDir, "preferences.json")
+	err = os.WriteFile(prefsPath, data, 0o644)
+	if err != nil {
+		return fmt.Errorf("writing preferences %s: %w", prefsPath, err)
+	}
+
+	return nil
+}
+
+// globalConfigDefaults returns a GlobalConfig with sensible defaults.
+func globalConfigDefaults() *GlobalConfig {
+	return &GlobalConfig{
 		SkillPaths:     []string{".claude/skills"},
 		StateTTLHours:  24,
 		DefaultAgent:   "*",
 		IgnorePatterns: []string{".git", "node_modules", "vendor", "dist", ".next", "__pycache__", ".venv", "build", "target"},
 	}
+}
 
-	configPath := filepath.Join(projectRoot, configDirName, "config.json")
-	_, err := os.Stat(configPath)
+// LoadGlobalDefaults reads ~/.care-bare/config.json (machine-level defaults).
+// Returns built-in defaults if the file does not exist.
+func LoadGlobalDefaults() (*GlobalConfig, error) {
+	defaults := globalConfigDefaults()
+
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		// File doesn't exist or can't be read -- return defaults.
+		slog.Warn("cannot determine home directory for global defaults", "error", err)
 		return defaults, nil
 	}
 
-	data, err := os.ReadFile(configPath)
+	configPath := filepath.Join(homeDir, configDirName, "config.json")
+	return loadGlobalConfigFile(configPath, defaults)
+}
+
+// LoadGlobalConfig reads project-level config.json from the project root and
+// merges it on top of the global defaults from ~/.care-bare/config.json.
+// Project-level non-zero fields override global values.
+// Returns defaults if neither file exists.
+func LoadGlobalConfig(projectRoot string) (*GlobalConfig, error) {
+	// Load global defaults first.
+	base, err := LoadGlobalDefaults()
+	if err != nil {
+		return nil, fmt.Errorf("loading global defaults: %w", err)
+	}
+
+	// Load project-level config on top.
+	configPath := filepath.Join(projectRoot, configDirName, "config.json")
+	project, err := loadGlobalConfigFile(configPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("loading project config %s: %w", configPath, err)
+	}
+
+	// If no project file was found, return global defaults.
+	if project == nil {
+		return base, nil
+	}
+
+	// Merge: project non-zero fields override global.
+	merged := *base
+	if len(project.SkillPaths) > 0 {
+		merged.SkillPaths = project.SkillPaths
+	}
+	if project.StateTTLHours != 0 {
+		merged.StateTTLHours = project.StateTTLHours
+	}
+	// SkillTTLMinutes: 0 means "no expiry" so we only override when project
+	// explicitly sets a positive value.
+	if project.SkillTTLMinutes > 0 {
+		merged.SkillTTLMinutes = project.SkillTTLMinutes
+	}
+	if project.DefaultAgent != "" {
+		merged.DefaultAgent = project.DefaultAgent
+	}
+	if len(project.IgnorePatterns) > 0 {
+		merged.IgnorePatterns = project.IgnorePatterns
+	}
+
+	return &merged, nil
+}
+
+// loadGlobalConfigFile reads a single config.json file. Returns nil, nil when
+// the file does not exist (and defaults is nil). When defaults is non-nil, missing
+// files return defaults. Malformed JSON is always an error.
+func loadGlobalConfigFile(path string, defaults *GlobalConfig) (*GlobalConfig, error) {
+	_, err := os.Stat(path)
+	if err != nil {
+		// File doesn't exist or can't be read.
+		return defaults, nil
+	}
+
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return defaults, nil
 	}
 
 	var cfg GlobalConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("malformed JSON in %s: %w", configPath, err)
-	}
-
-	// Fill in defaults for zero-value fields.
-	if len(cfg.SkillPaths) == 0 {
-		cfg.SkillPaths = defaults.SkillPaths
-	}
-	if cfg.StateTTLHours == 0 {
-		cfg.StateTTLHours = defaults.StateTTLHours
-	}
-	if cfg.DefaultAgent == "" {
-		cfg.DefaultAgent = defaults.DefaultAgent
-	}
-	if len(cfg.IgnorePatterns) == 0 {
-		cfg.IgnorePatterns = defaults.IgnorePatterns
+	err = json.Unmarshal(data, &cfg)
+	if err != nil {
+		return nil, fmt.Errorf("malformed JSON in %s: %w", path, err)
 	}
 
 	return &cfg, nil

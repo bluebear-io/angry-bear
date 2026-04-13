@@ -63,19 +63,19 @@ func TestRepoConfigDir(t *testing.T) {
 }
 
 func TestShortHash_Deterministic(t *testing.T) {
-	h1 := shortHash("Blue-Bear-Security/blueden")
-	h2 := shortHash("Blue-Bear-Security/blueden")
+	h1 := ShortHash("Blue-Bear-Security/blueden")
+	h2 := ShortHash("Blue-Bear-Security/blueden")
 	if h1 != h2 {
-		t.Errorf("shortHash not deterministic: %q != %q", h1, h2)
+		t.Errorf("ShortHash not deterministic: %q != %q", h1, h2)
 	}
 	if len(h1) != 8 {
-		t.Errorf("shortHash length = %d, want 8", len(h1))
+		t.Errorf("ShortHash length = %d, want 8", len(h1))
 	}
 }
 
 func TestShortHash_Different(t *testing.T) {
-	h1 := shortHash("Blue-Bear-Security/blueden")
-	h2 := shortHash("Blue-Bear-Security/baloo")
+	h1 := ShortHash("Blue-Bear-Security/blueden")
+	h2 := ShortHash("Blue-Bear-Security/baloo")
 	if h1 == h2 {
 		t.Errorf("different inputs produced same hash: %q", h1)
 	}

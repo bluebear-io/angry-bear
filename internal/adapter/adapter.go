@@ -30,6 +30,8 @@ type HookAdapter interface {
 	ConfigPath() string
 	// InstallHook modifies the agent's global config to add a care-bare hook.
 	InstallHook(projectDir string) error
+	// UninstallHook removes all care-bare hooks from the agent's global config.
+	UninstallHook() error
 	// DetectSkillInvocation checks if the input represents a skill being invoked.
 	DetectSkillInvocation(input *HookInput) (skillName string, isSkill bool)
 	// ScanProjects discovers all projects that have sessions with this agent.

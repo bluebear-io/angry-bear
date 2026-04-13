@@ -222,6 +222,70 @@ func careBareHookExists(preToolUse []any) bool {
 	return false
 }
 
+// UninstallHook removes all care-bare hooks from Claude Code's global settings.
+func (a *ClaudeAdapter) UninstallHook() error {
+	settingsPath := a.GlobalConfigPath()
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading settings.json: %w", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("parsing settings.json: %w", err)
+	}
+
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	preToolUse, ok := hooks["PreToolUse"].([]any)
+	if !ok {
+		return nil
+	}
+
+	// Filter out entries containing care-bare hook commands
+	var filtered []any
+	for _, entry := range preToolUse {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			filtered = append(filtered, entry)
+			continue
+		}
+		hooksList, ok := entryMap["hooks"].([]any)
+		if !ok {
+			filtered = append(filtered, entry)
+			continue
+		}
+		hasCareBare := false
+		for _, hook := range hooksList {
+			hookMap, ok := hook.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := hookMap["command"].(string); ok && strings.Contains(cmd, "care-bare hook") {
+				hasCareBare = true
+				break
+			}
+		}
+		if !hasCareBare {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	hooks["PreToolUse"] = filtered
+	output, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling settings.json: %w", err)
+	}
+	output = append(output, '\n')
+	return os.WriteFile(settingsPath, output, 0o644)
+}
+
 // DetectSkillInvocation checks if the parsed input represents a Skill tool invocation.
 // If tool_name is "Skill", it extracts the skill name from tool_input.skill.
 // Returns the skill name and true if found, or ("", false) otherwise.

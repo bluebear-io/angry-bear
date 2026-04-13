@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Blue-Bear-Security/care-bare/internal/adapter"
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
 	"github.com/Blue-Bear-Security/care-bare/internal/tui"
@@ -65,9 +64,6 @@ Examples:
 // interactive mode. With a skill name arg, uses flags for one-liner mode.
 func runAdd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-
-	// Auto-install hooks on first use
-	ensureHooksInstalled()
 
 	var skillName string
 	var tools, paths, agents []string
@@ -414,27 +410,4 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	}
 
 	return selectedSkill, tools, paths, agents, nil
-}
-
-// ensureHooksInstalled checks if care-bare hooks are installed in agent configs.
-// If not, installs them silently. Called on first `care-bare add`.
-func ensureHooksInstalled() {
-	registry := adapter.NewRegistry()
-	for _, name := range registry.Names() {
-		a, err := registry.Get(name)
-		if err != nil {
-			continue
-		}
-		// Check if agent is present on this machine
-		home, err := os.UserHomeDir()
-		if err != nil {
-			continue
-		}
-		configDir := filepath.Join(home, "."+name)
-		if _, err := os.Stat(configDir); err != nil {
-			continue
-		}
-		// Install hook (idempotent)
-		_ = a.InstallHook("")
-	}
 }

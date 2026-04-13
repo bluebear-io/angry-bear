@@ -416,4 +416,3 @@ func checkSingleSkillPath(displayPath, absPath string) checkResult {
 		Detail: fmt.Sprintf("found %d skills", len(skills)),
 	}
 }
-

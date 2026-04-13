@@ -18,21 +18,22 @@ import (
 
 // Dashboard is a split-pane view: skills (left), rules+logs (right).
 type Dashboard struct {
-	skills       []scanner.Skill
-	config       engine.Config
-	loadedSkills map[string]*SkillStatus
-	eventLines   []string // Recent event log lines
-	projectRoot  string   // For reading events.log
-	skillCursor  int
-	ruleCursor   int
-	logCursor    int
-	focusPanel   int // 0=skills, 1=rules, 2=event log
-	editingPath  bool
-	pathBuffer   string
-	pathCurPos   int
-	width        int
-	height       int
-	styles       Styles
+	skills           []scanner.Skill
+	config           engine.Config
+	loadedSkills     map[string]*SkillStatus
+	eventLines       []string // Recent event log lines
+	projectRoot      string   // For reading events.log
+	skillCursor      int
+	ruleCursor       int
+	logCursor        int
+	logProjectFilter string // "" = all projects, or specific project name
+	focusPanel       int    // 0=skills, 1=rules, 2=event log
+	editingPath      bool
+	pathBuffer       string
+	pathCurPos       int
+	width            int
+	height           int
+	styles           Styles
 }
 
 // NewDashboard creates a new split-pane Dashboard.
@@ -245,6 +246,37 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			return d, func() tea.Msg { return saveRequestMsg{} }
 
+		case "f":
+			// Cycle project filter: all → project1 → project2 → ... → all
+			if d.focusPanel == 2 {
+				projects := d.uniqueLogProjects()
+				if len(projects) == 0 {
+					return d, nil
+				}
+				if d.logProjectFilter == "" {
+					d.logProjectFilter = projects[0]
+				} else {
+					// Find current and move to next
+					found := false
+					for i, p := range projects {
+						if p == d.logProjectFilter {
+							if i+1 < len(projects) {
+								d.logProjectFilter = projects[i+1]
+							} else {
+								d.logProjectFilter = "" // Back to all
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						d.logProjectFilter = ""
+					}
+				}
+				d.logCursor = 0
+			}
+			return d, nil
+
 		case "P":
 			// Switch project — return to project picker
 			return d, func() tea.Msg { return switchProjectMsg{} }
@@ -346,12 +378,16 @@ func (d Dashboard) View() string {
 	}
 
 	// Split right panel: top = rules (60%), bottom = event log (40%)
-	rulesHeight := panelHeight * 55 / 100
-	logsHeight := panelHeight - rulesHeight - 3 // account for borders
+	rulesHeight := panelHeight * 50 / 100
+	logsHeight := panelHeight - rulesHeight
 
 	left := d.renderSkillList(leftWidth, panelHeight)
 	rulesContent := d.renderRulePanel(rightWidth, rulesHeight)
 	logsContent := d.renderEventLog(rightWidth, logsHeight)
+
+	// Combine rules + divider + logs into one right panel
+	divider := d.styles.Divider.Render(strings.Repeat("─", rightWidth))
+	rightContent := rulesContent + "\n" + divider + "\n" + logsContent
 
 	activeBorder := lipgloss.Color("#7C3AED")
 	dimBorder := lipgloss.Color("#374151")
@@ -371,27 +407,14 @@ func (d Dashboard) View() string {
 		Height(panelHeight).
 		Render(left)
 
-	rulesPanel := lipgloss.NewStyle().
+	rightPanel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(rightBorderColor).
 		Width(rightWidth).
-		Height(rulesHeight).
-		Render(rulesContent)
+		Height(panelHeight).
+		Render(rightContent)
 
-	logsBorderColor := lipgloss.Color("#374151")
-	if d.focusPanel == 2 {
-		logsBorderColor = activeBorder
-	}
-	logsPanel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(logsBorderColor).
-		Width(rightWidth).
-		Height(logsHeight).
-		Render(logsContent)
-
-	rightCombined := lipgloss.JoinVertical(lipgloss.Left, rulesPanel, logsPanel)
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightCombined)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, " ", rightPanel)
 }
 
 // renderSkillList renders the left panel.
@@ -605,36 +628,139 @@ func wordWrap(text string, width int) string {
 }
 
 // renderEventLog renders the bottom-right panel showing recent hook events.
+// Columns auto-size based on actual data width.
 func (d Dashboard) renderEventLog(width, height int) string {
-	title := d.styles.RuleHeader.Render("  EVENT LOG") + "\n"
+	filterLabel := ""
+	if d.logProjectFilter != "" {
+		filterLabel = " [" + d.logProjectFilter + "]"
+	}
+	title := d.styles.RuleHeader.Render("  EVENT LOG"+filterLabel) + "\n"
 
 	if len(d.eventLines) == 0 {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	var b strings.Builder
-
-	// Column widths
-	colAct := 7
-	colAgent := 8
-	colTool := 8
-	colSkill := 16
-	pathWidth := width - 75
-	if pathWidth < 10 {
-		pathWidth = 10
+	// Parse all visible events into structured rows
+	type eventRow struct {
+		act, project, sess, agent, tool, skill, path string
+		lineIdx                                      int
+		isBlock, isLoad                              bool
 	}
 
-	// Header
-	title += d.styles.Description.Render(fmt.Sprintf("  %-*s %-13s %-6s %-*s %-*s %-*s %-*s",
-		colAct, "ACTION", "PROJECT", "SESS", colAgent, "AGENT", colTool, "TOOL", colSkill, "SKILL", pathWidth, "PATH")) + "\n"
-	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
+	var allRows []eventRow
+	for i, line := range d.eventLines {
+		if d.logProjectFilter != "" {
+			parts := strings.Split(line, " | ")
+			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
+				continue
+			}
+		}
 
+		parts := strings.Split(line, " | ")
+		for j := range parts {
+			parts[j] = strings.TrimSpace(parts[j])
+		}
+
+		r := eventRow{lineIdx: i}
+		if len(parts) >= 8 {
+			r.project = parts[1]
+			r.agent = parts[2]
+			r.sess = parts[3]
+			r.tool = parts[4]
+			r.path = parts[5]
+			r.skill = parts[7]
+		} else if len(parts) >= 7 {
+			r.agent = parts[1]
+			r.sess = parts[2]
+			r.tool = parts[3]
+			r.path = parts[4]
+			r.skill = parts[6]
+		} else if len(parts) >= 6 {
+			r.agent = parts[1]
+			r.tool = parts[2]
+			r.path = parts[3]
+			r.skill = parts[5]
+		} else {
+			continue
+		}
+
+		r.isBlock = strings.Contains(line, "| BLOCK")
+		r.isLoad = strings.Contains(line, "SKILL-LOAD")
+
+		if r.isBlock {
+			r.act = "BLOCK"
+		} else if r.isLoad {
+			r.act = "LOAD"
+			r.tool = "—"
+			r.path = ""
+		} else {
+			r.act = "ALLOW"
+		}
+
+		allRows = append(allRows, r)
+	}
+
+	if len(allRows) == 0 {
+		return title + "\n" + d.styles.Description.Render("  No matching events.")
+	}
+
+	// Calculate max width for each column from actual data
+	colW := map[string]int{
+		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
+	}
+	for _, r := range allRows {
+		if len(r.act) > colW["act"] {
+			colW["act"] = len(r.act)
+		}
+		if len(r.project) > colW["project"] {
+			colW["project"] = len(r.project)
+		}
+		if len(r.sess) > colW["sess"] {
+			colW["sess"] = len(r.sess)
+		}
+		if len(r.agent) > colW["agent"] {
+			colW["agent"] = len(r.agent)
+		}
+		if len(r.tool) > colW["tool"] {
+			colW["tool"] = len(r.tool)
+		}
+		if len(r.skill) > colW["skill"] {
+			colW["skill"] = len(r.skill)
+		}
+		if len(r.path) > colW["path"] {
+			colW["path"] = len(r.path)
+		}
+	}
+
+	// Cap path width to fill remaining space
+	used := colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
+	maxPath := width - used - 4
+	if maxPath < 10 {
+		maxPath = 10
+	}
+	if colW["path"] > maxPath {
+		colW["path"] = maxPath
+	}
+
+	// Build format string
+	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
+		colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
+
+	// Header
+	title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
+
+	// Scrolling
+	var b strings.Builder
 	visible := height - 4
 	if visible < 3 {
 		visible = 3
 	}
 
-	start := len(d.eventLines) - visible
+	if d.logCursor >= len(allRows) && len(allRows) > 0 {
+		d.logCursor = len(allRows) - 1
+	}
+	start := len(allRows) - visible
 	if start < 0 {
 		start = 0
 	}
@@ -647,116 +773,110 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 	}
 	end := start + visible
-	if end > len(d.eventLines) {
-		end = len(d.eventLines)
+	if end > len(allRows) {
+		end = len(allRows)
 	}
 
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
 
-	for idx := start; idx < end; idx++ {
-		line := d.eventLines[idx]
-		parts := strings.Split(line, " | ")
-		if len(parts) < 6 {
-			continue
-		}
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
-		}
+	for fi := start; fi < end; fi++ {
+		r := allRows[fi]
 
-		// 8-column format: timestamp|project|agent|session|tool|path|action|skill
-		project := ""
-		agent := ""
-		sess := ""
-		tool := ""
-		path := ""
-		skill := ""
-		if len(parts) >= 8 {
-			project = parts[1]
-			agent = parts[2]
-			sess = parts[3]
-			tool = parts[4]
-			path = parts[5]
-			skill = parts[7]
-		} else if len(parts) >= 7 {
-			// 7-column (old): timestamp|agent|session|tool|path|action|skill
-			agent = parts[1]
-			sess = parts[2]
-			tool = parts[3]
-			path = parts[4]
-			skill = parts[6]
-		} else if len(parts) >= 6 {
-			agent = parts[1]
-			tool = parts[2]
-			path = parts[3]
-			skill = parts[5]
+		// Truncate path
+		path := r.path
+		if len(path) > colW["path"] {
+			path = "…" + path[len(path)-colW["path"]+1:]
 		}
 
-
-		if len(path) > pathWidth {
-			path = "…" + path[len(path)-pathWidth+1:]
-		}
-
-		// Build plain text row with consistent widths
-		var act string
 		var sty lipgloss.Style
-		if strings.Contains(line, "| BLOCK") {
-			act = "BLOCK"
+		if r.isBlock {
 			sty = red
-		} else if strings.Contains(line, "SKILL-LOAD") {
-			act = "LOAD"
-			tool = "—"
-			path = ""
+		} else if r.isLoad {
 			sty = cyan
 		} else {
-			act = "ALLOW"
 			sty = green
 		}
 
-		plainRow := fmt.Sprintf("  %-*s %-13s %-6s %-*s %-*s %-*s %-*s", colAct, act, project, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
+		focused := fi == d.logCursor && d.focusPanel == 2
+		plain := fmt.Sprintf(fmtStr, r.act, r.project, r.sess, r.agent, r.tool, r.skill, path)
 
-		focused := idx == d.logCursor && d.focusPanel == 2
 		if focused {
-			b.WriteString(d.styles.Selected.Render("▸" + plainRow[1:]) + "\n")
+			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")
 		} else {
-			b.WriteString(sty.Render(plainRow) + "\n")
+			b.WriteString(sty.Render(plain) + "\n")
 		}
 	}
 
 	return title + b.String()
 }
 
+// uniqueLogProjects extracts unique project names from event lines.
+func (d *Dashboard) uniqueLogProjects() []string {
+	seen := make(map[string]bool)
+	var projects []string
+	for _, line := range d.eventLines {
+		parts := strings.Split(line, " | ")
+		if len(parts) >= 2 {
+			proj := strings.TrimSpace(parts[1])
+			if proj != "" && !seen[proj] {
+				seen[proj] = true
+				projects = append(projects, proj)
+			}
+		}
+	}
+	return projects
+}
+
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.
+// Works with the filtered log view used by renderEventLog.
 func (d *Dashboard) jumpToLogEntry() {
-	if d.logCursor < 0 || d.logCursor >= len(d.eventLines) {
+	// Build the same filtered list as renderEventLog
+	var filtered []string
+	for _, line := range d.eventLines {
+		if d.logProjectFilter != "" {
+			parts := strings.Split(line, " | ")
+			if len(parts) >= 2 && !strings.Contains(strings.TrimSpace(parts[1]), d.logProjectFilter) {
+				continue
+			}
+		}
+		filtered = append(filtered, line)
+	}
+
+	if d.logCursor < 0 || d.logCursor >= len(filtered) {
 		return
 	}
 
-	line := d.eventLines[d.logCursor]
+	line := filtered[d.logCursor]
 	parts := strings.Split(line, " | ")
-	if len(parts) < 6 {
-		return
-	}
-
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])
 	}
 
+	// Extract skill from the right column based on format
 	skill := ""
-	if len(parts) > 5 {
+	if len(parts) >= 8 {
+		// 8-col: timestamp|project|agent|session|tool|path|action|skill
+		skill = parts[7]
+	} else if len(parts) >= 7 {
+		// 7-col: timestamp|agent|session|tool|path|action|skill
+		skill = parts[6]
+	} else if len(parts) >= 6 {
+		// 6-col: timestamp|agent|tool|path|action|skill
 		skill = parts[5]
 	}
-	// For SKILL-LOAD events, the skill name is in parts[2] (tool column)
-	if strings.Contains(line, "SKILL-LOAD") {
-		skill = parts[2]
+
+	// Skills can be comma-separated (e.g., "linear,sst-architect") — use first one
+	if strings.Contains(skill, ",") {
+		skill = strings.Split(skill, ",")[0]
 	}
 
 	if skill == "" {
 		return
 	}
 
-	// Find the skill in the skills list
+	// Find the skill in the skills list and jump to it
 	for i, s := range d.skills {
 		if s.Name == skill {
 			d.skillCursor = i

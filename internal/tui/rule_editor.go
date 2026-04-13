@@ -47,8 +47,8 @@ type listItem struct {
 	value    string // Underlying value (tool name, glob pattern, agent name)
 	section  string // "tools", "paths", "agents"
 	selected bool
-	indent   int  // Tree depth (0 for top-level)
-	expanded bool // For directories
+	indent   int      // Tree depth (0 for top-level)
+	expanded bool     // For directories
 	children []string // Child dir names (for lazy expansion)
 }
 
@@ -56,7 +56,7 @@ type listItem struct {
 type editorPhase int
 
 const (
-	phaseEdit    editorPhase = iota
+	phaseEdit editorPhase = iota
 	phaseAnother
 )
 
@@ -69,10 +69,10 @@ type RuleEditor struct {
 	existingRules []engine.Rule
 	projectRoot   string
 
-	items      []listItem
-	cursor     int
-	scrollTop  int
-	height     int
+	items     []listItem
+	cursor    int
+	scrollTop int
+	height    int
 
 	addAnother    bool
 	confirmCursor int // 0=Yes, 1=No
@@ -560,10 +560,10 @@ func (re RuleEditor) View() string {
 		end = len(re.items)
 	}
 
-	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")) // green
-	uncheck := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")) // gray
+	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))                   // green
+	uncheck := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))                 // gray
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA")) // violet
-	treeArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")) // yellow
+	treeArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24"))               // yellow
 
 	for i := re.scrollTop; i < end; i++ {
 		item := re.items[i]

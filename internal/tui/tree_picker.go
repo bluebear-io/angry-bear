@@ -31,15 +31,12 @@ type treeEntry struct {
 // TreePicker provides a file tree browser for selecting paths.
 // It implements tea.Model for use as a child model within the App.
 type TreePicker struct {
-	rootDir        string        // Project root directory
-	currentDir     string        // Currently displayed directory
-	entries        []treeEntry   // Visible entries in currentDir
-	focusIndex     int           // Currently focused entry index
-	ignorePatterns []string      // Directory names to hide
-	selectedPath   string        // Final selection (absolute path)
-	generatedPattern string      // Glob pattern generated from selection
-	confirmed      bool          // Whether the user has confirmed the selection
-	styles         Styles        // Style definitions
+	rootDir        string      // Project root directory
+	currentDir     string      // Currently displayed directory
+	entries        []treeEntry // Visible entries in currentDir
+	focusIndex     int         // Currently focused entry index
+	ignorePatterns []string    // Directory names to hide
+	styles         Styles      // Style definitions
 }
 
 // NewTreePicker creates a new TreePicker rooted at the given directory.

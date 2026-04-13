@@ -11,10 +11,10 @@ import (
 
 // Project represents a discovered project with AI agent sessions.
 type Project struct {
-	Name     string   // Human-readable name (last path component)
-	Path     string   // Decoded absolute path to the project
-	Agents   []string // Which agents use this project ("claude", "cursor")
-	Encoded  string   // Encoded directory name
+	Name    string   // Human-readable name (last path component)
+	Path    string   // Decoded absolute path to the project
+	Agents  []string // Which agents use this project ("claude", "cursor")
+	Encoded string   // Encoded directory name
 }
 
 // ScanProjects discovers all projects that have Claude or Cursor sessions.

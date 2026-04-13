@@ -213,3 +213,11 @@ func LoadGlobalConfig(projectRoot string) (*GlobalConfig, error) {
 
 	return &cfg, nil
 }
+
+// LoadConfigFromDir loads enforcement rules from a specific directory.
+// The directory should contain skill_enforcement.json directly.
+// Returns nil rules if the file doesn't exist.
+func LoadConfigFromDir(dir string) ([]MatchedRule, error) {
+	configPath := filepath.Join(dir, configFileName)
+	return loadConfigFile(configPath)
+}

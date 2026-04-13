@@ -72,19 +72,19 @@ type saveResultMsg struct {
 
 // App is the root Bubble Tea model that manages the TUI lifecycle.
 type App struct {
-	config       engine.Config    // Currently loaded enforcement config (mutable)
-	configPath   string           // Path to the config file for saving
-	stateDir     string           // Path to .care-bare/state/ for watching
-	skills       []scanner.Skill  // Discovered skills from the scanner
+	config       engine.Config           // Currently loaded enforcement config (mutable)
+	configPath   string                  // Path to the config file for saving
+	stateDir     string                  // Path to .care-bare/state/ for watching
+	skills       []scanner.Skill         // Discovered skills from the scanner
 	loadedSkills map[string]*SkillStatus // Skills loaded in active sessions, with agent info
-	view         viewState        // Current active view
-	dashboard    Dashboard        // Dashboard child model
-	ruleEditor   RuleEditor       // Rule editor child model
-	treePicker   TreePicker       // Tree picker child model
-	statusMsg    string           // Transient status message ("Saved!", "Error: ...")
-	width        int              // Terminal width
-	height       int              // Terminal height
-	styles       Styles           // Style definitions
+	view         viewState               // Current active view
+	dashboard    Dashboard               // Dashboard child model
+	ruleEditor   RuleEditor              // Rule editor child model
+	treePicker   TreePicker              // Tree picker child model
+	statusMsg    string                  // Transient status message ("Saved!", "Error: ...")
+	width        int                     // Terminal width
+	height       int                     // Terminal height
+	styles       Styles                  // Style definitions
 }
 
 // NewApp creates a new TUI application model with the given config, config path,
@@ -435,7 +435,7 @@ func (a App) helpBar() string {
 				key("d", "del") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
 			text = key("↑↓", "scroll") + sep + key("tab", "skills") + sep + key("←", "skills") + sep +
-				key("enter", "jump to rule") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
+				key("enter", "jump to rule") + sep + key("f", "filter project") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:
 		text = "" // huh provides its own help

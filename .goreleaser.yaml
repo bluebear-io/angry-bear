@@ -8,6 +8,8 @@ builds:
     binary: care-bare
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     goos:
       - darwin
       - linux
@@ -17,7 +19,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.version=v{{.Version}}
       - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
 
@@ -41,14 +43,35 @@ checksum:
 
 changelog:
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?\!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\(.+\))?\!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
   filters:
     exclude:
       - "^docs:"
       - "^chore:"
       - "^ci:"
       - "^test:"
-      - "^style:"
-      - "^refactor:"
+
+brews:
+  - name: care-bare
+    repository:
+      owner: Blue-Bear-Security
+      name: care-bare
+      branch: homebrew
+    homepage: https://github.com/Blue-Bear-Security/care-bare
+    description: "Enforce skill-loading requirements for AI coding agents"
+    license: "Apache-2.0"
+    install: |
+      bin.install "care-bare"
+    test: |
+      system "#{bin}/care-bare", "version"
 
 release:
   github:

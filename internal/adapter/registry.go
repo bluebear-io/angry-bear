@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+
+	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 )
 
 // AdapterRegistry holds all registered adapters indexed by name.
@@ -70,11 +72,13 @@ func (r *AdapterRegistry) Names() []string {
 	return names
 }
 
-// MergedProject is a project path with all agents that use it.
+// MergedProject is a repo with all agents and local paths.
 type MergedProject struct {
-	Name   string   // Human-readable name (last path component)
-	Path   string   // Absolute path
-	Agents []string // Which agents use this project
+	Name       string   // Human-readable name (repo slug or last path component)
+	Path       string   // Primary absolute path (first discovered)
+	RepoSlug   string   // Git repo identity (e.g., "Blue-Bear-Security/blueden")
+	LocalPaths []string // All local directories that are clones of this repo
+	Agents     []string // Which agents use this repo
 }
 
 // ScanAllProjects discovers projects from ALL registered adapters, merges
@@ -82,43 +86,71 @@ type MergedProject struct {
 // This is the single entry point for project discovery — all agent-specific
 // logic stays inside each adapter's ScanProjects().
 func (r *AdapterRegistry) ScanAllProjects() ([]MergedProject, error) {
-	merged := make(map[string]*MergedProject)
+	// Key by repo slug (Git identity), not by local path
+	byRepo := make(map[string]*MergedProject)
 
 	for _, a := range r.adapters {
 		projects, err := a.ScanProjects()
 		if err != nil {
-			continue // Skip adapters that fail
+			continue
 		}
 		for _, p := range projects {
-			if existing, ok := merged[p.Path]; ok {
-				// Add agent if not already present
-				found := false
+			// Resolve Git repo identity
+			repo := engine.ResolveRepoIdentity(p.Path)
+			key := p.Path // fallback: use path if no git repo
+			slug := ""
+			if repo != nil {
+				key = repo.Slug
+				slug = repo.Slug
+			}
+
+			if existing, ok := byRepo[key]; ok {
+				// Add agent
+				hasAgent := false
 				for _, ag := range existing.Agents {
 					if ag == p.Agent {
-						found = true
+						hasAgent = true
 						break
 					}
 				}
-				if !found {
+				if !hasAgent {
 					existing.Agents = append(existing.Agents, p.Agent)
 				}
+				// Add local path
+				hasPath := false
+				for _, lp := range existing.LocalPaths {
+					if lp == p.Path {
+						hasPath = true
+						break
+					}
+				}
+				if !hasPath {
+					existing.LocalPaths = append(existing.LocalPaths, p.Path)
+				}
 			} else {
-				merged[p.Path] = &MergedProject{
-					Name:   p.Name,
-					Path:   p.Path,
-					Agents: []string{p.Agent},
+				name := p.Name
+				if slug != "" {
+					name = slug
+				}
+				byRepo[key] = &MergedProject{
+					Name:       name,
+					Path:       p.Path,
+					RepoSlug:   slug,
+					LocalPaths: []string{p.Path},
+					Agents:     []string{p.Agent},
 				}
 			}
 		}
 	}
 
 	var result []MergedProject
-	for _, p := range merged {
+	for _, p := range byRepo {
 		sort.Strings(p.Agents)
+		sort.Strings(p.LocalPaths)
 		result = append(result, *p)
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Path < result[j].Path
+		return result[i].Name < result[j].Name
 	})
 	return result, nil
 }

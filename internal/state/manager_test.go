@@ -446,3 +446,49 @@ func TestConcurrent_RecordSkill_And_HasSkill(t *testing.T) {
 		t.Fatal("concurrent RecordSkill + HasSkill timed out (possible deadlock)")
 	}
 }
+
+// --- RecordSkillWithAgent tests ---
+
+func TestRecordSkillWithAgent_SetsAgent(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	if err := mgr.RecordSkillWithAgent("sess1", "git", "cursor"); err != nil {
+		t.Fatalf("RecordSkillWithAgent failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "sess1.json"))
+	if err != nil {
+		t.Fatalf("state file not created: %v", err)
+	}
+
+	var state SessionState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if state.Agent != "cursor" {
+		t.Errorf("agent = %q, want %q", state.Agent, "cursor")
+	}
+}
+
+func TestRecordSkillWithAgent_UpdatesAgent(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	// First call sets agent to claude
+	_ = mgr.RecordSkillWithAgent("sess1", "git", "claude")
+	// Second call updates to cursor
+	_ = mgr.RecordSkillWithAgent("sess1", "linear", "cursor")
+
+	data, _ := os.ReadFile(filepath.Join(dir, "sess1.json"))
+	var state SessionState
+	_ = json.Unmarshal(data, &state)
+
+	if state.Agent != "cursor" {
+		t.Errorf("agent = %q, want %q (last writer wins)", state.Agent, "cursor")
+	}
+	if len(state.InvokedSkills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(state.InvokedSkills))
+	}
+}

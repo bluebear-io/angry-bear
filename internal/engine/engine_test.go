@@ -633,15 +633,15 @@ func TestShouldBlock(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		rules          []MatchedRule
-		toolName       string
-		filePath       string
-		agent          string
-		invokedSkills  map[string]bool
-		wantBlocked    bool
-		wantMissing    []string
-		wantReasonHas  string
+		name          string
+		rules         []MatchedRule
+		toolName      string
+		filePath      string
+		agent         string
+		invokedSkills map[string]bool
+		wantBlocked   bool
+		wantMissing   []string
+		wantReasonHas string
 	}{
 		{
 			name:        "no rules returns not blocked",
@@ -952,4 +952,103 @@ func searchString(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// --- MatchedSkills tests ---
+
+func TestMatchedSkills_FindsMatching(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**/stacks/**", Skill: "sst-architect", Agent: "*"}, Source: "test"},
+		{Rule: Rule{Tool: "Write", Path: "**/*.go", Skill: "go-coding", Agent: "claude"}, Source: "test"},
+	}
+
+	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "*")
+	if len(matched) != 1 || matched[0] != "sst-architect" {
+		t.Errorf("expected [sst-architect], got %v", matched)
+	}
+}
+
+func TestMatchedSkills_NoMatch(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**/stacks/**", Skill: "sst-architect", Agent: "*"}, Source: "test"},
+	}
+
+	matched := MatchedSkills(rules, "Edit", "handler/main.go", "*")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_MultipleSkills(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**", Skill: "linear", Agent: "*"}, Source: "test"},
+		{Rule: Rule{Tool: "Edit", Path: "**/stacks/**", Skill: "sst-architect", Agent: "*"}, Source: "test"},
+	}
+
+	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "*")
+	if len(matched) != 2 {
+		t.Errorf("expected 2 matches, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_AgentFilter(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**", Skill: "eval", Agent: "cursor"}, Source: "test"},
+	}
+
+	// Claude should not match cursor-only rules
+	matched := MatchedSkills(rules, "Edit", "test.go", "claude")
+	if len(matched) != 0 {
+		t.Errorf("expected no matches for claude, got %v", matched)
+	}
+
+	// Cursor should match
+	matched = MatchedSkills(rules, "Edit", "test.go", "cursor")
+	if len(matched) != 1 {
+		t.Errorf("expected 1 match for cursor, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_Deduplicates(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Path: "**", Skill: "linear", Agent: "*"}, Source: "a"},
+		{Rule: Rule{Tool: "Write", Path: "**", Skill: "linear", Agent: "*"}, Source: "b"},
+	}
+
+	matched := MatchedSkills(rules, "Edit", "test.go", "*")
+	if len(matched) != 1 {
+		t.Errorf("expected 1 deduplicated match, got %v", matched)
+	}
+}
+
+// --- LoadConfigFromDir tests ---
+
+func TestLoadConfigFromDir_LoadsRules(t *testing.T) {
+	dir := t.TempDir()
+	config := `{"version": 1, "tools": [{"tool": "Edit", "path": "**/*.go", "skill": "go-coding", "agent": "*"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "skill_enforcement.json"), []byte(config), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := LoadConfigFromDir(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Errorf("expected 1 rule, got %d", len(rules))
+	}
+	if rules[0].Rule.Skill != "go-coding" {
+		t.Errorf("expected skill go-coding, got %s", rules[0].Rule.Skill)
+	}
+}
+
+func TestLoadConfigFromDir_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	rules, err := LoadConfigFromDir(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules, got %d", len(rules))
+	}
 }

@@ -30,7 +30,7 @@ func NewRootCommand() *cobra.Command {
 			// Auto-install hooks on every command except hook/completion
 			// (hook would cause infinite recursion, completion is non-interactive)
 			name := cmd.Name()
-			if name == "hook" || name == "completion" || name == "version" || name == "enable" || name == "disable" {
+			if name == "hook" || name == "completion" || name == "version" || name == "enable" || name == "disable" || name == "doctor" {
 				return nil
 			}
 			result := EnsureHooksInstalled()

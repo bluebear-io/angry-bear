@@ -182,6 +182,7 @@ func TestDoctor_AllPassWhenHealthy(t *testing.T) {
 // when an agent is detected but the hook entry is missing from its config.
 func TestDoctor_FailsWhenHookNotInstalled(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Overwrite settings.json without the care-bear hook.
@@ -216,6 +217,7 @@ func TestDoctor_FailsWhenHookNotInstalled(t *testing.T) {
 // when skill_enforcement.json contains malformed JSON.
 func TestDoctor_FailsWhenConfigHasJSONErrors(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Overwrite skill_enforcement.json with malformed JSON.
@@ -246,6 +248,7 @@ func TestDoctor_FailsWhenConfigHasJSONErrors(t *testing.T) {
 // FAIL when the state directory exists but is not writable.
 func TestDoctor_FailsWhenStateDirectoryNotWritable(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Make state directory read-only.
@@ -277,6 +280,7 @@ func TestDoctor_FailsWhenStateDirectoryNotWritable(t *testing.T) {
 // when configured skill paths point to nonexistent directories.
 func TestDoctor_FailsWhenSkillPathsDoNotExist(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Overwrite config.json with a skill path that does not exist.
@@ -312,6 +316,7 @@ func TestDoctor_FailsWhenSkillPathsDoNotExist(t *testing.T) {
 // FAIL when a skill path exists but contains no skill files.
 func TestDoctor_FailsWhenSkillPathExistsButEmpty(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Remove the skill file but keep the directory.
@@ -341,6 +346,7 @@ func TestDoctor_FailsWhenSkillPathExistsButEmpty(t *testing.T) {
 // first hook invocation.
 func TestDoctor_MissingStateDirectory(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Remove the state directory.
@@ -366,6 +372,7 @@ func TestDoctor_MissingStateDirectory(t *testing.T) {
 // when skill_enforcement.json has an unsupported version.
 func TestDoctor_UnsupportedConfigVersion(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Overwrite enforcement config with version 99.
@@ -400,6 +407,8 @@ func TestDoctor_UnsupportedConfigVersion(t *testing.T) {
 // when a detected agent's config file exists but is unreadable.
 func TestDoctor_FailsWhenAgentConfigUnreadable(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Make settings.json unreadable.
@@ -425,6 +434,9 @@ func TestDoctor_FailsWhenAgentConfigUnreadable(t *testing.T) {
 // .cursor/ exists but hooks.json does not exist.
 func TestDoctor_CursorDetectedNoConfig(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)
 	setupHealthyProject(t, dir)
 
 	// Create .cursor/ directory but no hooks.json.

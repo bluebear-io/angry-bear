@@ -30,6 +30,8 @@ type HookAdapter interface {
 	ConfigPath() string
 	// InstallHook modifies the agent's global config to add a care-bear hook.
 	InstallHook(projectDir string) error
+	// GlobalConfigPath returns the absolute path to the agent's global hook config file.
+	GlobalConfigPath() string
 	// UninstallHook removes all care-bear hooks from the agent's global config.
 	UninstallHook() error
 	// DetectSkillInvocation checks if the input represents a skill being invoked.

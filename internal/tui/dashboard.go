@@ -637,6 +637,7 @@ func wordWrap(text string, width int) string {
 }
 
 // renderEventLog renders the bottom-right panel showing recent hook events.
+// Columns auto-size based on actual data width.
 func (d Dashboard) renderEventLog(width, height int) string {
 	filterLabel := ""
 	if d.logProjectFilter != "" {
@@ -648,51 +649,14 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	var b strings.Builder
-
-	// Column widths
-	colAct := 7
-	colAgent := 8
-	colTool := 8
-	colSkill := 16
-	pathWidth := width - 90
-	if pathWidth < 10 {
-		pathWidth = 10
+	// Parse all visible events into structured rows
+	type eventRow struct {
+		act, project, sess, agent, tool, skill, path string
+		lineIdx                                       int
+		isBlock, isLoad                                bool
 	}
 
-	// Header
-	title += d.styles.Description.Render(fmt.Sprintf("  %-*s %-28s %-6s %-*s %-*s %-*s %-*s",
-		colAct, "ACTION", "PROJECT", "SESS", colAgent, "AGENT", colTool, "TOOL", colSkill, "SKILL", pathWidth, "PATH")) + "\n"
-	title += d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
-
-	visible := height - 4
-	if visible < 3 {
-		visible = 3
-	}
-
-	start := len(d.eventLines) - visible
-	if start < 0 {
-		start = 0
-	}
-	if d.focusPanel == 2 {
-		if d.logCursor < start {
-			start = d.logCursor
-		}
-		if d.logCursor >= start+visible {
-			start = d.logCursor - visible + 1
-		}
-	}
-	end := start + visible
-	if end > len(d.eventLines) {
-		end = len(d.eventLines)
-	}
-
-	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
-	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
-
-	// Apply project filter
-	var filtered []int
+	var allRows []eventRow
 	for i, line := range d.eventLines {
 		if d.logProjectFilter != "" {
 			parts := strings.Split(line, " | ")
@@ -700,97 +664,113 @@ func (d Dashboard) renderEventLog(width, height int) string {
 				continue
 			}
 		}
-		filtered = append(filtered, i)
-	}
 
-	// Recalculate scroll on filtered list
-	if d.logCursor >= len(filtered) && len(filtered) > 0 {
-		d.logCursor = len(filtered) - 1
-	}
-	fStart := len(filtered) - visible
-	if fStart < 0 {
-		fStart = 0
-	}
-	if d.focusPanel == 2 && len(filtered) > 0 {
-		if d.logCursor < fStart {
-			fStart = d.logCursor
-		}
-		if d.logCursor >= fStart+visible {
-			fStart = d.logCursor - visible + 1
-		}
-	}
-	fEnd := fStart + visible
-	if fEnd > len(filtered) {
-		fEnd = len(filtered)
-	}
-
-	for fi := fStart; fi < fEnd; fi++ {
-		idx := filtered[fi]
-		line := d.eventLines[idx]
 		parts := strings.Split(line, " | ")
-		if len(parts) < 6 {
+		for j := range parts {
+			parts[j] = strings.TrimSpace(parts[j])
+		}
+
+		r := eventRow{lineIdx: i}
+		if len(parts) >= 8 {
+			r.project = parts[1]; r.agent = parts[2]; r.sess = parts[3]
+			r.tool = parts[4]; r.path = parts[5]; r.skill = parts[7]
+		} else if len(parts) >= 7 {
+			r.agent = parts[1]; r.sess = parts[2]; r.tool = parts[3]
+			r.path = parts[4]; r.skill = parts[6]
+		} else if len(parts) >= 6 {
+			r.agent = parts[1]; r.tool = parts[2]; r.path = parts[3]; r.skill = parts[5]
+		} else {
 			continue
 		}
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
-		}
 
-		// 8-column format: timestamp|project|agent|session|tool|path|action|skill
-		project := ""
-		agent := ""
-		sess := ""
-		tool := ""
-		path := ""
-		skill := ""
-		if len(parts) >= 8 {
-			project = parts[1]
-			agent = parts[2]
-			sess = parts[3]
-			tool = parts[4]
-			path = parts[5]
-			skill = parts[7]
-		} else if len(parts) >= 7 {
-			// 7-column (old): timestamp|agent|session|tool|path|action|skill
-			agent = parts[1]
-			sess = parts[2]
-			tool = parts[3]
-			path = parts[4]
-			skill = parts[6]
-		} else if len(parts) >= 6 {
-			agent = parts[1]
-			tool = parts[2]
-			path = parts[3]
-			skill = parts[5]
-		}
+		r.isBlock = strings.Contains(line, "| BLOCK")
+		r.isLoad = strings.Contains(line, "SKILL-LOAD")
 
-
-		if len(path) > pathWidth {
-			path = "…" + path[len(path)-pathWidth+1:]
-		}
-
-		// Build plain text row with consistent widths
-		var act string
-		var sty lipgloss.Style
-		if strings.Contains(line, "| BLOCK") {
-			act = "BLOCK"
-			sty = red
-		} else if strings.Contains(line, "SKILL-LOAD") {
-			act = "LOAD"
-			tool = "—"
-			path = ""
-			sty = cyan
+		if r.isBlock {
+			r.act = "BLOCK"
+		} else if r.isLoad {
+			r.act = "LOAD"
+			r.tool = "—"
+			r.path = ""
 		} else {
-			act = "ALLOW"
-			sty = green
+			r.act = "ALLOW"
 		}
 
-		plainRow := fmt.Sprintf("  %-*s %-28s %-6s %-*s %-*s %-*s %-*s", colAct, act, project, sess, colAgent, agent, colTool, tool, colSkill, skill, pathWidth, path)
+		allRows = append(allRows, r)
+	}
+
+	if len(allRows) == 0 {
+		return title + "\n" + d.styles.Description.Render("  No matching events.")
+	}
+
+	// Calculate max width for each column from actual data
+	colW := map[string]int{
+		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
+	}
+	for _, r := range allRows {
+		if len(r.act) > colW["act"] { colW["act"] = len(r.act) }
+		if len(r.project) > colW["project"] { colW["project"] = len(r.project) }
+		if len(r.sess) > colW["sess"] { colW["sess"] = len(r.sess) }
+		if len(r.agent) > colW["agent"] { colW["agent"] = len(r.agent) }
+		if len(r.tool) > colW["tool"] { colW["tool"] = len(r.tool) }
+		if len(r.skill) > colW["skill"] { colW["skill"] = len(r.skill) }
+		if len(r.path) > colW["path"] { colW["path"] = len(r.path) }
+	}
+
+	// Cap path width to fill remaining space
+	used := colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
+	maxPath := width - used - 4
+	if maxPath < 10 { maxPath = 10 }
+	if colW["path"] > maxPath { colW["path"] = maxPath }
+
+	// Build format string
+	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
+		colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
+
+	// Header
+	title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
+
+	// Scrolling
+	var b strings.Builder
+	visible := height - 4
+	if visible < 3 { visible = 3 }
+
+	if d.logCursor >= len(allRows) && len(allRows) > 0 {
+		d.logCursor = len(allRows) - 1
+	}
+	start := len(allRows) - visible
+	if start < 0 { start = 0 }
+	if d.focusPanel == 2 {
+		if d.logCursor < start { start = d.logCursor }
+		if d.logCursor >= start+visible { start = d.logCursor - visible + 1 }
+	}
+	end := start + visible
+	if end > len(allRows) { end = len(allRows) }
+
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
+	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
+
+	for fi := start; fi < end; fi++ {
+		r := allRows[fi]
+
+		// Truncate path
+		path := r.path
+		if len(path) > colW["path"] {
+			path = "…" + path[len(path)-colW["path"]+1:]
+		}
+
+		var sty lipgloss.Style
+		if r.isBlock { sty = red } else if r.isLoad { sty = cyan } else { sty = green }
 
 		focused := fi == d.logCursor && d.focusPanel == 2
+		plain := fmt.Sprintf(fmtStr, r.act, r.project, r.sess, r.agent, r.tool, r.skill, path)
+
 		if focused {
-			b.WriteString(d.styles.Selected.Render("▸" + plainRow[1:]) + "\n")
+			b.WriteString(d.styles.Selected.Render("▸" + plain[1:]) + "\n")
 		} else {
-			b.WriteString(sty.Render(plainRow) + "\n")
+			b.WriteString(sty.Render(plain) + "\n")
 		}
 	}
 

@@ -1085,3 +1085,248 @@ func TestRuleEditor_PathViewportHeight(t *testing.T) {
 		t.Errorf("pathViewportHeight with small height = %d, want >= 3", vp)
 	}
 }
+
+// --- NewRuleEditor tests ---
+
+func TestNewRuleEditor_InitializesFields(t *testing.T) {
+	re := NewRuleEditor("my-skill", nil, -1, DefaultStyles())
+
+	if re.skillName != "my-skill" {
+		t.Errorf("skillName = %q, want %q", re.skillName, "my-skill")
+	}
+	if re.ruleIndex != -1 {
+		t.Errorf("ruleIndex = %d, want -1 for new rule", re.ruleIndex)
+	}
+	if re.phase != phaseEdit {
+		t.Errorf("phase = %d, want %d (phaseEdit)", re.phase, phaseEdit)
+	}
+}
+
+func TestNewRuleEditor_WithExistingRule(t *testing.T) {
+	existing := &engine.Rule{
+		Tool:  "Edit",
+		Path:  "**/*.go",
+		Skill: "my-skill",
+		Agent: "claude",
+	}
+	re := NewRuleEditor("my-skill", existing, 0, DefaultStyles())
+
+	if re.ruleIndex != 0 {
+		t.Errorf("ruleIndex = %d, want 0 for existing rule", re.ruleIndex)
+	}
+}
+
+// --- SetProjectRoot tests ---
+
+func TestSetProjectRoot_BuildsSectionsAndPopulatesItems(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create some structure.
+	os.MkdirAll(filepath.Join(tmpDir, "src", "handlers"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "src", "main.go"), []byte("pkg"), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0o644)
+
+	re := NewRuleEditor("test-skill", nil, -1, DefaultStyles())
+	re.SetExistingRules([]engine.Rule{
+		{Tool: "Edit", Path: "**/src/handlers/**", Skill: "test-skill", Agent: "*"},
+	})
+	re.SetProjectRoot(tmpDir)
+
+	// Tools should be populated.
+	if len(re.toolItems) == 0 {
+		t.Error("expected toolItems to be populated after SetProjectRoot")
+	}
+
+	// Path items should include ** plus directory entries from tmpDir.
+	if len(re.pathItems) < 2 {
+		t.Errorf("expected at least 2 path items (** + dir entries), got %d", len(re.pathItems))
+	}
+
+	// Agents should be populated.
+	if len(re.agentItems) == 0 {
+		t.Error("expected agentItems to be populated after SetProjectRoot")
+	}
+
+	// Verify that "src/**" is present in path items (from directory listing).
+	hasSrc := false
+	for _, item := range re.pathItems {
+		if item.value == "src/**" {
+			hasSrc = true
+		}
+	}
+	if !hasSrc {
+		t.Error("expected src/** in path items from project root")
+	}
+
+	// After auto-expand, src/handlers/** should appear because the existing rule
+	// **/src/handlers/** triggers expansion of the src directory.
+	hasHandlers := false
+	for _, item := range re.pathItems {
+		if item.value == "src/handlers/**" {
+			hasHandlers = true
+			if !item.selected {
+				t.Error("src/handlers/** should be marked as selected from existing rule")
+			}
+		}
+	}
+	if !hasHandlers {
+		t.Error("expected src/handlers/** to appear after auto-expansion for existing rule")
+	}
+}
+
+// --- RuleEditor: enter on directory expands, left collapses ---
+
+func TestRuleEditor_EnterOnDirExpandsLeftCollapses(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.MkdirAll(filepath.Join(tmpDir, "src"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "src", "file.go"), []byte(""), 0o644)
+
+	re := RuleEditor{
+		focus:       sectionPaths,
+		skillName:   "test-skill",
+		projectRoot: tmpDir,
+		styles:      DefaultStyles(),
+		toolItems:   []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**", label: "** (all files)"},
+			{typ: itemTreeDir, value: "src/**", label: "src/", indent: 0, expanded: false},
+		},
+		agentItems: []listItem{{typ: itemCheckbox, value: "claude"}},
+	}
+	re.pathScroll.Cursor = 1 // On the directory
+
+	// Enter on collapsed directory should expand it.
+	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	re = m.(RuleEditor)
+	if !re.pathItems[1].expanded {
+		t.Error("expected directory to be expanded after enter")
+	}
+	countExpanded := len(re.pathItems)
+
+	// Left on expanded directory should collapse it.
+	m, _ = re.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	re = m.(RuleEditor)
+	if re.pathItems[1].expanded {
+		t.Error("expected directory to be collapsed after left")
+	}
+	if len(re.pathItems) >= countExpanded {
+		t.Errorf("expected fewer items after collapse: got %d, had %d when expanded", len(re.pathItems), countExpanded)
+	}
+}
+
+// --- RuleEditor: right on collapsed dir expands ---
+
+func TestRuleEditor_RightExpandsDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.MkdirAll(filepath.Join(tmpDir, "src"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "src", "file.go"), []byte(""), 0o644)
+
+	re := RuleEditor{
+		focus:       sectionPaths,
+		skillName:   "test-skill",
+		projectRoot: tmpDir,
+		styles:      DefaultStyles(),
+		toolItems:   []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**", label: "** (all files)"},
+			{typ: itemTreeDir, value: "src/**", label: "src/", indent: 0, expanded: false},
+		},
+		agentItems: []listItem{{typ: itemCheckbox, value: "claude"}},
+	}
+	re.pathScroll.Cursor = 1 // On the directory
+
+	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyRight})
+	re = m.(RuleEditor)
+	if !re.pathItems[1].expanded {
+		t.Error("expected right arrow to expand directory")
+	}
+}
+
+// --- RuleEditor: view with tree items renders correctly ---
+
+func TestRuleEditor_ViewWithTreeDir(t *testing.T) {
+	re := RuleEditor{
+		skillName: "my-skill",
+		phase:     phaseEdit,
+		styles:    DefaultStyles(),
+		focus:     sectionPaths,
+		toolItems: []listItem{
+			{typ: itemCheckbox, value: "Edit", label: "Edit"},
+		},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**", label: "** (all files)"},
+			{typ: itemTreeDir, value: "src/**", label: "src/", expanded: true},
+			{typ: itemCheckbox, value: "src/main.go", label: "main.go", indent: 1},
+		},
+		agentItems: []listItem{
+			{typ: itemCheckbox, value: "claude", label: "claude"},
+		},
+	}
+
+	output := re.View()
+	// Should show expanded directory arrow and child items
+	if !strings.Contains(output, "src") {
+		t.Error("expected src directory in view")
+	}
+	if !strings.Contains(output, "main.go") {
+		t.Error("expected main.go child item in view")
+	}
+}
+
+// --- RuleEditor: down at bottom of agents stays put ---
+
+func TestRuleEditor_DownAtBottomOfAgentsStays(t *testing.T) {
+	re := RuleEditor{
+		focus: sectionAgents,
+		toolItems: []listItem{
+			{typ: itemCheckbox, value: "Edit"},
+		},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**"},
+		},
+		agentItems: []listItem{
+			{typ: itemCheckbox, value: "claude"},
+		},
+	}
+	re.agentScroll.Cursor = 0 // At the last (and only) item
+
+	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyDown})
+	re = m.(RuleEditor)
+	// At bottom of the last section, down does nothing (no wrap)
+	if re.focus != sectionAgents {
+		t.Errorf("focus = %d, want %d (agents, should stay at bottom)", re.focus, sectionAgents)
+	}
+	if re.agentScroll.Cursor != 0 {
+		t.Errorf("agentScroll.Cursor = %d, want 0", re.agentScroll.Cursor)
+	}
+}
+
+// --- RuleEditor: up at top of tools stays put ---
+
+func TestRuleEditor_UpAtTopOfToolsStays(t *testing.T) {
+	re := RuleEditor{
+		focus: sectionTools,
+		toolItems: []listItem{
+			{typ: itemCheckbox, value: "Edit"},
+			{typ: itemCheckbox, value: "Write"},
+		},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**"},
+		},
+		agentItems: []listItem{
+			{typ: itemCheckbox, value: "claude"},
+			{typ: itemCheckbox, value: "cursor"},
+		},
+	}
+	re.toolScroll.Cursor = 0 // At the first item
+
+	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyUp})
+	re = m.(RuleEditor)
+	// At top of the first section, up does nothing (no wrap)
+	if re.focus != sectionTools {
+		t.Errorf("focus = %d, want %d (tools, should stay at top)", re.focus, sectionTools)
+	}
+	if re.toolScroll.Cursor != 0 {
+		t.Errorf("toolScroll.Cursor = %d, want 0 (should not change)", re.toolScroll.Cursor)
+	}
+}

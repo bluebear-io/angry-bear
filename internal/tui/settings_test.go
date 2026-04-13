@@ -710,3 +710,138 @@ func TestSettings_ViewShowsLevel(t *testing.T) {
 		t.Error("View should produce non-empty output")
 	}
 }
+
+// --- visibleToRealIndex: out-of-range returns 0 ---
+
+func TestVisibleToRealIndex_OutOfRange(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	s := NewSettings(cfg, DefaultStyles(), "/tmp/project", nil)
+	s.configLevel = "project"
+
+	// Request an index far beyond the visible items.
+	realIdx := s.visibleToRealIndex(999)
+	// Should return 0 as fallback when visible index is out of range.
+	if realIdx != 0 {
+		t.Errorf("visibleToRealIndex(999) = %d, want 0 (fallback for out of range)", realIdx)
+	}
+}
+
+// --- Settings: editing backspace at position 0 ---
+
+func TestSettings_EditingBackspaceAtStart(t *testing.T) {
+	s := Settings{
+		editing:    true,
+		editBuffer: "hello",
+		editCurPos: 0,
+	}
+
+	m, _ := s.updateEditing(tea.KeyMsg{Type: tea.KeyBackspace})
+	s = m.(Settings)
+	// Backspace at position 0 should not change anything.
+	if s.editBuffer != "hello" {
+		t.Errorf("editBuffer = %q, want %q (backspace at 0 should not change)", s.editBuffer, "hello")
+	}
+	if s.editCurPos != 0 {
+		t.Errorf("editCurPos = %d, want 0", s.editCurPos)
+	}
+}
+
+// --- Settings: left at 0, right at end ---
+
+func TestSettings_EditingLeftAtZero(t *testing.T) {
+	s := Settings{
+		editing:    true,
+		editBuffer: "abc",
+		editCurPos: 0,
+	}
+
+	m, _ := s.updateEditing(tea.KeyMsg{Type: tea.KeyLeft})
+	s = m.(Settings)
+	if s.editCurPos != 0 {
+		t.Errorf("editCurPos = %d, want 0 (already at start)", s.editCurPos)
+	}
+}
+
+func TestSettings_EditingRightAtEnd(t *testing.T) {
+	s := Settings{
+		editing:    true,
+		editBuffer: "abc",
+		editCurPos: 3,
+	}
+
+	m, _ := s.updateEditing(tea.KeyMsg{Type: tea.KeyRight})
+	s = m.(Settings)
+	if s.editCurPos != 3 {
+		t.Errorf("editCurPos = %d, want 3 (already at end)", s.editCurPos)
+	}
+}
+
+// --- Settings: view in global mode shows only global items ---
+
+func TestSettings_ViewGlobalMode(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	s := NewSettings(cfg, DefaultStyles(), "/tmp/project", nil)
+	s.configLevel = "global"
+	s.width = 80
+	s.height = 30
+
+	output := s.View()
+	if output == "" {
+		t.Error("View should produce non-empty output in global mode")
+	}
+	// Should show GLOBAL indicator
+	if !strings.Contains(output, "GLOBAL") {
+		t.Error("expected GLOBAL indicator in global mode view")
+	}
+}
+
+// --- Settings: string value editing ---
+
+func TestSettings_EditStringValue(t *testing.T) {
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "claude",
+	}
+	s := NewSettings(cfg, DefaultStyles(), "/tmp", nil)
+
+	// Find the default_agent item.
+	agentIdx := -1
+	for i, item := range s.items {
+		if item.key == "default_agent" {
+			agentIdx = i
+			break
+		}
+	}
+	if agentIdx == -1 {
+		t.Fatal("could not find default_agent item")
+	}
+
+	s.cursor = agentIdx
+	// Enter editing mode.
+	m, _ := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	s = m.(Settings)
+	if !s.editing {
+		t.Fatal("expected editing mode after enter on string item")
+	}
+
+	// Clear and type new value.
+	s.editBuffer = "cursor"
+	s.editCurPos = 6
+
+	// Commit.
+	m, _ = s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	s = m.(Settings)
+	result := s.buildConfig()
+	if result.DefaultAgent != "cursor" {
+		t.Errorf("DefaultAgent = %q, want %q", result.DefaultAgent, "cursor")
+	}
+}

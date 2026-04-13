@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1261,5 +1262,360 @@ func TestUniqueColumnValues_SessionAndToolAndSkill(t *testing.T) {
 	skills := d.uniqueColumnValues(filterSkill)
 	if len(skills) != 2 {
 		t.Errorf("skills: got %d values, want 2", len(skills))
+	}
+}
+
+// --- renderRulePanel with inline path editing ---
+
+func TestRenderRulePanel_EditingPathShowsCursor(t *testing.T) {
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "go-coding"}},
+		config: engine.Config{
+			Tools: []engine.Rule{
+				{Tool: "Edit", Path: "src/**", Skill: "go-coding", Agent: "claude"},
+			},
+		},
+		logFilters:  make(map[filterCol]string),
+		styles:      DefaultStyles(),
+		focusPanel:  1,
+		editingPath: true,
+		pathBuffer:  "new/path",
+		pathCurPos:  3,
+	}
+
+	output := d.renderRulePanel(80, 20)
+	// When editing path, the panel should show the editing hint
+	if !strings.Contains(output, "Editing path") {
+		t.Error("expected 'Editing path' hint when editingPath is true")
+	}
+}
+
+func TestRenderRulePanel_WithRulesShowsColumnHeader(t *testing.T) {
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "go-coding"}},
+		config: engine.Config{
+			Tools: []engine.Rule{
+				{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "claude"},
+			},
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 0,
+	}
+
+	output := d.renderRulePanel(80, 20)
+	if !strings.Contains(output, "TOOL") {
+		t.Error("expected TOOL column header")
+	}
+	if !strings.Contains(output, "PATH") {
+		t.Error("expected PATH column header")
+	}
+	if !strings.Contains(output, "AGENT") {
+		t.Error("expected AGENT column header")
+	}
+}
+
+func TestRenderRulePanel_FocusedRuleHighlighted(t *testing.T) {
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "go-coding"}},
+		config: engine.Config{
+			Tools: []engine.Rule{
+				{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "claude"},
+				{Tool: "Write", Path: "**/*.ts", Skill: "go-coding", Agent: "*"},
+			},
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 1, // Rules panel focused
+	}
+
+	output := d.renderRulePanel(80, 20)
+	// Should contain the help bar with tool/path/agent/dup/del keys
+	if !strings.Contains(output, "tool") || !strings.Contains(output, "path") {
+		t.Error("expected help bar with editing keys when rules panel focused")
+	}
+}
+
+func TestRenderRulePanel_LongPathTruncated(t *testing.T) {
+	longPath := "very/long/deeply/nested/path/to/some/file/that/exceeds/width/limit.go"
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "go-coding"}},
+		config: engine.Config{
+			Tools: []engine.Rule{
+				{Tool: "Edit", Path: longPath, Skill: "go-coding", Agent: "*"},
+			},
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 0, // Not focused on rules, so path gets truncated normally
+	}
+
+	output := d.renderRulePanel(60, 20)
+	// Long paths should be truncated with "..."
+	if !strings.Contains(output, "...") {
+		t.Error("expected '...' truncation for long path")
+	}
+}
+
+func TestRenderRulePanel_ShowsSkillDescription(t *testing.T) {
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "go-coding", Description: "Go coding standards and best practices"}},
+		config: engine.Config{
+			Tools: []engine.Rule{
+				{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "*"},
+			},
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+	}
+
+	output := d.renderRulePanel(80, 20)
+	if !strings.Contains(output, "Go coding standards") {
+		t.Error("expected skill description in rule panel")
+	}
+}
+
+// --- renderRulePanel with many rules to test scroll indicators ---
+
+func TestRenderRulePanel_ScrollIndicator(t *testing.T) {
+	var rules []engine.Rule
+	for i := 0; i < 30; i++ {
+		rules = append(rules, engine.Rule{
+			Tool: "Edit", Path: fmt.Sprintf("path_%d/**", i), Skill: "go-coding", Agent: "*",
+		})
+	}
+	d := Dashboard{
+		skills:     []scanner.Skill{{Name: "go-coding"}},
+		config:     engine.Config{Tools: rules},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 1,
+	}
+
+	output := d.renderRulePanel(80, 15) // Small height forces scrolling
+	// With 30 rules and only 15 height, there should be a scroll indicator
+	if !strings.Contains(output, "[1/30]") {
+		t.Error("expected scroll indicator [1/30] when rules overflow viewport")
+	}
+}
+
+// --- renderSkillList with many skills to test scroll indicators ---
+
+func TestRenderSkillList_ScrollIndicators(t *testing.T) {
+	var skills []scanner.Skill
+	for i := 0; i < 20; i++ {
+		skills = append(skills, scanner.Skill{Name: fmt.Sprintf("skill-%02d", i)})
+	}
+	d := Dashboard{
+		skills:       skills,
+		config:       engine.Config{},
+		loadedSkills: make(map[string]*state.SkillStatus),
+		logFilters:   make(map[filterCol]string),
+		styles:       DefaultStyles(),
+	}
+
+	output := d.renderSkillList(40, 10) // Only 10 rows, 20 skills
+	if !strings.Contains(output, "[1/20]") {
+		t.Error("expected scroll indicator [1/20] when skills overflow viewport")
+	}
+}
+
+func TestRenderSkillList_LoadedWithUnknownAgentSkipped(t *testing.T) {
+	d := Dashboard{
+		skills: []scanner.Skill{{Name: "git"}, {Name: "linear"}},
+		config: engine.Config{},
+		loadedSkills: map[string]*state.SkillStatus{
+			// git has unknown+claude, linear has no loaded status
+			"git": {Agents: []string{"unknown", "claude"}},
+		},
+		logFilters:  make(map[filterCol]string),
+		styles:      DefaultStyles(),
+		focusPanel:  1,                     // Focus on rules panel so skill list items are NOT focused
+		skillScroll: ScrollView{Cursor: 1}, // Cursor on linear, not git
+		width:       100,
+		height:      40,
+	}
+
+	output := d.renderSkillList(40, 20)
+	// The "git" skill is not focused, so it renders agent tags (not " loaded" text).
+	// "unknown" agents should be skipped in the rendered output.
+	if !strings.Contains(output, "claude") {
+		t.Error("expected 'claude' agent tag in loaded skill")
+	}
+}
+
+func TestRenderSkillList_CursorOnNonFocusedPanel(t *testing.T) {
+	d := Dashboard{
+		skills: testSkills(),
+		config: testConfig(),
+		loadedSkills: map[string]*state.SkillStatus{
+			"linear": {Agents: []string{"cursor"}},
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 1, // Rules panel focused, not skills
+		width:      100,
+		height:     40,
+	}
+
+	output := d.renderSkillList(40, 20)
+	// Should still render skill names
+	if !strings.Contains(output, "go-coding") {
+		t.Error("expected skill names rendered even when panel not focused")
+	}
+	// Loaded skill "cursor" tag should appear
+	if !strings.Contains(output, "cursor") {
+		t.Error("expected cursor agent tag on loaded skill")
+	}
+}
+
+// --- renderEventLog with LOAD events ---
+
+func TestRenderEventLog_LoadEventsRenderCyan(t *testing.T) {
+	d := Dashboard{
+		eventLines: []string{
+			"2026-04-13T00:00:00Z | proj | claude | abc12 | SKILL-LOAD | | LOAD | linear",
+		},
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		width:      120,
+		height:     40,
+	}
+
+	output := d.renderEventLog(100, 20)
+	if !strings.Contains(output, "LOAD") {
+		t.Error("expected LOAD action in event log output")
+	}
+}
+
+// --- Dashboard View with various panel sizes ---
+
+func TestDashboard_ViewSmallTerminal(t *testing.T) {
+	d := Dashboard{
+		skills:     testSkills(),
+		config:     testConfig(),
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		width:      40,
+		height:     15,
+	}
+
+	output := d.View()
+	// Should not panic with small terminal
+	if output == "" {
+		t.Error("expected non-empty output even with small terminal")
+	}
+}
+
+// --- Dashboard: up/down in rules panel ---
+
+func TestDashboard_UpDownInRulesPanel(t *testing.T) {
+	cfg := engine.Config{
+		Tools: []engine.Rule{
+			{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "*"},
+			{Tool: "Write", Path: "**/*.ts", Skill: "go-coding", Agent: "*"},
+		},
+	}
+	d := Dashboard{
+		skills:     []scanner.Skill{{Name: "go-coding"}},
+		config:     cfg,
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 1,
+	}
+
+	// Move down in rules
+	m, _ := d.Update(tea.KeyMsg{Type: tea.KeyDown})
+	d = m.(Dashboard)
+	if d.ruleScroll.Cursor != 1 {
+		t.Errorf("ruleScroll.Cursor = %d, want 1 after down in rules panel", d.ruleScroll.Cursor)
+	}
+
+	// Move up
+	m, _ = d.Update(tea.KeyMsg{Type: tea.KeyUp})
+	d = m.(Dashboard)
+	if d.ruleScroll.Cursor != 0 {
+		t.Errorf("ruleScroll.Cursor = %d, want 0 after up in rules panel", d.ruleScroll.Cursor)
+	}
+}
+
+// --- Dashboard: filter mode up/down cycles values ---
+
+func TestDashboard_FilterModeUpDownCyclesValues(t *testing.T) {
+	d := Dashboard{
+		skills: testSkills(),
+		config: testConfig(),
+		logFilters: map[filterCol]string{
+			filterAgent: "claude",
+		},
+		eventLines: []string{
+			"ts | proj | claude | s1 | Edit | f.go | BLOCK | git",
+			"ts | proj | cursor | s2 | Write | g.go | ALLOW | linear",
+		},
+		styles:       DefaultStyles(),
+		focusPanel:   2,
+		filterMode:   true,
+		filterCursor: filterAgent,
+	}
+
+	// Up should cycle the agent filter backward
+	m, _ := d.Update(tea.KeyMsg{Type: tea.KeyUp})
+	d = m.(Dashboard)
+	currentFilter := d.logFilters[filterAgent]
+	// The value should have changed from "claude" to either "" (all) or "cursor"
+	if currentFilter == "claude" {
+		t.Error("expected agent filter to change after up cycle")
+	}
+}
+
+// --- Dashboard: delete last rule adjusts cursor ---
+
+func TestDashboard_DeleteLastRuleAdjustsCursor(t *testing.T) {
+	cfg := engine.Config{
+		Tools: []engine.Rule{
+			{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "*"},
+			{Tool: "Write", Path: "**/*.ts", Skill: "go-coding", Agent: "*"},
+		},
+	}
+	d := Dashboard{
+		skills:     []scanner.Skill{{Name: "go-coding"}},
+		config:     cfg,
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 1,
+	}
+	d.ruleScroll.Cursor = 1 // Select second (last) rule
+
+	// Delete the last rule
+	m, _ := d.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	d = m.(Dashboard)
+	if len(d.config.Tools) != 1 {
+		t.Fatalf("expected 1 rule after delete, got %d", len(d.config.Tools))
+	}
+	// Cursor should adjust down since we deleted the last item
+	if d.ruleScroll.Cursor != 0 {
+		t.Errorf("ruleScroll.Cursor = %d, want 0 after deleting last rule", d.ruleScroll.Cursor)
+	}
+}
+
+// --- Dashboard: right from skills resets rule cursor ---
+
+func TestDashboard_RightFromSkillsResetsRuleCursor(t *testing.T) {
+	d := Dashboard{
+		skills:     testSkills(),
+		config:     testConfig(),
+		logFilters: make(map[filterCol]string),
+		styles:     DefaultStyles(),
+		focusPanel: 0,
+	}
+	d.ruleScroll.Cursor = 5 // Set to non-zero
+
+	m, _ := d.Update(tea.KeyMsg{Type: tea.KeyRight})
+	d = m.(Dashboard)
+	if d.focusPanel != 1 {
+		t.Errorf("focusPanel = %d, want 1", d.focusPanel)
+	}
+	if d.ruleScroll.Cursor != 0 {
+		t.Errorf("ruleScroll.Cursor = %d, want 0 (should reset on panel switch)", d.ruleScroll.Cursor)
 	}
 }

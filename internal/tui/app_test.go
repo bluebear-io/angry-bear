@@ -706,3 +706,244 @@ func TestApp_SettingsDoneNilConfig(t *testing.T) {
 		t.Error("expected no commands for nil config")
 	}
 }
+
+// --- saveGlobalConfig tests ---
+
+func TestSaveGlobalConfig_GlobalLevel(t *testing.T) {
+	// Override HOME so saveGlobalConfig writes to a temp directory.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 90,
+		StateTTLHours:   48,
+		DefaultAgent:    "claude",
+	}
+
+	cmd := saveGlobalConfig(cfg, "global", "")
+	msg := cmd()
+	result := msg.(saveResultMsg)
+	if result.err != nil {
+		t.Fatalf("saveGlobalConfig failed: %v", result.err)
+	}
+
+	// Verify the file was written.
+	configPath := tmpHome + "/.care-bare/config.json"
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config file not written: %v", err)
+	}
+	if !strings.Contains(string(data), "90") {
+		t.Error("expected SkillTTLMinutes=90 in saved config")
+	}
+	if !strings.Contains(string(data), "claude") {
+		t.Error("expected DefaultAgent=claude in saved config")
+	}
+}
+
+func TestSaveGlobalConfig_ProjectLevel(t *testing.T) {
+	tmpDir := t.TempDir()
+	enforcementPath := tmpDir + "/skill_enforcement.json"
+	// Create the enforcement file so the directory exists.
+	_ = os.WriteFile(enforcementPath, []byte("{}"), 0o644)
+
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 30,
+		StateTTLHours:   12,
+		DefaultAgent:    "*",
+	}
+
+	cmd := saveGlobalConfig(cfg, "project", enforcementPath)
+	msg := cmd()
+	result := msg.(saveResultMsg)
+	if result.err != nil {
+		t.Fatalf("saveGlobalConfig project level failed: %v", result.err)
+	}
+
+	// Verify config.json sits alongside skill_enforcement.json.
+	configPath := tmpDir + "/config.json"
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("project config file not written: %v", err)
+	}
+	if !strings.Contains(string(data), "30") {
+		t.Error("expected SkillTTLMinutes=30 in saved project config")
+	}
+}
+
+// --- savePreferredPath tests ---
+
+func TestSavePreferredPath_WritesPreferencesJSON(t *testing.T) {
+	repoConfigDir := t.TempDir()
+
+	cmd := savePreferredPath(repoConfigDir, "/new/preferred/path")
+	msg := cmd()
+	result := msg.(saveResultMsg)
+	if result.err != nil {
+		t.Fatalf("savePreferredPath failed: %v", result.err)
+	}
+
+	// Verify preferences.json was written.
+	prefs, err := engine.LoadRepoPreferences(repoConfigDir)
+	if err != nil {
+		t.Fatalf("failed to load saved preferences: %v", err)
+	}
+	if prefs.PreferredPath != "/new/preferred/path" {
+		t.Errorf("PreferredPath = %q, want %q", prefs.PreferredPath, "/new/preferred/path")
+	}
+}
+
+// --- saveConfig tests ---
+
+func TestSaveConfig_WritesValidJSON(t *testing.T) {
+	tmpFile := t.TempDir() + "/test_config.json"
+
+	cfg := engine.Config{
+		Version: 1,
+		Tools: []engine.Rule{
+			{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "*"},
+		},
+	}
+
+	cmd := saveConfig(cfg, tmpFile)
+	msg := cmd()
+	result := msg.(saveResultMsg)
+	if result.err != nil {
+		t.Fatalf("saveConfig failed: %v", result.err)
+	}
+
+	data, err := os.ReadFile(tmpFile)
+	if err != nil {
+		t.Fatalf("config file not written: %v", err)
+	}
+	if !strings.Contains(string(data), "go-coding") {
+		t.Error("expected go-coding skill in saved config")
+	}
+	if !strings.Contains(string(data), "Edit") {
+		t.Error("expected Edit tool in saved config")
+	}
+}
+
+func TestSaveConfig_InvalidPathFails(t *testing.T) {
+	cfg := engine.Config{Version: 1}
+	cmd := saveConfig(cfg, "/nonexistent/deeply/nested/dir/config.json")
+	msg := cmd()
+	result := msg.(saveResultMsg)
+	if result.err == nil {
+		t.Error("expected error when writing to nonexistent directory")
+	}
+}
+
+// --- App: loadedSkillsUpdatedMsg handling ---
+
+func TestApp_LoadedSkillsUpdatedMsg(t *testing.T) {
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+
+	newLoaded := map[string]*state.SkillStatus{
+		"git":    {Agents: []string{"claude"}},
+		"linear": {Agents: []string{"cursor"}},
+	}
+
+	m, _ := app.Update(loadedSkillsUpdatedMsg{loaded: newLoaded})
+	app = m.(App)
+
+	if len(app.loadedSkills) != 2 {
+		t.Errorf("expected 2 loaded skills, got %d", len(app.loadedSkills))
+	}
+	if app.dashboard.loadedSkills["git"] == nil {
+		t.Error("expected git in dashboard's loadedSkills")
+	}
+}
+
+// --- App: eventsUpdatedMsg handling ---
+
+func TestApp_EventsUpdatedMsg(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Create events.log
+	eventsDir := tmpHome + "/.care-bare"
+	_ = os.MkdirAll(eventsDir, 0o755)
+	_ = os.WriteFile(eventsDir+"/events.log",
+		[]byte("2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | git\n"),
+		0o644)
+
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+
+	m, _ := app.Update(eventsUpdatedMsg{})
+	app = m.(App)
+
+	// After receiving eventsUpdatedMsg, the dashboard should have reloaded events.
+	// The reload reads from ~/.care-bare/events.log.
+	if len(app.dashboard.eventLines) != 1 {
+		t.Errorf("expected 1 event line after reload, got %d", len(app.dashboard.eventLines))
+	}
+}
+
+// --- App: settings done with global config saves global ---
+
+func TestApp_SettingsDoneGlobalSave(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	cfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 60,
+		StateTTLHours:   24,
+		DefaultAgent:    "*",
+	}
+	app := NewApp(testConfig(), "/tmp/test.json", "/tmp", testSkills(), nil, cfg, "", nil)
+	app.view = viewSettings
+
+	updatedCfg := &engine.GlobalConfig{
+		SkillTTLMinutes: 120,
+		StateTTLHours:   72,
+		DefaultAgent:    "claude",
+	}
+
+	m, cmd := app.Update(settingsDoneMsg{
+		config:      updatedCfg,
+		configLevel: "global",
+	})
+	app = m.(App)
+	if app.view != viewDashboard {
+		t.Errorf("view = %d, want %d (viewDashboard)", app.view, viewDashboard)
+	}
+	if cmd == nil {
+		t.Error("expected save command for global config")
+	}
+	// Verify the global config was updated in app state
+	if app.globalConfig.SkillTTLMinutes != 120 {
+		t.Errorf("SkillTTLMinutes = %d, want 120", app.globalConfig.SkillTTLMinutes)
+	}
+}
+
+// --- App: rulesSubmittedMsg adds multiple rules and stays in editor for confirm ---
+
+func TestApp_RulesSubmittedMultipleRules(t *testing.T) {
+	app := NewApp(engine.Config{Version: 1}, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewRuleEditor
+	app.ruleEditor = RuleEditor{
+		toolItems:  []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems:  []listItem{{typ: itemCheckbox, value: "**"}},
+		agentItems: []listItem{{typ: itemCheckbox, value: "*"}},
+	}
+
+	rules := []engine.Rule{
+		{Tool: "Edit", Path: "**/*.go", Skill: "go-coding", Agent: "claude"},
+		{Tool: "Write", Path: "**/*.go", Skill: "go-coding", Agent: "claude"},
+		{Tool: "Bash", Path: "scripts/**", Skill: "go-coding", Agent: "*"},
+	}
+
+	m, cmd := app.Update(rulesSubmittedMsg{rules: rules})
+	app = m.(App)
+	if len(app.config.Tools) != 3 {
+		t.Errorf("expected 3 rules, got %d", len(app.config.Tools))
+	}
+	// rulesSubmittedMsg triggers SwitchToConfirm + saveConfig, stays in rule editor view
+	if app.view != viewRuleEditor {
+		t.Errorf("view = %d, want %d (should stay in rule editor for confirm)", app.view, viewRuleEditor)
+	}
+	if cmd == nil {
+		t.Error("expected batch command (save + confirm)")
+	}
+}

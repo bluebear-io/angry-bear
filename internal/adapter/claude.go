@@ -13,18 +13,13 @@ import (
 	"strings"
 )
 
-// BinaryPath can be set to override the binary path used in hook configs.
-// When empty, resolveCareBareCommand() auto-detects via os.Executable().
-// This is primarily useful for testing.
-var BinaryPath string
-
 // resolveCareBareCommand returns the path to the care-bare binary for use
-// in hook configurations. Uses BinaryPath if set, otherwise resolves the
+// in hook configurations. Uses binaryPath if non-empty, otherwise resolves the
 // absolute path to the running binary. This ensures hooks work regardless
 // of whether care-bare is on PATH.
-func resolveCareBareCommand() string {
-	if BinaryPath != "" {
-		return BinaryPath
+func resolveCareBareCommand(binaryPath string) string {
+	if binaryPath != "" {
+		return binaryPath
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -38,7 +33,10 @@ func resolveCareBareCommand() string {
 }
 
 // ClaudeAdapter implements HookAdapter for Claude Code.
-type ClaudeAdapter struct{}
+type ClaudeAdapter struct {
+	HomeDir    string // Override home directory (empty = os.UserHomeDir)
+	BinaryPath string // Override binary path (empty = auto-detect)
+}
 
 // Name returns "claude".
 func (a *ClaudeAdapter) Name() string { return "claude" }
@@ -111,12 +109,10 @@ func (a *ClaudeAdapter) FormatDeny(reason string) ([]byte, error) {
 // Used by init to detect if this agent is present in a project.
 func (a *ClaudeAdapter) ConfigPath() string { return ".claude/settings.json" }
 
-// TestHomeDir can be set to override the home directory for testing.
-var TestHomeDir string
-
 // GlobalConfigPath returns the absolute path to the global settings file.
+// Uses a.HomeDir if set, otherwise resolves via os.UserHomeDir().
 func (a *ClaudeAdapter) GlobalConfigPath() string {
-	home := TestHomeDir
+	home := a.HomeDir
 	if home == "" {
 		var err error
 		home, err = os.UserHomeDir()
@@ -171,7 +167,7 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 	}
 
 	// Append the care-bare hook entry using the absolute binary path
-	binPath := resolveCareBareCommand()
+	binPath := resolveCareBareCommand(a.BinaryPath)
 	careBareEntry := map[string]any{
 		"matcher": "*",
 		"hooks": []any{
@@ -249,7 +245,7 @@ func (a *ClaudeAdapter) DetectSkillInvocation(input *HookInput) (string, bool) {
 // ScanProjects discovers all projects with Claude Code sessions by scanning
 // ~/.claude/projects/. Each subdirectory is an encoded project path.
 func (a *ClaudeAdapter) ScanProjects() ([]AgentProject, error) {
-	home := TestHomeDir
+	home := a.HomeDir
 	if home == "" {
 		var err error
 		home, err = os.UserHomeDir()

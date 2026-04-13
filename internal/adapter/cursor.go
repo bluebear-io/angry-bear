@@ -39,7 +39,10 @@ var cursorToolMap = map[string]string{
 }
 
 // CursorAdapter implements HookAdapter for Cursor IDE.
-type CursorAdapter struct{}
+type CursorAdapter struct {
+	HomeDir    string // Override home directory (empty = os.UserHomeDir)
+	BinaryPath string // Override binary path (empty = auto-detect)
+}
 
 // Name returns "cursor".
 func (a *CursorAdapter) Name() string { return "cursor" }
@@ -140,8 +143,9 @@ func (a *CursorAdapter) FormatDeny(reason string) ([]byte, error) {
 func (a *CursorAdapter) ConfigPath() string { return ".cursor/hooks.json" }
 
 // GlobalConfigPath returns the absolute path to the global Cursor hooks file.
+// Uses a.HomeDir if set, otherwise resolves via os.UserHomeDir().
 func (a *CursorAdapter) GlobalConfigPath() string {
-	home := TestHomeDir
+	home := a.HomeDir
 	if home == "" {
 		var err error
 		home, err = os.UserHomeDir()
@@ -201,7 +205,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 		"beforeMCPExecution",
 	}
 
-	binPath := resolveCareBareCommand()
+	binPath := resolveCareBareCommand(a.BinaryPath)
 	careBareEntry := map[string]any{
 		"command": binPath + " hook --agent cursor",
 	}
@@ -264,7 +268,7 @@ func (a *CursorAdapter) DetectSkillInvocation(input *HookInput) (string, bool) {
 // ScanProjects discovers all projects with Cursor sessions by scanning
 // ~/.cursor/projects/. Each subdirectory is an encoded project path.
 func (a *CursorAdapter) ScanProjects() ([]AgentProject, error) {
-	home := TestHomeDir
+	home := a.HomeDir
 	if home == "" {
 		var err error
 		home, err = os.UserHomeDir()

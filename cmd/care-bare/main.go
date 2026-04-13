@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,17 +21,22 @@ var (
 
 func main() {
 	// Set the binary path for hook configs so they use the absolute path
-	// to this binary, not a PATH-relative name.
+	// to this binary, not a PATH-relative name. This propagates to all
+	// adapters created by NewRegistry.
 	if exe, err := os.Executable(); err == nil {
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-			adapter.BinaryPath = resolved
+			adapter.SetRegistryDefaults("", resolved)
 		} else {
-			adapter.BinaryPath = exe
+			adapter.SetRegistryDefaults("", exe)
 		}
 	}
 
 	cli.SetVersionInfo(version, commit, date)
 	if err := cli.Execute(); err != nil {
+		var exitErr *cli.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

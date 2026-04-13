@@ -21,14 +21,11 @@ import (
 
 // loadedSkillsUpdatedMsg is pushed when the state directory changes.
 type loadedSkillsUpdatedMsg struct {
-	loaded map[string]*SkillStatus
+	loaded map[string]*state.SkillStatus
 }
 
 // eventsUpdatedMsg is pushed when events.log changes.
 type eventsUpdatedMsg struct{}
-
-// SwitchRequested is set to true when the user presses P to switch projects.
-var SwitchRequested bool
 
 // switchProjectMsg triggers returning to the project picker.
 type switchProjectMsg struct{}
@@ -76,29 +73,36 @@ type saveResultMsg struct {
 
 // App is the root Bubble Tea model that manages the TUI lifecycle.
 type App struct {
-	config       engine.Config           // Currently loaded enforcement config (mutable)
-	globalConfig *engine.GlobalConfig    // Global config (skill_ttl, state_ttl, etc.)
-	configPath   string                  // Path to the config file for saving
-	stateDir     string                  // Path to .care-bare/state/ for watching
-	skills       []scanner.Skill         // Discovered skills from the scanner
-	loadedSkills map[string]*SkillStatus // Skills loaded in active sessions, with agent info
-	view         viewState               // Current active view
-	dashboard    Dashboard               // Dashboard child model
-	ruleEditor   RuleEditor              // Rule editor child model
-	treePicker   TreePicker              // Tree picker child model
-	settings     Settings                // Settings editor child model
-	statusMsg    string                  // Transient status message ("Saved!", "Error: ...")
-	width        int                     // Terminal width
-	height       int                     // Terminal height
-	styles       Styles                  // Style definitions
+	config          engine.Config                 // Currently loaded enforcement config (mutable)
+	globalConfig    *engine.GlobalConfig          // Global config (skill_ttl, state_ttl, etc.)
+	configPath      string                        // Path to the config file for saving
+	projectRoot     string                        // Actual project root (for path tree in rule editor)
+	stateDir        string                        // Path to .care-bare/state/ for watching
+	skills          []scanner.Skill               // Discovered skills from the scanner
+	loadedSkills    map[string]*state.SkillStatus // Skills loaded in active sessions, with agent info
+	switchRequested bool                          // True when user pressed P to switch projects
+	view            viewState                     // Current active view
+	dashboard       Dashboard                     // Dashboard child model
+	ruleEditor      RuleEditor                    // Rule editor child model
+	treePicker      TreePicker                    // Tree picker child model
+	settings        Settings                      // Settings editor child model
+	statusMsg       string                        // Transient status message ("Saved!", "Error: ...")
+	width           int                           // Terminal width
+	height          int                           // Terminal height
+	styles          Styles                        // Style definitions
+}
+
+// SwitchRequested returns true if the user requested switching projects.
+func (a App) SwitchRequested() bool {
+	return a.switchRequested
 }
 
 // NewApp creates a new TUI application model with the given config, config path,
 // discovered skills, and currently loaded skills from session state.
-func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loadedSkills map[string]*SkillStatus, globalCfg *engine.GlobalConfig) App {
+func NewApp(cfg engine.Config, configPath string, projectRoot string, skills []scanner.Skill, loadedSkills map[string]*state.SkillStatus, globalCfg *engine.GlobalConfig) App {
 	styles := DefaultStyles()
 	if loadedSkills == nil {
-		loadedSkills = make(map[string]*SkillStatus)
+		loadedSkills = make(map[string]*state.SkillStatus)
 	}
 	if globalCfg == nil {
 		globalCfg = &engine.GlobalConfig{
@@ -116,6 +120,7 @@ func NewApp(cfg engine.Config, configPath string, skills []scanner.Skill, loaded
 		config:       cfg,
 		globalConfig: globalCfg,
 		configPath:   configPath,
+		projectRoot:  projectRoot,
 		stateDir:     stateDir,
 		skills:       skills,
 		loadedSkills: loadedSkills,
@@ -172,7 +177,7 @@ func watchStateDir(stateDir string) tea.Cmd {
 				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 &&
 					strings.HasSuffix(event.Name, ".json") {
 					watcher.Close()
-					return loadedSkillsUpdatedMsg{loaded: readLoadedSkills(stateDir)}
+					return loadedSkillsUpdatedMsg{loaded: state.CollectLoadedSkills(stateDir)}
 				}
 			case _, ok := <-watcher.Errors:
 				if !ok {
@@ -181,11 +186,6 @@ func watchStateDir(stateDir string) tea.Cmd {
 			}
 		}
 	}
-}
-
-// SkillStatus tracks which agents have loaded a skill.
-type SkillStatus struct {
-	Agents []string // e.g. ["claude", "cursor"]
 }
 
 // watchEventsLog watches the events.log file and sends eventsUpdatedMsg on changes.
@@ -221,50 +221,6 @@ func watchEventsLog(logPath string) tea.Cmd {
 	}
 }
 
-// readLoadedSkills reads all session state files and returns loaded skills
-// with their agent information.
-func readLoadedSkills(stateDir string) map[string]*SkillStatus {
-	loaded := make(map[string]*SkillStatus)
-	entries, err := os.ReadDir(stateDir)
-	if err != nil {
-		return loaded
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(stateDir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var ss state.SessionState
-		if err := json.Unmarshal(data, &ss); err != nil {
-			continue
-		}
-		agent := ss.Agent
-		if agent == "" {
-			agent = "unknown"
-		}
-		for _, skill := range ss.InvokedSkills {
-			if loaded[skill] == nil {
-				loaded[skill] = &SkillStatus{}
-			}
-			// Add agent if not already in list
-			found := false
-			for _, a := range loaded[skill].Agents {
-				if a == agent {
-					found = true
-					break
-				}
-			}
-			if !found {
-				loaded[skill].Agents = append(loaded[skill].Agents, agent)
-			}
-		}
-	}
-	return loaded
-}
-
 // Update handles messages and routes them to the active view's child model.
 // View transitions are triggered by custom message types.
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -295,7 +251,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case switchProjectMsg:
-		SwitchRequested = true
+		a.switchRequested = true
 		return a, tea.Quit
 
 	case tea.KeyMsg:
@@ -310,9 +266,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.view = viewRuleEditor
 		a.ruleEditor = NewRuleEditor(msg.skillName, msg.existing, msg.ruleIndex, a.styles)
 		a.ruleEditor.SetExistingRules(a.config.Tools)
-		// Set project root for path discovery (two levels up from .care-bare/skill_enforcement.json)
-		if a.configPath != "" {
-			a.ruleEditor.SetProjectRoot(filepath.Dir(filepath.Dir(a.configPath)))
+		// Use the actual project root for path discovery (not derived from config path,
+		// which may point to ~/.care-bare/repos/ for repo-based configs)
+		if a.projectRoot != "" {
+			a.ruleEditor.SetProjectRoot(a.projectRoot)
 		}
 		return a, a.ruleEditor.Init()
 
@@ -358,18 +315,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case openTreePickerMsg:
 		a.view = viewTreePicker
 		root := "."
-		if a.configPath != "" {
-			// Use the directory two levels up from configPath (skip .care-bare/).
-			root = filepath.Dir(filepath.Dir(a.configPath))
+		if a.projectRoot != "" {
+			root = a.projectRoot
 		}
 		a.treePicker = NewTreePicker(root, a.styles)
 		return a, a.treePicker.Init()
 
 	case treePickerDoneMsg:
 		a.view = viewRuleEditor
-		if msg.pattern != "" {
-			a.ruleEditor.SetPath(msg.pattern)
-		}
 		return a, nil
 
 	case openSettingsMsg:

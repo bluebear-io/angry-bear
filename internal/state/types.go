@@ -10,10 +10,3 @@ type SessionState struct {
 	InvokedSkills   []string          `json:"invoked_skills"`
 	SkillTimestamps map[string]string `json:"skill_timestamps,omitempty"`
 }
-
-// LoadedSkill represents a skill loaded in a specific session/agent.
-type LoadedSkill struct {
-	SkillName string
-	Agent     string
-	SessionID string
-}

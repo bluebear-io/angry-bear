@@ -8,7 +8,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -62,7 +62,7 @@ func LoadConfig(startDir string, opts ...ConfigOption) ([]MatchedRule, error) {
 		homeDir, err = os.UserHomeDir()
 		if err != nil {
 			// Cannot determine home directory -- skip user-level config.
-			log.Printf("warning: cannot determine home directory: %v", err)
+			slog.Warn("cannot determine home directory, skipping user-level config", "error", err)
 			homeDir = ""
 		}
 	}
@@ -128,11 +128,11 @@ func loadConfigFile(path string) ([]MatchedRule, error) {
 			return nil, nil
 		}
 		if os.IsPermission(err) {
-			log.Printf("warning: permission denied reading %s, skipping", path)
+			slog.Warn("permission denied reading config, skipping", "path", path)
 			return nil, nil
 		}
 		// Other stat errors -- skip with warning.
-		log.Printf("warning: cannot stat %s: %v, skipping", path, err)
+		slog.Warn("cannot stat config file, skipping", "path", path, "error", err)
 		return nil, nil
 	}
 
@@ -140,7 +140,7 @@ func loadConfigFile(path string) ([]MatchedRule, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsPermission(err) {
-			log.Printf("warning: permission denied reading %s, skipping", path)
+			slog.Warn("permission denied reading config file, skipping", "path", path)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)

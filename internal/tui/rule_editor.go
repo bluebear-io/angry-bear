@@ -17,10 +17,6 @@ import (
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 )
 
-// ToolOptions and AgentOptions for the rule editor.
-var ToolOptions = []string{"Edit", "Write", "Bash", "Read", "Glob", "Grep", "Agent", "*"}
-var AgentOptions = []string{"claude", "cursor", "*"}
-
 // Message types for communication with the App.
 type ruleSubmittedMsg struct {
 	rule      *engine.Rule
@@ -100,9 +96,6 @@ func (re *RuleEditor) SetExistingRules(rules []engine.Rule) {
 	re.existingRules = rules
 }
 
-// SetPath is kept for compatibility.
-func (re *RuleEditor) SetPath(path string) {}
-
 // buildItems creates the unified list with tools, paths, and agents.
 // Pre-selects items that already have rules for this skill.
 func (re *RuleEditor) buildItems() []listItem {
@@ -172,12 +165,6 @@ func (re *RuleEditor) buildPathTree() []listItem {
 		root, _ = os.Getwd()
 	}
 
-	ignoreSet := map[string]bool{
-		".git": true, "node_modules": true, "vendor": true, "dist": true,
-		".next": true, "__pycache__": true, ".venv": true, "build": true,
-		"target": true, ".care-bare": true, "bin": true,
-	}
-
 	var items []listItem
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -186,7 +173,7 @@ func (re *RuleEditor) buildPathTree() []listItem {
 
 	var dirNames []string
 	for _, e := range entries {
-		if !e.IsDir() || ignoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		dirNames = append(dirNames, e.Name())
@@ -199,7 +186,7 @@ func (re *RuleEditor) buildPathTree() []listItem {
 		subEntries, err := os.ReadDir(filepath.Join(root, name))
 		if err == nil {
 			for _, se := range subEntries {
-				if se.IsDir() && !ignoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
+				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
 					children = append(children, se.Name())
 				}
 			}
@@ -236,12 +223,6 @@ func (re *RuleEditor) expandDir(idx int) {
 		root, _ = os.Getwd()
 	}
 
-	ignoreSet := map[string]bool{
-		".git": true, "node_modules": true, "vendor": true, "dist": true,
-		".next": true, "__pycache__": true, ".venv": true, "build": true,
-		"target": true, ".care-bare": true, "bin": true,
-	}
-
 	// Read children from filesystem
 	absDir := filepath.Join(root, parentPath)
 	entries, err := os.ReadDir(absDir)
@@ -251,7 +232,7 @@ func (re *RuleEditor) expandDir(idx int) {
 
 	var newItems []listItem
 	for _, e := range entries {
-		if !e.IsDir() || ignoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || DefaultIgnoreSet[e.Name()] || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		childPath := parentPath + "/" + e.Name()
@@ -261,7 +242,7 @@ func (re *RuleEditor) expandDir(idx int) {
 		subEntries, err := os.ReadDir(filepath.Join(root, childPath))
 		if err == nil {
 			for _, se := range subEntries {
-				if se.IsDir() && !ignoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
+				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
 					grandchildren = append(grandchildren, se.Name())
 				}
 			}

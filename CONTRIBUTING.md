@@ -214,7 +214,7 @@ No other code needs to change. The engine, TUI, CLI commands, state manager, and
 - CLI commands: integration tests with `cobra.Command` + captured stdout/stderr
 - TUI: tests using Bubble Tea's `teatest` pattern
 - Filesystem tests: always use `t.TempDir()`
-- Use `TestHomeDir` and `BinaryPath` variables for test isolation (see adapter tests)
+- Use `HomeDir` and `BinaryPath` struct fields on adapters for test isolation (see adapter tests), or `SetRegistryDefaults` for CLI-level tests
 
 ## License
 

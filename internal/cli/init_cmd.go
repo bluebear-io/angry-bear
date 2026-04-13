@@ -191,7 +191,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  care-bare is not on your PATH. To fix this, run ONE of:")
 		fmt.Fprintln(out, "")
 		fmt.Fprintln(out, "    # Install globally via Go")
-		fmt.Fprintln(out, "    cd "+filepath.Dir(filepath.Dir(adapter.BinaryPath))+" && make install")
+		fmt.Fprintln(out, "    cd "+filepath.Dir(filepath.Dir(adapter.RegistryBinaryPath()))+" && make install")
 		fmt.Fprintln(out, "")
 		fmt.Fprintln(out, "    # Or install via Homebrew (once published)")
 		fmt.Fprintln(out, "    brew install Blue-Bear-Security/tap/care-bare")

@@ -263,30 +263,14 @@ func TestClaudeFormatDeny_IncludesHookEventName(t *testing.T) {
 
 // --- InstallHook tests ---
 
-func setTestBinaryPath(t *testing.T) {
-	t.Helper()
-	oldBin := BinaryPath
-	BinaryPath = "care-bare"
-	t.Cleanup(func() { BinaryPath = oldBin })
-}
-
-func setTestHomeDir(t *testing.T, dir string) {
-	t.Helper()
-	oldHome := TestHomeDir
-	TestHomeDir = dir
-	t.Cleanup(func() { TestHomeDir = oldHome })
-}
-
 func TestClaudeInstallHook_CreatesSettingsWhenMissing(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		t.Fatalf("failed to create .claude dir: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -304,9 +288,7 @@ func TestClaudeInstallHook_CreatesSettingsWhenMissing(t *testing.T) {
 }
 
 func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		t.Fatalf("failed to create .claude dir: %v", err)
@@ -333,7 +315,7 @@ func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Fatalf("failed to write existing settings: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}
@@ -359,15 +341,13 @@ func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
 }
 
 func TestClaudeInstallHook_Idempotent(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	claudeDir := filepath.Join(tmpDir, ".claude")
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		t.Fatalf("failed to create .claude dir: %v", err)
 	}
 
-	adapter := &ClaudeAdapter{}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 
 	// Install twice
 	if err := adapter.InstallHook(tmpDir); err != nil {
@@ -391,12 +371,10 @@ func TestClaudeInstallHook_Idempotent(t *testing.T) {
 }
 
 func TestClaudeInstallHook_CreatesClaudeDir(t *testing.T) {
-	setTestBinaryPath(t)
 	tmpDir := t.TempDir()
-	setTestHomeDir(t, tmpDir)
 	// Don't pre-create .claude dir -- InstallHook should handle it
 
-	adapter := &ClaudeAdapter{}
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bare"}
 	if err := adapter.InstallHook(tmpDir); err != nil {
 		t.Fatalf("InstallHook failed: %v", err)
 	}

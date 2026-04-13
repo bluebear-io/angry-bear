@@ -6,7 +6,6 @@ package scanner
 
 import (
 	"bytes"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,8 +48,7 @@ func ParseSkillFile(path string) (*Skill, error) {
 	if ok {
 		var parsed skillFrontmatter
 		if yamlErr := yaml.Unmarshal([]byte(fm), &parsed); yamlErr != nil {
-			// Malformed YAML: log warning and fall back to directory/file name
-			log.Printf("warning: malformed YAML frontmatter in %s: %v", path, yamlErr)
+			// Malformed YAML: fall back to directory/file name.
 		} else {
 			skill.Name = strings.TrimSpace(parsed.Name)
 			skill.Description = strings.TrimSpace(parsed.Description)

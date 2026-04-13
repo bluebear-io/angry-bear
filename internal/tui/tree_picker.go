@@ -14,13 +14,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// DefaultIgnorePatterns lists directory names that are hidden by default
-// in the tree picker to reduce noise.
-var DefaultIgnorePatterns = []string{
-	".git", "node_modules", "vendor", "dist", ".next",
-	"__pycache__", ".venv", "build", "target",
-}
-
 // treeEntry represents a single entry (file or directory) in the tree picker.
 type treeEntry struct {
 	name  string // Display name (basename)
@@ -31,16 +24,16 @@ type treeEntry struct {
 // TreePicker provides a file tree browser for selecting paths.
 // It implements tea.Model for use as a child model within the App.
 type TreePicker struct {
-	rootDir        string      // Project root directory
-	currentDir     string      // Currently displayed directory
-	entries        []treeEntry // Visible entries in currentDir
-	focusIndex     int         // Currently focused entry index
-	ignorePatterns []string    // Directory names to hide
-	styles         Styles      // Style definitions
+	rootDir    string          // Project root directory
+	currentDir string          // Currently displayed directory
+	entries    []treeEntry     // Visible entries in currentDir
+	focusIndex int             // Currently focused entry index
+	ignoreSet  map[string]bool // Directory names to hide
+	styles     Styles          // Style definitions
 }
 
 // NewTreePicker creates a new TreePicker rooted at the given directory.
-// It uses DefaultIgnorePatterns for filtering.
+// It uses DefaultIgnoreSet for filtering.
 func NewTreePicker(rootDir string, styles Styles) TreePicker {
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
@@ -48,27 +41,27 @@ func NewTreePicker(rootDir string, styles Styles) TreePicker {
 	}
 
 	tp := TreePicker{
-		rootDir:        absRoot,
-		currentDir:     absRoot,
-		ignorePatterns: DefaultIgnorePatterns,
-		styles:         styles,
+		rootDir:    absRoot,
+		currentDir: absRoot,
+		ignoreSet:  DefaultIgnoreSet,
+		styles:     styles,
 	}
 	tp.entries = tp.listEntries(absRoot)
 	return tp
 }
 
-// NewTreePickerWithIgnore creates a TreePicker with custom ignore patterns.
-func NewTreePickerWithIgnore(rootDir string, ignorePatterns []string, styles Styles) TreePicker {
+// NewTreePickerWithIgnore creates a TreePicker with a custom ignore set.
+func NewTreePickerWithIgnore(rootDir string, ignoreSet map[string]bool, styles Styles) TreePicker {
 	absRoot, err := filepath.Abs(rootDir)
 	if err != nil {
 		absRoot = rootDir
 	}
 
 	tp := TreePicker{
-		rootDir:        absRoot,
-		currentDir:     absRoot,
-		ignorePatterns: ignorePatterns,
-		styles:         styles,
+		rootDir:    absRoot,
+		currentDir: absRoot,
+		ignoreSet:  ignoreSet,
+		styles:     styles,
 	}
 	tp.entries = tp.listEntries(absRoot)
 	return tp
@@ -118,14 +111,9 @@ func (tp TreePicker) listEntries(dir string) []treeEntry {
 	return append(dirs, files...)
 }
 
-// isIgnored checks if a name matches any of the ignore patterns.
+// isIgnored checks if a name is in the ignore set.
 func (tp TreePicker) isIgnored(name string) bool {
-	for _, pattern := range tp.ignorePatterns {
-		if name == pattern {
-			return true
-		}
-	}
-	return false
+	return tp.ignoreSet[name]
 }
 
 // Init returns the initial command for the tree picker.
@@ -277,14 +265,4 @@ func (tp TreePicker) toRelativePath(absPath string) string {
 	}
 	// Convert to forward slashes for cross-platform glob patterns.
 	return filepath.ToSlash(rel)
-}
-
-// GeneratePattern generates a glob pattern from the given absolute path.
-// Directories get "/**" appended, files are returned as relative paths.
-func (tp TreePicker) GeneratePattern(absPath string, isDir bool) string {
-	rel := tp.toRelativePath(absPath)
-	if isDir {
-		return rel + "/**"
-	}
-	return rel
 }

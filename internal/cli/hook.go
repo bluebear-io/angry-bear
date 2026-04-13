@@ -25,6 +25,18 @@ import (
 // Anything beyond this is likely malformed or adversarial input.
 const maxStdinSize = 5 * 1024 * 1024
 
+// ExitError is returned when the hook needs the process to exit with a
+// specific code (e.g., exit code 2 to signal a block to Cursor).
+// The caller in main.go checks for this error and calls os.Exit(e.Code).
+type ExitError struct {
+	Code int
+}
+
+// Error returns a human-readable description of the exit code request.
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit code %d", e.Code)
+}
+
 // NewHookCommand returns the hook subcommand that runs as a PreToolUse hook
 // for AI agents. It reads JSON from stdin, evaluates enforcement rules, and
 // writes allow/deny JSON to stdout.
@@ -100,10 +112,16 @@ func runHook(cmd *cobra.Command, args []string) error {
 	repo := engine.ResolveRepoIdentity(projectRoot)
 	repoConfigDir := ""
 	if repo != nil {
-		home, _ := os.UserHomeDir()
-		repoConfigDir = engine.RepoConfigDir(home, repo)
-		os.MkdirAll(repoConfigDir, 0755)
-		logger.Debug("resolved repo identity", "slug", repo.Slug, "configDir", repoConfigDir)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			logger.Warn("failed to get home directory for repo config", "error", err)
+		} else {
+			repoConfigDir = engine.RepoConfigDir(home, repo)
+			if err := os.MkdirAll(repoConfigDir, 0o755); err != nil {
+				logger.Warn("failed to create repo config directory", "path", repoConfigDir, "error", err)
+			}
+			logger.Debug("resolved repo identity", "slug", repo.Slug, "configDir", repoConfigDir)
+		}
 	}
 
 	// Step 5: Check for skill invocation (short-circuit).
@@ -202,11 +220,10 @@ func runHook(cmd *cobra.Command, args []string) error {
 	matched := engine.MatchedSkills(rules, hookInput.ToolName, normalizedPath, hookInput.Agent)
 	logger.Debug("matched skills for logging", "matched", matched, "tool", hookInput.ToolName, "path", normalizedPath)
 	if len(matched) > 0 {
-		// For ALLOW events, include which skills were required (and satisfied)
-		if !blockResult.Blocked {
-			blockResult.Missing = matched // reuse Missing field for "matched" skills on allow
-		}
-		logEvent(projectRoot, hookInput, normalizedPath, blockResult)
+		// For BLOCK events, the relevant skills come from blockResult.Missing.
+		// For ALLOW events, the relevant skills come from the matched parameter.
+		// We pass matchedSkills separately to avoid mutating blockResult.Missing.
+		logEvent(projectRoot, hookInput, normalizedPath, blockResult, matched)
 	}
 
 	// Step 11: Output response.
@@ -217,13 +234,6 @@ func runHook(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprint(cmd.OutOrStdout(), string(denyBytes))
 		logger.Debug("denied tool invocation", "reason", blockResult.Reason)
-
-		// For Cursor: exit code 2 signals "block this action".
-		// Claude Code reads the deny decision from stdout JSON (exit 0 is fine).
-		// We use os.Exit(2) to ensure Cursor respects the block.
-		if hookInput.Agent == "cursor" {
-			os.Exit(2)
-		}
 	} else {
 		if err := writeAllow(cmd, hookAdapter); err != nil {
 			return err
@@ -231,12 +241,19 @@ func runHook(cmd *cobra.Command, args []string) error {
 		logger.Debug("allowed tool invocation")
 	}
 
-	// Step 11: Trigger throttled pruning (reuses globalCfg loaded in step 7).
+	// Step 12: Trigger throttled pruning (reuses globalCfg loaded in step 7).
 	if _, err := os.Stat(stateDir); err == nil {
 		ttl := time.Duration(globalCfg.StateTTLHours) * time.Hour
 		if pruneErr := state.PruneIfDue(stateDir, ttl); pruneErr != nil {
 			logger.Warn("pruning failed", "error", pruneErr)
 		}
+	}
+
+	// For Cursor: exit code 2 signals "block this action".
+	// Claude Code reads the deny decision from stdout JSON (exit 0 is fine).
+	// Return ExitError so main.go calls os.Exit(2) after cleanup completes.
+	if blockResult.Blocked && hookInput.Agent == "cursor" {
+		return &ExitError{Code: 2}
 	}
 
 	return nil
@@ -291,7 +308,7 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 		return
 	}
 	logDir := filepath.Join(home, ".care-bare")
-	os.MkdirAll(logDir, 0755)
+	os.MkdirAll(logDir, 0o755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)
 	if repo := engine.ResolveRepoIdentity(projectRoot); repo != nil {
@@ -305,7 +322,7 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 		"",
 		skillName,
 	)
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}
@@ -314,15 +331,17 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 }
 
 // logEvent appends a line to .care-bare/events.log for every hook invocation.
-// Log format: timestamp | agent | tool | path | decision | missing skills
+// Log format: timestamp | agent | tool | path | decision | skills
+// For BLOCK events, skills come from result.Missing (the skills that were not loaded).
+// For ALLOW events, skills come from matchedSkills (the skills that were required and satisfied).
 // Events older than 7 days are pruned on each write.
-func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath string, result engine.BlockResult) {
+func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath string, result engine.BlockResult, matchedSkills []string) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
 	logDir := filepath.Join(home, ".care-bare")
-	os.MkdirAll(logDir, 0755)
+	os.MkdirAll(logDir, 0o755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)
 	if repo := engine.ResolveRepoIdentity(projectRoot); repo != nil {
@@ -330,10 +349,12 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	}
 
 	decision := "ALLOW"
+	skills := matchedSkills
 	if result.Blocked {
 		decision = "BLOCK"
+		skills = result.Missing
 	}
-	missing := strings.Join(result.Missing, ",")
+	missing := strings.Join(skills, ",")
 
 	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | %-10s | %-40s | %-5s | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
@@ -346,7 +367,7 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 		missing,
 	)
 
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}

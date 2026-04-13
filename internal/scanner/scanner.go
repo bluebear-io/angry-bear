@@ -5,7 +5,6 @@ package scanner
 
 import (
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,18 +26,16 @@ func ScanSkills(paths []string) ([]Skill, error) {
 	seen := make(map[string]Skill)
 
 	for _, root := range paths {
-		// Check if path exists; skip nonexistent paths with a log warning.
+		// Skip nonexistent paths — expected when skill dirs haven't been created yet.
 		if _, err := os.Stat(root); os.IsNotExist(err) {
-			log.Printf("warning: skill path does not exist, skipping: %s", root)
 			continue
 		}
 
 		// Walk the directory tree looking for skill files.
 		walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				// Permission error on a subdirectory: skip the subtree.
+				// Permission error on a subdirectory: skip the subtree silently.
 				if os.IsPermission(err) {
-					log.Printf("warning: permission denied, skipping: %s", path)
 					if d != nil && d.IsDir() {
 						return fs.SkipDir
 					}
@@ -59,10 +56,9 @@ func ScanSkills(paths []string) ([]Skill, error) {
 				return nil
 			}
 
-			// Parse the skill file to extract metadata.
+			// Parse the skill file to extract metadata. Skip unreadable files.
 			skill, parseErr := ParseSkillFile(path)
 			if parseErr != nil {
-				log.Printf("warning: failed to parse skill file %s: %v", path, parseErr)
 				return nil
 			}
 

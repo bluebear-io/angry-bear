@@ -14,6 +14,7 @@ import (
 
 	"github.com/Blue-Bear-Security/care-bare/internal/engine"
 	"github.com/Blue-Bear-Security/care-bare/internal/scanner"
+	"github.com/Blue-Bear-Security/care-bare/internal/state"
 )
 
 // filterCol identifies a filterable column in the event log.
@@ -52,7 +53,7 @@ func filterColName(c filterCol) string {
 type Dashboard struct {
 	skills       []scanner.Skill
 	config       engine.Config
-	loadedSkills map[string]*SkillStatus
+	loadedSkills map[string]*state.SkillStatus
 	eventLines   []string // Recent event log lines
 	projectRoot  string   // For reading events.log
 	skillCursor  int
@@ -73,9 +74,9 @@ type Dashboard struct {
 }
 
 // NewDashboard creates a new split-pane Dashboard.
-func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, loadedSkills map[string]*SkillStatus) Dashboard {
+func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, loadedSkills map[string]*state.SkillStatus) Dashboard {
 	if loadedSkills == nil {
-		loadedSkills = make(map[string]*SkillStatus)
+		loadedSkills = make(map[string]*state.SkillStatus)
 	}
 	return Dashboard{
 		skills:       skills,
@@ -429,26 +430,24 @@ func (d Dashboard) updatePathEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// nextTool cycles through tool options.
+// nextTool cycles through ToolOptions (defined in constants.go).
 func nextTool(current string) string {
-	tools := []string{"Edit", "Write", "Bash", "Read", "Glob", "Grep", "Agent", "*"}
-	for i, t := range tools {
+	for i, t := range ToolOptions {
 		if t == current {
-			return tools[(i+1)%len(tools)]
+			return ToolOptions[(i+1)%len(ToolOptions)]
 		}
 	}
-	return tools[0]
+	return ToolOptions[0]
 }
 
-// nextAgent cycles through agent options.
+// nextAgent cycles through AgentOptions (defined in constants.go).
 func nextAgent(current string) string {
-	agents := []string{"claude", "cursor", "*"}
-	for i, a := range agents {
+	for i, a := range AgentOptions {
 		if a == current {
-			return agents[(i+1)%len(agents)]
+			return AgentOptions[(i+1)%len(AgentOptions)]
 		}
 	}
-	return agents[0]
+	return AgentOptions[0]
 }
 
 // View renders the split-pane layout.
@@ -788,64 +787,12 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No events yet. Hook activity will appear here.")
 	}
 
-	// Parse all events into structured rows
-	type eventRow struct {
-		act, project, sess, agent, tool, skill, path string
-		lineIdx                                      int
-		isBlock, isLoad                              bool
-	}
+	// Parse all events, then apply filters.
+	parsedRows := parseAllEvents(d.eventLines)
 
-	// First pass: parse all rows (unfiltered, for value extraction)
-	var parsedRows []eventRow
-	for i, line := range d.eventLines {
-		parts := strings.Split(line, " | ")
-		for j := range parts {
-			parts[j] = strings.TrimSpace(parts[j])
-		}
-
-		r := eventRow{lineIdx: i}
-		if len(parts) >= 8 {
-			r.project = parts[1]
-			r.agent = parts[2]
-			r.sess = parts[3]
-			r.tool = parts[4]
-			r.path = parts[5]
-			r.skill = parts[7]
-		} else if len(parts) >= 7 {
-			r.agent = parts[1]
-			r.sess = parts[2]
-			r.tool = parts[3]
-			r.path = parts[4]
-			r.skill = parts[6]
-		} else if len(parts) >= 6 {
-			r.agent = parts[1]
-			r.tool = parts[2]
-			r.path = parts[3]
-			r.skill = parts[5]
-		} else {
-			continue
-		}
-
-		r.isBlock = strings.Contains(line, "| BLOCK")
-		r.isLoad = strings.Contains(line, "SKILL-LOAD")
-
-		if r.isBlock {
-			r.act = "BLOCK"
-		} else if r.isLoad {
-			r.act = "LOAD"
-			r.tool = "—"
-			r.path = ""
-		} else {
-			r.act = "ALLOW"
-		}
-
-		parsedRows = append(parsedRows, r)
-	}
-
-	// Second pass: apply filters
-	var allRows []eventRow
+	var allRows []ParsedEvent
 	for _, r := range parsedRows {
-		if !d.matchesFilters(r.act, r.project, r.sess, r.agent, r.tool, r.skill) {
+		if !d.matchesFilters(r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill) {
 			continue
 		}
 		allRows = append(allRows, r)
@@ -860,26 +807,26 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
 	}
 	for _, r := range allRows {
-		if len(r.act) > colW["act"] {
-			colW["act"] = len(r.act)
+		if len(r.Action) > colW["act"] {
+			colW["act"] = len(r.Action)
 		}
-		if len(r.project) > colW["project"] {
-			colW["project"] = len(r.project)
+		if len(r.Project) > colW["project"] {
+			colW["project"] = len(r.Project)
 		}
-		if len(r.sess) > colW["sess"] {
-			colW["sess"] = len(r.sess)
+		if len(r.Session) > colW["sess"] {
+			colW["sess"] = len(r.Session)
 		}
-		if len(r.agent) > colW["agent"] {
-			colW["agent"] = len(r.agent)
+		if len(r.Agent) > colW["agent"] {
+			colW["agent"] = len(r.Agent)
 		}
-		if len(r.tool) > colW["tool"] {
-			colW["tool"] = len(r.tool)
+		if len(r.Tool) > colW["tool"] {
+			colW["tool"] = len(r.Tool)
 		}
-		if len(r.skill) > colW["skill"] {
-			colW["skill"] = len(r.skill)
+		if len(r.Skill) > colW["skill"] {
+			colW["skill"] = len(r.Skill)
 		}
-		if len(r.path) > colW["path"] {
-			colW["path"] = len(r.path)
+		if len(r.Path) > colW["path"] {
+			colW["path"] = len(r.Path)
 		}
 	}
 
@@ -955,22 +902,22 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		r := allRows[fi]
 
 		// Truncate path
-		path := r.path
+		path := r.Path
 		if len(path) > colW["path"] {
 			path = "…" + path[len(path)-colW["path"]+1:]
 		}
 
 		var sty lipgloss.Style
-		if r.isBlock {
+		if r.IsBlock {
 			sty = red
-		} else if r.isLoad {
+		} else if r.IsLoad {
 			sty = cyan
 		} else {
 			sty = green
 		}
 
 		focused := fi == d.logCursor && d.focusPanel == 2
-		plain := fmt.Sprintf(fmtStr, r.act, r.project, r.sess, r.agent, r.tool, r.skill, path)
+		plain := fmt.Sprintf(fmtStr, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
 
 		if focused {
 			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")
@@ -987,33 +934,21 @@ func (d Dashboard) renderEventLog(width, height int) string {
 func (d *Dashboard) uniqueColumnValues(col filterCol) []string {
 	seen := make(map[string]bool)
 	var vals []string
-	for _, line := range d.eventLines {
-		parts := strings.Split(line, " | ")
-		for j := range parts {
-			parts[j] = strings.TrimSpace(parts[j])
-		}
+	for _, ev := range parseAllEvents(d.eventLines) {
 		var val string
-		if len(parts) >= 8 {
-			switch col {
-			case filterAction:
-				if strings.Contains(line, "| BLOCK") {
-					val = "BLOCK"
-				} else if strings.Contains(line, "SKILL-LOAD") {
-					val = "LOAD"
-				} else {
-					val = "ALLOW"
-				}
-			case filterProject:
-				val = parts[1]
-			case filterSess:
-				val = parts[3]
-			case filterAgent:
-				val = parts[2]
-			case filterTool:
-				val = parts[4]
-			case filterSkill:
-				val = parts[7]
-			}
+		switch col {
+		case filterAction:
+			val = ev.Action
+		case filterProject:
+			val = ev.Project
+		case filterSess:
+			val = ev.Session
+		case filterAgent:
+			val = ev.Agent
+		case filterTool:
+			val = ev.Tool
+		case filterSkill:
+			val = ev.Skill
 		}
 		if val != "" && !seen[val] {
 			seen[val] = true
@@ -1088,32 +1023,18 @@ func (d *Dashboard) matchesFilters(act, project, sess, agent, tool, skill string
 // jumpToLogEntry parses the focused log line and navigates to the skill/rule.
 // Works with the filtered log view used by renderEventLog.
 func (d *Dashboard) jumpToLogEntry() {
-	filtered := append([]string{}, d.eventLines...)
-
-	if d.logCursor < 0 || d.logCursor >= len(filtered) {
+	if d.logCursor < 0 || d.logCursor >= len(d.eventLines) {
 		return
 	}
 
-	line := filtered[d.logCursor]
-	parts := strings.Split(line, " | ")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
+	ev, ok := parseEventLine(d.eventLines[d.logCursor], d.logCursor)
+	if !ok {
+		return
 	}
 
-	// Extract skill from the right column based on format
-	skill := ""
-	if len(parts) >= 8 {
-		// 8-col: timestamp|project|agent|session|tool|path|action|skill
-		skill = parts[7]
-	} else if len(parts) >= 7 {
-		// 7-col: timestamp|agent|session|tool|path|action|skill
-		skill = parts[6]
-	} else if len(parts) >= 6 {
-		// 6-col: timestamp|agent|tool|path|action|skill
-		skill = parts[5]
-	}
+	skill := ev.Skill
 
-	// Skills can be comma-separated (e.g., "linear,sst-architect") — use first one
+	// Skills can be comma-separated (e.g., "linear,sst-architect") -- use first one.
 	if strings.Contains(skill, ",") {
 		skill = strings.Split(skill, ",")[0]
 	}
@@ -1122,7 +1043,7 @@ func (d *Dashboard) jumpToLogEntry() {
 		return
 	}
 
-	// Find the skill in the skills list and jump to it
+	// Find the skill in the skills list and jump to it.
 	for i, s := range d.skills {
 		if s.Name == skill {
 			d.skillCursor = i
@@ -1134,7 +1055,7 @@ func (d *Dashboard) jumpToLogEntry() {
 }
 
 // LoadEventLog reads the event log file and stores lines from the last 7 days.
-// Older lines are pruned from the file to keep it manageable.
+// This is a pure read operation -- no file modifications are performed.
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
 	home, _ := os.UserHomeDir()
@@ -1148,13 +1069,13 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 	allLines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	cutoff := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
 
-	// Keep only lines from the last 7 days that have a skill attached
+	// Keep only lines from the last 7 days that have a skill attached.
 	var recent []string
 	for _, line := range allLines {
 		if len(line) < 10 || line[:10] < cutoff {
 			continue
 		}
-		// Only keep events with a skill (BLOCK with skill, SKILL-LOAD, or ALLOW with skill)
+		// Only keep events with a skill (BLOCK with skill, SKILL-LOAD, or ALLOW with skill).
 		parts := strings.Split(line, " | ")
 		hasSkill := false
 		if strings.Contains(line, "SKILL-LOAD") {
@@ -1167,18 +1088,11 @@ func (d *Dashboard) LoadEventLog(projectRoot string) {
 		}
 	}
 
-	// Prune the file if we removed old lines
-	if len(recent) < len(allLines) && len(recent) > 0 {
-		pruned := strings.Join(recent, "\n") + "\n"
-		_ = os.WriteFile(logPath, []byte(pruned), 0644)
-	}
-
-	// Keep last 200 lines for display
+	// Keep last 200 lines for display.
 	if len(recent) > 200 {
 		recent = recent[len(recent)-200:]
 	}
 	d.eventLines = recent
-
 }
 
 // stripAnsi removes ANSI escape sequences.

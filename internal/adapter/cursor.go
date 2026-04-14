@@ -44,7 +44,9 @@ type CursorAdapter struct {
 	BinaryPath string // Override binary path (empty = auto-detect)
 }
 
-// Name returns "cursor".
+// ExitCodeForDeny returns 2. Cursor blocks operations on non-zero exit codes.
+func (a *CursorAdapter) ExitCodeForDeny() int { return 2 }
+
 func (a *CursorAdapter) Name() string { return "cursor" }
 
 // ParseInput reads Cursor hook JSON from stdin and returns a normalized HookInput.

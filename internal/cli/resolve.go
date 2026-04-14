@@ -77,17 +77,8 @@ func EnsureHooksInstalled() HookSetupResult {
 }
 
 // hookAlreadyInstalled checks if care-bear hook is already in the agent's config.
-func hookAlreadyInstalled(a adapter.HookAdapter, home string) bool {
-	var configPath string
-	switch a.Name() {
-	case "claude":
-		configPath = filepath.Join(home, ".claude", "settings.json")
-	case "cursor":
-		configPath = filepath.Join(home, ".cursor", "hooks.json")
-	default:
-		return false
-	}
-	data, err := os.ReadFile(configPath)
+func hookAlreadyInstalled(a adapter.HookAdapter, _ string) bool {
+	data, err := os.ReadFile(a.GlobalConfigPath())
 	if err != nil {
 		return false
 	}

@@ -258,5 +258,5 @@ func writeStateFile(path string, state *SessionState) error {
 	}
 
 	// Ensure 0600 permissions (atomic.WriteFile may use default umask).
-	return os.Chmod(path, 0600)
+	return os.Chmod(path, 0o600)
 }

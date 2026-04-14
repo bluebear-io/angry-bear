@@ -234,6 +234,12 @@ func runHook(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprint(cmd.OutOrStdout(), string(denyBytes))
 		logger.Debug("denied tool invocation", "reason", blockResult.Reason)
+
+		// Use adapter-specific exit code for deny responses.
+		exitCode := hookAdapter.ExitCodeForDeny()
+		if exitCode != 0 {
+			return &ExitError{Code: exitCode}
+		}
 	} else {
 		if err := writeAllow(cmd, hookAdapter); err != nil {
 			return err
@@ -247,13 +253,6 @@ func runHook(cmd *cobra.Command, args []string) error {
 		if pruneErr := state.PruneIfDue(stateDir, ttl); pruneErr != nil {
 			logger.Warn("pruning failed", "error", pruneErr)
 		}
-	}
-
-	// For Cursor: exit code 2 signals "block this action".
-	// Claude Code reads the deny decision from stdout JSON (exit 0 is fine).
-	// Return ExitError so main.go calls os.Exit(2) after cleanup completes.
-	if blockResult.Blocked && hookInput.Agent == "cursor" {
-		return &ExitError{Code: 2}
 	}
 
 	return nil
@@ -322,7 +321,7 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 		"",
 		skillName,
 	)
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
@@ -367,7 +366,7 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 		missing,
 	)
 
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}

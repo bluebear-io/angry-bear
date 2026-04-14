@@ -34,6 +34,9 @@ type HookAdapter interface {
 	GlobalConfigPath() string
 	// UninstallHook removes all care-bear hooks from the agent's global config.
 	UninstallHook() error
+	// ExitCodeForDeny returns the process exit code for a deny response.
+	// Claude Code uses 0 (reads deny from stdout JSON), Cursor uses 2.
+	ExitCodeForDeny() int
 	// DetectSkillInvocation checks if the input represents a skill being invoked.
 	DetectSkillInvocation(input *HookInput) (skillName string, isSkill bool)
 	// ScanProjects discovers all projects that have sessions with this agent.

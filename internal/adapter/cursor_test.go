@@ -3,6 +3,7 @@ package adapter
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1045,5 +1046,85 @@ func TestCursorInstallHook_OnlyPreToolUse(t *testing.T) {
 	sessionStart := hooks["sessionStart"].([]any)
 	if len(sessionStart) != 1 {
 		t.Errorf("sessionStart should have 1 entry, got %d", len(sessionStart))
+	}
+}
+
+// TestCursorInstallHook_WorksWithManyExistingHooks verifies that care-bear
+// installs correctly and the file remains valid when other tools have added
+// hundreds of hook entries across many hook types.
+func TestCursorInstallHook_WorksWithManyExistingHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	_ = os.MkdirAll(cursorDir, 0o755)
+
+	// Simulate a hooks.json with 1000+ entries from other tools
+	hooks := map[string]any{}
+	hookTypes := []string{
+		"preToolUse", "beforeFileEdit", "beforeShellExecution",
+		"afterFileEdit", "afterShellExecution", "sessionStart",
+		"sessionEnd", "beforeSubmitPrompt", "postToolUse",
+		"afterAgentResponse",
+	}
+	for _, ht := range hookTypes {
+		var entries []any
+		for i := 0; i < 100; i++ {
+			entries = append(entries, map[string]any{
+				"command": fmt.Sprintf("tool-%d hook %s", i, ht),
+			})
+		}
+		hooks[ht] = entries
+	}
+	config := map[string]any{"version": float64(1), "hooks": hooks}
+	data, _ := json.MarshalIndent(config, "", "  ")
+	_ = os.WriteFile(filepath.Join(cursorDir, "hooks.json"), data, 0o644)
+
+	// Install care-bear
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed with 1000 existing hooks: %v", err)
+	}
+
+	// Read result
+	result, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var resultConfig map[string]any
+	_ = json.Unmarshal(result, &resultConfig)
+	resultHooks := resultConfig["hooks"].(map[string]any)
+
+	// preToolUse should have care-bear as FIRST entry + 100 existing
+	preToolUse := resultHooks["preToolUse"].([]any)
+	if len(preToolUse) != 101 {
+		t.Errorf("preToolUse should have 101 entries (care-bear + 100 existing), got %d", len(preToolUse))
+	}
+	firstCmd := preToolUse[0].(map[string]any)["command"].(string)
+	if !strings.Contains(firstCmd, "care-bear") {
+		t.Errorf("care-bear should be first in preToolUse, got: %s", firstCmd)
+	}
+
+	// Other hook types should be untouched (100 entries each)
+	for _, ht := range hookTypes[1:] {
+		arr := resultHooks[ht].([]any)
+		if len(arr) != 100 {
+			t.Errorf("%s should have 100 entries (untouched), got %d", ht, len(arr))
+		}
+		for _, e := range arr {
+			cmd := e.(map[string]any)["command"].(string)
+			if strings.Contains(cmd, "care-bear") {
+				t.Errorf("%s should NOT have care-bear, got: %s", ht, cmd)
+			}
+		}
+	}
+
+	// Idempotent — install again should not duplicate
+	err = adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("second InstallHook failed: %v", err)
+	}
+	result2, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var resultConfig2 map[string]any
+	_ = json.Unmarshal(result2, &resultConfig2)
+	preToolUse2 := resultConfig2["hooks"].(map[string]any)["preToolUse"].([]any)
+	if len(preToolUse2) != 101 {
+		t.Errorf("after second install, preToolUse should still have 101 entries, got %d", len(preToolUse2))
 	}
 }

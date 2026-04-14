@@ -1,7 +1,5 @@
 bin/
 
 # Local state and binary
-.care-bear/
 .angry-bear/
 angry-bear
-care-bear

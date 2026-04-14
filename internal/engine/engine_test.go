@@ -45,9 +45,9 @@ func TestNormalizeGlob(t *testing.T) {
 			want:    "**/handler/**",
 		},
 		{
-			name:    "relative pattern gets doublestar prefix",
+			name:    "relative path with slash preserved as-is",
 			pattern: "handler/**",
-			want:    "**/handler/**",
+			want:    "handler/**",
 		},
 		{
 			name:    "extension pattern gets doublestar prefix",
@@ -55,9 +55,9 @@ func TestNormalizeGlob(t *testing.T) {
 			want:    "**/*.go",
 		},
 		{
-			name:    "nested relative pattern gets doublestar prefix",
+			name:    "nested relative path preserved as-is",
 			pattern: "internal/engine/*.go",
-			want:    "**/internal/engine/*.go",
+			want:    "internal/engine/*.go",
 		},
 		{
 			name:    "double star without slash unchanged",
@@ -968,9 +968,9 @@ func TestNormalizeGlob_EdgeCases(t *testing.T) {
 			want:    "**/*.test.ts",
 		},
 		{
-			name:    "directory-only pattern",
+			name:    "directory-only pattern preserved",
 			pattern: "src/",
-			want:    "**/src/",
+			want:    "src/",
 		},
 		{
 			name:    "doublestar alone at start with extra path",
@@ -1131,9 +1131,9 @@ func TestLoadConfigFile_MultipleRules(t *testing.T) {
 	if rules[1].Rule.Path != "**/*.py" {
 		t.Errorf("rules[1].Path = %q, want **/*.py", rules[1].Rule.Path)
 	}
-	// stacks/** already starts with relative so it gets **/ prefix.
-	if rules[2].Rule.Path != "**/stacks/**" {
-		t.Errorf("rules[2].Path = %q, want **/stacks/**", rules[2].Rule.Path)
+	// stacks/** has a slash so it's preserved as-is (specific path).
+	if rules[2].Rule.Path != "stacks/**" {
+		t.Errorf("rules[2].Path = %q, want stacks/**", rules[2].Rule.Path)
 	}
 
 	// Verify source is set to machine (loaded via LoadConfig fallback).

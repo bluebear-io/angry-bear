@@ -180,9 +180,9 @@ func TestAdd_NormalizesGlob(t *testing.T) {
 		t.Fatalf("expected 1 rule, got %d", len(cfg.Tools))
 	}
 
-	// NormalizeGlob should prepend **/ to relative paths.
-	if cfg.Tools[0].Path != "**/stacks/*.ts" {
-		t.Errorf("expected path **/stacks/*.ts, got %s", cfg.Tools[0].Path)
+	// NormalizeGlob preserves paths with slashes (specific directories).
+	if cfg.Tools[0].Path != "stacks/*.ts" {
+		t.Errorf("expected path stacks/*.ts, got %s", cfg.Tools[0].Path)
 	}
 }
 
@@ -332,10 +332,10 @@ func TestAdd_MultiplePathsNormalized(t *testing.T) {
 		paths[r.Path] = true
 	}
 
-	if !paths["**/src/*.py"] {
-		t.Error("expected **/src/*.py")
+	if !paths["src/*.py"] {
+		t.Error("expected src/*.py")
 	}
-	if !paths["**/lib/*.ts"] {
-		t.Error("expected **/lib/*.ts")
+	if !paths["lib/*.ts"] {
+		t.Error("expected lib/*.ts")
 	}
 }

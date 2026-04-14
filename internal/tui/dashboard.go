@@ -441,7 +441,7 @@ func (d Dashboard) View() string {
 		return d.styles.Description.Render("  No skills discovered. Add skill paths to .care-bear/config.json")
 	}
 
-	leftWidth := d.width*30/100 - 2
+	leftWidth := d.width*25/100 - 2
 	rightWidth := d.width - leftWidth - 5
 	if leftWidth < 20 {
 		leftWidth = 25
@@ -853,9 +853,12 @@ func (d Dashboard) renderEventLog(width, height int) string {
 
 	// Calculate max width for each column from actual data
 	colW := map[string]int{
-		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
+		"time": 5, "act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
 	}
 	for _, r := range allRows {
+		if len(r.Time) > colW["time"] {
+			colW["time"] = len(r.Time)
+		}
 		if len(r.Action) > colW["act"] {
 			colW["act"] = len(r.Action)
 		}
@@ -880,7 +883,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	// Cap path width to fill remaining space
-	used := colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
+	used := colW["time"] + colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
 	maxPath := width - used - 4
 	if maxPath < 10 {
 		maxPath = 10
@@ -890,8 +893,8 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	// Build format string
-	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
-		colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
+	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
+		colW["time"], colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
 
 	// Header — highlight the active filter column when in filter mode
 	if d.filterMode {
@@ -912,7 +915,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 		title += "  " + strings.Join(headerParts, "  ")
 	} else {
-		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
 	}
 	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
@@ -947,7 +950,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 
 		focused := fi == d.logScroll.Cursor && d.focusPanel == 2
-		plain := fmt.Sprintf(fmtStr, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
+		plain := fmt.Sprintf(fmtStr, r.Time, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
 
 		if focused {
 			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")

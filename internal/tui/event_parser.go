@@ -8,6 +8,7 @@ import "strings"
 
 // ParsedEvent holds the structured fields extracted from a single event log line.
 type ParsedEvent struct {
+	Time    string // HH:MM timestamp
 	Action  string // "BLOCK", "ALLOW", or "LOAD"
 	Project string // Project name
 	Session string // Short session ID

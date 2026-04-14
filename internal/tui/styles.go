@@ -87,12 +87,10 @@ func DefaultStyles() Styles {
 
 		Tool: lipgloss.NewStyle().
 			Foreground(pink).
-			Bold(true).
-			Width(10),
+			Bold(true),
 
 		Path: lipgloss.NewStyle().
-			Foreground(yellow).
-			Width(35),
+			Foreground(yellow),
 
 		Agent: lipgloss.NewStyle().
 			Foreground(cyan),

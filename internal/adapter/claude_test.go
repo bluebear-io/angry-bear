@@ -1376,6 +1376,61 @@ func TestGreedyBuildPath_NestedHyphenatedDirs(t *testing.T) {
 	}
 }
 
+func TestGreedyBuildPath_RealDashPreferredOverDot(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Both my-project (real dashes) and my.project (dots) exist.
+	// The as-is variant (real dashes) should win because it's tried first.
+	dashDir := filepath.Join(tmpDir, "my-project")
+	dotDir := filepath.Join(tmpDir, "my.project")
+	if err := os.MkdirAll(dashDir, 0o755); err != nil {
+		t.Fatalf("failed to create dash dir: %v", err)
+	}
+	if err := os.MkdirAll(dotDir, 0o755); err != nil {
+		t.Fatalf("failed to create dot dir: %v", err)
+	}
+
+	result := greedyBuildPath(tmpDir, []string{"my", "project"})
+	if result != dashDir {
+		t.Errorf("greedyBuildPath = %q, want %q (real dashes should be preferred)", result, dashDir)
+	}
+}
+
+func TestGreedyBuildPath_DottedDirectoryName(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create path with dots: Users/amir.shaked/Development/blueden
+	targetDir := filepath.Join(tmpDir, "Users", "amir.shaked", "Development", "blueden")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded as: Users-amir-shaked-Development-blueden
+	result := greedyBuildPath(tmpDir, []string{"Users", "amir", "shaked", "Development", "blueden"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q", result, targetDir)
+	}
+}
+
+func TestGreedyDecodeDirName_DottedUsername(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Simulate /Users/amir.shaked/dev/blueden
+	targetDir := filepath.Join(tmpDir, "amir.shaked", "dev", "blueden")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded directory name (without leading tmpDir prefix — test greedyBuildPath directly)
+	result := greedyBuildPath(tmpDir, []string{"amir", "shaked", "dev", "blueden"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q", result, targetDir)
+	}
+}
+
 // --- ConfigPath test ---
 
 func TestClaudeConfigPath(t *testing.T) {

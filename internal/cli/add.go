@@ -215,7 +215,10 @@ func loadOrCreateConfig(path string) (*engine.Config, error) {
 }
 
 // saveConfig writes the config to disk, creating parent directories as needed.
+// Deduplicates rules before writing.
 func saveConfig(path string, cfg *engine.Config) error {
+	engine.DeduplicateRules(cfg)
+
 	err := os.MkdirAll(filepath.Dir(path), 0o755)
 	if err != nil {
 		return fmt.Errorf("creating config directory: %w", err)

@@ -39,6 +39,19 @@ type MatchedRule struct {
 	Source string // SourceRepo or SourceMachine
 }
 
+// DeduplicateRules removes exact duplicate rules from a config, preserving order.
+func DeduplicateRules(cfg *Config) {
+	seen := make(map[Rule]bool)
+	var unique []Rule
+	for _, r := range cfg.Tools {
+		if !seen[r] {
+			seen[r] = true
+			unique = append(unique, r)
+		}
+	}
+	cfg.Tools = unique
+}
+
 // BlockResult represents the outcome of an enforcement check.
 type BlockResult struct {
 	Blocked bool

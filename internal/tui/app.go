@@ -600,8 +600,10 @@ func savePreferredPath(repoConfigDir string, path string) tea.Cmd {
 }
 
 // saveConfig writes the current config to disk as indented JSON.
+// Deduplicates rules before writing to prevent duplicate entries.
 func saveConfig(cfg engine.Config, path string) tea.Cmd {
 	return func() tea.Msg {
+		engine.DeduplicateRules(&cfg)
 		data, err := json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			return saveResultMsg{err: err}

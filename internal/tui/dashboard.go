@@ -679,7 +679,7 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	}
 
 	// Column header
-	header := fmt.Sprintf("  %-10s %-22s %-8s %s", "TOOL", "PATH", "AGENT", "SOURCE")
+	header := fmt.Sprintf("  %-8s %-20s %-8s %s", "TOOL", "PATH", "AGENT", "SOURCE")
 	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
 	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
 	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
@@ -710,11 +710,11 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 				after = d.pathBuffer[d.pathCurPos+1:]
 			}
 			pathStr = before + d.styles.Selected.Render(cursor) + after
-			if len(pathStr) > 22 {
-				pathStr = pathStr[:22]
+			if len(pathStr) > 20 {
+				pathStr = pathStr[:20]
 			}
-		} else if len(pathStr) > 22 {
-			pathStr = pathStr[:19] + "..."
+		} else if len(pathStr) > 20 {
+			pathStr = pathStr[:17] + "..."
 		}
 
 		sourceStr := machineStyle.Render("machine")
@@ -723,11 +723,11 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 		}
 
 		if focused && !d.editingPath {
-			line := fmt.Sprintf("  %-10s %-22s %-8s", toolStr, pathStr, agentStr)
+			line := fmt.Sprintf("  %-8s %-20s %-8s", toolStr, pathStr, agentStr)
 			b.WriteString(d.styles.Selected.Render(line) + " " + sourceStr + "\n")
 		} else {
-			tool := d.styles.Tool.Render(fmt.Sprintf("%-10s", toolStr))
-			path := d.styles.Path.Render(fmt.Sprintf("%-22s", pathStr))
+			tool := d.styles.Tool.Render(fmt.Sprintf("%-8s", toolStr))
+			path := d.styles.Path.Render(fmt.Sprintf("%-20s", pathStr))
 			agent := d.styles.Agent.Render(fmt.Sprintf("%-8s", agentStr))
 			b.WriteString("  " + tool + " " + path + " " + agent + " " + sourceStr + "\n")
 		}

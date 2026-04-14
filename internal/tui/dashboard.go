@@ -53,6 +53,7 @@ func filterColName(c filterCol) string {
 type Dashboard struct {
 	skills       []scanner.Skill
 	config       engine.Config
+	ruleSources  []string // Parallel to config.Tools — source per rule (SourceRepo/SourceMachine)
 	loadedSkills map[string]*state.SkillStatus
 	eventLines   []string // Recent event log lines
 	projectRoot  string   // For reading events.log
@@ -90,6 +91,7 @@ func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, load
 type indexedRule struct {
 	rule        engine.Rule
 	configIndex int
+	source      string // engine.SourceRepo or engine.SourceMachine
 }
 
 // rulesForSkill returns rules matching the currently selected skill.
@@ -100,8 +102,12 @@ func (d *Dashboard) rulesForSkill() []indexedRule {
 	name := d.skills[d.skillScroll.Cursor].Name
 	var rules []indexedRule
 	for i, r := range d.config.Tools {
+		source := engine.SourceMachine
+		if i < len(d.ruleSources) {
+			source = d.ruleSources[i]
+		}
 		if r.Skill == name {
-			rules = append(rules, indexedRule{rule: r, configIndex: i})
+			rules = append(rules, indexedRule{rule: r, configIndex: i, source: source})
 		}
 	}
 	return rules
@@ -112,6 +118,8 @@ func (d Dashboard) Init() tea.Cmd { return nil }
 
 // saveRequestMsg is sent when the user presses 's'.
 type saveRequestMsg struct{}
+type saveToRepoMsg struct{}
+type saveToMachineMsg struct{}
 
 // Update handles key input.
 func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -586,15 +594,24 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 
 		ruleCount := 0
-		for _, r := range d.config.Tools {
+		hasRepoRule := false
+		for idx, r := range d.config.Tools {
 			if r.Skill == skill.Name {
 				ruleCount++
+				if idx < len(d.ruleSources) && d.ruleSources[idx] == engine.SourceRepo {
+					hasRepoRule = true
+				}
 			}
 		}
 
 		name := skill.Name
 		if len(name) > width-8 {
 			name = name[:width-11] + "..."
+		}
+
+		repoTag := ""
+		if hasRepoRule {
+			repoTag = lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Render(" ")
 		}
 
 		countStr := d.styles.Description.Render(fmt.Sprintf(" (%d)", ruleCount))
@@ -605,16 +622,16 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		if focused {
 			suffix := fmt.Sprintf(" (%d)", ruleCount)
 
-			line := d.styles.Selected.Render(" ▸ " + name + suffix)
+			line := d.styles.Selected.Render(" ▸ " + name + suffix) + repoTag
 			b.WriteString(line + "\n")
 		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName
 
-			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + "\n")
+			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + repoTag + "\n")
 		} else {
 			nameStyle := lipgloss.NewStyle()
 
-			b.WriteString("   " + nameStyle.Render(name) + countStr + "\n")
+			b.WriteString("   " + nameStyle.Render(name) + countStr + repoTag + "\n")
 		}
 	}
 
@@ -661,66 +678,46 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 		return b.String()
 	}
 
-	// Column header
-	header := fmt.Sprintf("  %-10s %-28s %s", "TOOL", "PATH", "AGENT")
-	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
+	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
+	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
-	// Scrolling for rules list
+	// Build table rows.
+	var rows []TableRow
+	for _, ir := range rules {
+		srcStyle := machineStyle
+		srcText := "machine"
+		if ir.source == engine.SourceRepo {
+			srcStyle = repoStyle
+			srcText = " repo"
+		}
+		rows = append(rows, TableRow{
+			Cells: []TableCell{
+				{Text: ir.rule.Tool, Style: d.styles.Tool},
+				{Text: ir.rule.Path, Style: d.styles.Path},
+				{Text: ir.rule.Agent, Style: d.styles.Agent},
+				{Text: srcText, Style: srcStyle},
+			},
+		})
+	}
+
 	visibleRules := height - 7
 	if visibleRules < 3 {
 		visibleRules = 3
 	}
-	ruleStart, ruleEnd := d.ruleScroll.VisibleRange(len(rules), visibleRules)
-
-	for i := ruleStart; i < ruleEnd; i++ {
-		ir := rules[i]
-		focused := i == d.ruleScroll.Cursor && d.focusPanel == 1
-
-		toolStr := ir.rule.Tool
-		pathStr := ir.rule.Path
-		agentStr := ir.rule.Agent
-
-		// If editing this row's path
-		if d.editingPath && focused {
-			// Show path with cursor
-			before := d.pathBuffer[:d.pathCurPos]
-			cursor := "█"
-			after := ""
-			if d.pathCurPos < len(d.pathBuffer) {
-				cursor = string(d.pathBuffer[d.pathCurPos])
-				after = d.pathBuffer[d.pathCurPos+1:]
-			}
-			pathStr = before + d.styles.Selected.Render(cursor) + after
-			if len(pathStr) > 28 {
-				pathStr = pathStr[:28]
-			}
-		} else if len(pathStr) > 28 {
-			pathStr = pathStr[:25] + "..."
-		}
-
-		if focused && !d.editingPath {
-			line := fmt.Sprintf("  %-10s %-28s %s", toolStr, pathStr, agentStr)
-			b.WriteString(d.styles.Selected.Render(line) + "\n")
-		} else {
-			tool := d.styles.Tool.Render(fmt.Sprintf("%-10s", toolStr))
-			path := d.styles.Path.Render(fmt.Sprintf("%-28s", pathStr))
-			agent := d.styles.Agent.Render(agentStr)
-			b.WriteString("  " + tool + " " + path + " " + agent + "\n")
-		}
+	focusRow := -1
+	if d.focusPanel == 1 && !d.editingPath {
+		focusRow = d.ruleScroll.Cursor
 	}
-
-	// Scroll indicator for rules
-	if len(rules) > visibleRules {
-		indicator := d.styles.Description.Render(
-			fmt.Sprintf("  [%d/%d]", d.ruleScroll.Cursor+1, len(rules)))
-		if ruleStart > 0 {
-			indicator += d.styles.Description.Render(" ↑")
-		}
-		if ruleEnd < len(rules) {
-			indicator += d.styles.Description.Render(" ↓")
-		}
-		b.WriteString(indicator + "\n")
-	}
+	b.WriteString(RenderTable(
+		[]string{"TOOL", "PATH", "AGENT", "SOURCE"},
+		rows,
+		d.styles.RuleHeader,
+		d.styles.Selected,
+		focusRow,
+		&d.ruleScroll,
+		visibleRules,
+		width,
+	))
 
 	// Context help for right panel when focused
 	if d.focusPanel == 1 && !d.editingPath {
@@ -829,117 +826,53 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No matching events.")
 	}
 
-	// Calculate max width for each column from actual data
-	colW := map[string]int{
-		"time": 5, "act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
-	}
-	for _, r := range allRows {
-		if len(r.Time) > colW["time"] {
-			colW["time"] = len(r.Time)
-		}
-		if len(r.Action) > colW["act"] {
-			colW["act"] = len(r.Action)
-		}
-		if len(r.Project) > colW["project"] {
-			colW["project"] = len(r.Project)
-		}
-		if len(r.Session) > colW["sess"] {
-			colW["sess"] = len(r.Session)
-		}
-		if len(r.Agent) > colW["agent"] {
-			colW["agent"] = len(r.Agent)
-		}
-		if len(r.Tool) > colW["tool"] {
-			colW["tool"] = len(r.Tool)
-		}
-		if len(r.Skill) > colW["skill"] {
-			colW["skill"] = len(r.Skill)
-		}
-		if len(r.Path) > colW["path"] {
-			colW["path"] = len(r.Path)
-		}
-	}
-
-	// Cap path width to fill remaining space
-	used := colW["time"] + colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
-	maxPath := width - used - 4
-	if maxPath < 10 {
-		maxPath = 10
-	}
-	if colW["path"] > maxPath {
-		colW["path"] = maxPath
-	}
-
-	// Build format string
-	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
-		colW["time"], colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
-
-	// Header — highlight the active filter column when in filter mode
-	if d.filterMode {
-		activeStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#FBBF24"))
-		headers := []string{"ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
-		colWidths := []int{colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"]}
-		var headerParts []string
-		for i, h := range headers {
-			padded := fmt.Sprintf("%-*s", colWidths[i], h)
-			if filterCol(i) == d.filterCursor && i < int(filterColCount) {
-				headerParts = append(headerParts, activeStyle.Render(padded))
-			} else if v, ok := d.logFilters[filterCol(i)]; ok && v != "" && i < int(filterColCount) {
-				filteredStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FBBF24"))
-				headerParts = append(headerParts, filteredStyle.Render(padded))
-			} else {
-				headerParts = append(headerParts, d.styles.Description.Render(padded))
-			}
-		}
-		title += "  " + strings.Join(headerParts, "  ")
-	} else {
-		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
-	}
-	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
-
-	// Scrolling — use shared ScrollView
-	var b strings.Builder
-	visible := height - 4
-	if visible < 3 {
-		visible = 3
-	}
-	start, end := d.logScroll.VisibleRange(len(allRows), visible)
-
+	// Color styles for event actions.
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
+	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
 
-	for fi := start; fi < end; fi++ {
-		r := allRows[fi]
-
-		// Truncate path
-		path := r.Path
-		if len(path) > colW["path"] {
-			path = "…" + path[len(path)-colW["path"]+1:]
-		}
-
+	// Build table rows with per-row styling based on action type.
+	var rows []TableRow
+	for _, r := range allRows {
 		var sty lipgloss.Style
 		if r.IsBlock {
 			sty = red
 		} else if r.IsExpire {
-			sty = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
+			sty = yellow
 		} else if r.IsLoad {
 			sty = cyan
 		} else {
 			sty = green
 		}
 
-		focused := fi == d.logScroll.Cursor && d.focusPanel == 2
-		plain := fmt.Sprintf(fmtStr, r.Time, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
-
-		if focused {
-			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")
-		} else {
-			b.WriteString(sty.Render(plain) + "\n")
-		}
+		rows = append(rows, TableRow{
+			Cells: []TableCell{
+				{Text: r.Time, Style: sty},
+				{Text: r.Action, Style: sty},
+				{Text: r.Project, Style: sty},
+				{Text: r.Session, Style: sty},
+				{Text: r.Agent, Style: sty},
+				{Text: r.Tool, Style: sty},
+				{Text: r.Skill, Style: sty},
+				{Text: r.Path, Style: sty},
+			},
+		})
 	}
 
-	return title + b.String()
+	visible := height - 4
+	if visible < 3 {
+		visible = 3
+	}
+	focusRow := -1
+	if d.focusPanel == 2 {
+		focusRow = d.logScroll.Cursor
+	}
+
+	headers := []string{"TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
+	tableStr := RenderTable(headers, rows, d.styles.Description, d.styles.Selected, focusRow, &d.logScroll, visible, width)
+
+	return title + tableStr
 }
 
 // uniqueColumnValues returns the unique values for a given filter column

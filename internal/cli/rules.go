@@ -46,44 +46,44 @@ func runRules(cmd *cobra.Command, args []string) error {
 	skillFilter, _ := cmd.Flags().GetString("skill")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
-	// Resolve config path — use the canonical resolver that checks repo-keyed dir first.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting working directory: %w", err)
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
 
-	configPath, err := ResolveConfigForProject(projectRoot)
+	// Resolve repo config dir for machine-level rules.
+	repoConfigDir, _ := ResolveRepoDir(projectRoot)
+	configPath, _ := ResolveConfigForProject(projectRoot)
 
+	// Load merged rules (repo + machine).
+	matchedRules, err := engine.LoadMergedConfig(projectRoot, repoConfigDir)
 	if err != nil {
-		return err
-	}
-
-	// Load config.
-	cfg, err := loadOrCreateConfig(configPath)
-	if err != nil {
-		return err
+		return fmt.Errorf("loading config: %w", err)
 	}
 
 	// Filter by skill if requested.
-	rules := cfg.Tools
 	if skillFilter != "" {
-		var filtered []engine.Rule
-		for _, r := range rules {
-			if r.Skill == skillFilter {
-				filtered = append(filtered, r)
+		var filtered []engine.MatchedRule
+		for _, mr := range matchedRules {
+			if mr.Rule.Skill == skillFilter {
+				filtered = append(filtered, mr)
 			}
 		}
-		rules = filtered
+		matchedRules = filtered
 	}
 
 	// Output in JSON format if requested.
 	if jsonOutput {
+		rules := make([]engine.Rule, 0, len(matchedRules))
+		for _, mr := range matchedRules {
+			rules = append(rules, mr.Rule)
+		}
 		return printRulesJSON(out, rules, configPath)
 	}
 
-	// Default: table format.
-	return printRulesTable(out, rules, configPath, skillFilter)
+	// Default: table format with source column.
+	return printMatchedRulesTable(out, matchedRules, configPath, skillFilter)
 }
 
 // printRulesJSON outputs rules as a JSON array to the writer.
@@ -132,5 +132,39 @@ func printRulesTable(out io.Writer, rules []engine.Rule, configPath, skillFilter
 
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%d rules from %s\n", len(rules), configPath)
+	return nil
+}
+
+// printMatchedRulesTable outputs rules with source indicators (repo/machine).
+func printMatchedRulesTable(out io.Writer, rules []engine.MatchedRule, configPath, skillFilter string) error {
+	if len(rules) == 0 {
+		if skillFilter != "" {
+			fmt.Fprintf(out, "No rules found for skill %q\n", skillFilter)
+		} else {
+			fmt.Fprintln(out, "No enforcement rules configured.")
+		}
+		fmt.Fprintf(out, "Config: %s\n", configPath)
+		return nil
+	}
+
+	fmt.Fprintln(out, "Enforcement Rules")
+	fmt.Fprintln(out, "=================")
+
+	repoCount := 0
+	machineCount := 0
+	for i, mr := range rules {
+		sourceTag := "[machine]"
+		if mr.Source == engine.SourceRepo {
+			sourceTag = "[repo]   "
+			repoCount++
+		} else {
+			machineCount++
+		}
+		fmt.Fprintf(out, "  [%d] %s Skill: %s | Tool: %s | Path: %s | Agent: %s\n",
+			i+1, sourceTag, mr.Rule.Skill, mr.Rule.Tool, mr.Rule.Path, mr.Rule.Agent)
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%d rules (%d repo, %d machine)\n", len(rules), repoCount, machineCount)
 	return nil
 }

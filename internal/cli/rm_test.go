@@ -254,13 +254,13 @@ func TestRm_NoConfigFile(t *testing.T) {
 func TestRm_PathNormalization(t *testing.T) {
 	dir := t.TempDir()
 
-	// Stored rules have normalized paths (with **/ prefix).
+	// Stored rules have paths with slashes (preserved as-is by NormalizeGlob).
 	writeEnforcementConfig(t, dir, []engine.Rule{
-		{Tool: "Edit", Path: "**/src/*.go", Skill: "go-standards", Agent: "claude"},
+		{Tool: "Edit", Path: "src/*.go", Skill: "go-standards", Agent: "claude"},
 		{Tool: "Write", Path: "**", Skill: "linear", Agent: "*"},
 	})
 
-	// Use non-normalized path in the --path flag -- should still match.
+	// Path in --path flag matches stored path directly.
 	output, err := runRmInDir(t, dir, "go-standards", "--path", "src/*.go")
 	if err != nil {
 		t.Fatalf("rm command returned error: %v", err)

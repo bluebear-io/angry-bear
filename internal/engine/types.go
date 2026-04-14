@@ -25,10 +25,31 @@ type GlobalConfig struct {
 	IgnorePatterns  []string `json:"ignore_patterns"`
 }
 
-// MatchedRule is a Rule paired with the file path it was loaded from.
+// RuleSource indicates where a rule was loaded from.
+const (
+	// SourceRepo means the rule is from the project's .care-bear/ directory (committed to git).
+	SourceRepo = "repo"
+	// SourceMachine means the rule is from ~/.care-bear/repos/{hash}/ (local to this machine).
+	SourceMachine = "machine"
+)
+
+// MatchedRule is a Rule paired with its origin.
 type MatchedRule struct {
 	Rule   Rule
-	Source string
+	Source string // SourceRepo or SourceMachine
+}
+
+// DeduplicateRules removes exact duplicate rules from a config, preserving order.
+func DeduplicateRules(cfg *Config) {
+	seen := make(map[Rule]bool)
+	var unique []Rule
+	for _, r := range cfg.Tools {
+		if !seen[r] {
+			seen[r] = true
+			unique = append(unique, r)
+		}
+	}
+	cfg.Tools = unique
 }
 
 // BlockResult represents the outcome of an enforcement check.

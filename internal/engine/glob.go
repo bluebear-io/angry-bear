@@ -30,7 +30,13 @@ func NormalizeGlob(pattern string) string {
 		return pattern
 	}
 
-	// Relative pattern -- prepend **/ so it matches at any directory depth.
+	// If the pattern contains a slash, it's a specific path (e.g., "console/**",
+	// "services/bff/**"). Don't add **/ — the user picked this path intentionally.
+	if strings.Contains(pattern, "/") {
+		return pattern
+	}
+
+	// Simple filename pattern (e.g., "*.go") -- prepend **/ so it matches at any depth.
 	return "**/" + pattern
 }
 

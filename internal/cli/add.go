@@ -58,6 +58,7 @@ Examples:
 	cmd.Flags().String("tool", "*", "Comma-separated tool names: Edit, Write, Bash, Read, Glob, Grep, Agent, *")
 	cmd.Flags().String("path", "**", "Comma-separated glob patterns")
 	cmd.Flags().String("agent", "*", "Comma-separated agent names: claude, cursor, *")
+	cmd.Flags().Bool("repo", false, "Save to repo .care-bear/ directory (shared via git) instead of machine config")
 
 	// Register completions for flag values.
 	_ = cmd.RegisterFlagCompletionFunc("tool", completeToolNames)
@@ -160,8 +161,8 @@ func splitCSV(s string) []string {
 	return result
 }
 
-// resolveConfigPath determines the config file path from the --config flag
-// or by resolving the repo identity and project root.
+// resolveConfigPath determines the config file path from the --config flag,
+// --repo flag, or by resolving the repo identity and project root.
 func resolveConfigPath(cmd *cobra.Command) (string, error) {
 	configPath, _ := cmd.Flags().GetString("config")
 	if configPath != "" {
@@ -174,7 +175,13 @@ func resolveConfigPath(cmd *cobra.Command) (string, error) {
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
 
-	// Try repo-keyed config dir first.
+	// --repo flag: save to project directory (shared via git).
+	repoFlag, _ := cmd.Flags().GetBool("repo")
+	if repoFlag {
+		return filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json"), nil
+	}
+
+	// Default: try repo-keyed config dir (machine-level).
 	repo := engine.ResolveRepoIdentity(projectRoot)
 	if repo != nil {
 		home, err := os.UserHomeDir()
@@ -208,7 +215,10 @@ func loadOrCreateConfig(path string) (*engine.Config, error) {
 }
 
 // saveConfig writes the config to disk, creating parent directories as needed.
+// Deduplicates rules before writing.
 func saveConfig(path string, cfg *engine.Config) error {
+	engine.DeduplicateRules(cfg)
+
 	err := os.MkdirAll(filepath.Dir(path), 0o755)
 	if err != nil {
 		return fmt.Errorf("creating config directory: %w", err)

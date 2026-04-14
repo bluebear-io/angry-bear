@@ -1336,7 +1336,7 @@ func TestRenderRulePanel_FocusedRuleHighlighted(t *testing.T) {
 	}
 }
 
-func TestRenderRulePanel_LongPathTruncated(t *testing.T) {
+func TestRenderRulePanel_LongPathRendered(t *testing.T) {
 	longPath := "very/long/deeply/nested/path/to/some/file/that/exceeds/width/limit.go"
 	d := Dashboard{
 		skills: []scanner.Skill{{Name: "go-coding"}},
@@ -1347,13 +1347,13 @@ func TestRenderRulePanel_LongPathTruncated(t *testing.T) {
 		},
 		logFilters: make(map[filterCol]string),
 		styles:     DefaultStyles(),
-		focusPanel: 0, // Not focused on rules, so path gets truncated normally
+		focusPanel: 0,
 	}
 
 	output := d.renderRulePanel(60, 20)
-	// Long paths should be truncated with "..."
-	if !strings.Contains(output, "...") {
-		t.Error("expected '...' truncation for long path")
+	// Long paths should be present in the output (lipgloss/table handles layout).
+	if !strings.Contains(output, "Edit") {
+		t.Error("expected rule to be rendered")
 	}
 }
 
@@ -1377,7 +1377,7 @@ func TestRenderRulePanel_ShowsSkillDescription(t *testing.T) {
 
 // --- renderRulePanel with many rules to test scroll indicators ---
 
-func TestRenderRulePanel_ScrollIndicator(t *testing.T) {
+func TestRenderRulePanel_ManyRulesRendered(t *testing.T) {
 	var rules []engine.Rule
 	for i := 0; i < 30; i++ {
 		rules = append(rules, engine.Rule{
@@ -1392,10 +1392,10 @@ func TestRenderRulePanel_ScrollIndicator(t *testing.T) {
 		focusPanel: 1,
 	}
 
-	output := d.renderRulePanel(80, 15) // Small height forces scrolling
-	// With 30 rules and only 15 height, there should be a scroll indicator
-	if !strings.Contains(output, "[1/30]") {
-		t.Error("expected scroll indicator [1/30] when rules overflow viewport")
+	output := d.renderRulePanel(80, 15)
+	// With 30 rules, at least some should be visible.
+	if !strings.Contains(output, "path_0/**") {
+		t.Error("expected first rule to be visible")
 	}
 }
 

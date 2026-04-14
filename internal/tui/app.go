@@ -97,6 +97,7 @@ type App struct {
 	treePicker      TreePicker             // Tree picker child model
 	settings        Settings               // Settings editor child model
 	statusMsg       string                 // Transient status message ("Saved!", "Error: ...")
+	savePrompt      bool                   // True when showing save destination prompt
 	width           int                    // Terminal width
 	height          int                    // Terminal height
 	styles          Styles                 // Style definitions
@@ -120,6 +121,7 @@ func (a *App) SetHookHealthFn(fn func() map[string]bool) {
 // availablePaths lists all local checkout directories for this repo (may be nil).
 func NewApp(
 	cfg engine.Config,
+	ruleSources []string,
 	configPath string,
 	projectRoot string,
 	skills []scanner.Skill,
@@ -144,6 +146,7 @@ func NewApp(
 		stateDir = filepath.Join(filepath.Dir(configPath), "state")
 	}
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)
+	dashboard.ruleSources = ruleSources
 	// hookHealthFn is set after creation by the CLI layer
 	return App{
 		config:         cfg,
@@ -299,6 +302,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
+		// Handle save destination prompt.
+		if a.savePrompt {
+			switch msg.String() {
+			case "r":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, func() tea.Msg { return saveToRepoMsg{} }
+			case "m":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, func() tea.Msg { return saveToMachineMsg{} }
+			case "esc":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, nil
+			}
+			return a, nil
+		}
 		// Clear status message on any keypress.
 		a.statusMsg = ""
 
@@ -313,7 +334,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.ruleEditor.Init()
 
 	case ruleSubmittedMsg:
-		// Single rule submitted (edit mode) — save and return to dashboard
+		// Single rule submitted (edit mode) — update config and prompt to save.
 		if msg.rule != nil {
 			if msg.ruleIndex >= 0 && msg.ruleIndex < len(a.config.Tools) {
 				a.config.Tools[msg.ruleIndex] = *msg.rule
@@ -325,21 +346,32 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.dashboard.LoadEventLog("")
 			a.dashboard.width = a.width
 			a.dashboard.height = a.height
-			a.statusMsg = "Rule saved!"
-			return a, saveConfig(a.config, a.configPath)
+			a.savePrompt = true
+			a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+			return a, nil
 		}
 		return a, nil
 
 	case rulesSubmittedMsg:
-		// Multiple rules submitted — save and return to dashboard
-		a.config.Tools = append(a.config.Tools, msg.rules...)
+		// Multiple rules submitted — replace existing rules for this skill, then prompt to save.
+		if len(msg.rules) > 0 {
+			skillName := msg.rules[0].Skill
+			var kept []engine.Rule
+			for _, r := range a.config.Tools {
+				if r.Skill != skillName {
+					kept = append(kept, r)
+				}
+			}
+			a.config.Tools = append(kept, msg.rules...)
+		}
 		a.view = viewDashboard
 		a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
 		a.dashboard.LoadEventLog("")
 		a.dashboard.width = a.width
 		a.dashboard.height = a.height
-		a.statusMsg = fmt.Sprintf("%d rules saved!", len(msg.rules))
-		return a, saveConfig(a.config, a.configPath)
+		a.savePrompt = true
+		a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+		return a, nil
 
 	case ruleEditorDoneMsg:
 		// Editor is done (cancel or finished adding rules) — return to dashboard
@@ -352,8 +384,30 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case saveRequestMsg:
-		// Save current config to disk.
+		// Show save destination prompt.
+		a.savePrompt = true
+		a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+		return a, nil
+
+	case saveToRepoMsg:
+		a.savePrompt = false
+		repoPath := filepath.Join(a.projectRoot, ".care-bear", "skill_enforcement.json")
 		a.dashboard.config = a.config
+		// Mark all rules as repo-sourced.
+		a.dashboard.ruleSources = make([]string, len(a.config.Tools))
+		for i := range a.dashboard.ruleSources {
+			a.dashboard.ruleSources[i] = engine.SourceRepo
+		}
+		return a, saveConfig(a.config, repoPath)
+
+	case saveToMachineMsg:
+		a.savePrompt = false
+		a.dashboard.config = a.config
+		// Mark all rules as machine-sourced.
+		a.dashboard.ruleSources = make([]string, len(a.config.Tools))
+		for i := range a.dashboard.ruleSources {
+			a.dashboard.ruleSources[i] = engine.SourceMachine
+		}
 		return a, saveConfig(a.config, a.configPath)
 
 	case openTreePickerMsg:
@@ -459,13 +513,19 @@ func (a App) View() string {
 	}
 
 	status := ""
-	if a.statusMsg != "" {
+	if a.statusMsg != "" && !a.savePrompt {
 		status = "\n" + a.styles.Success.Render(a.statusMsg)
 	}
 
 	help := a.helpBar()
+	result := title + "\n" + content + status + "\n" + help
 
-	return title + "\n" + content + status + "\n" + help
+	// Overlay save dialog on top of the screen.
+	if a.savePrompt {
+		result = a.renderSaveDialog(result)
+	}
+
+	return result
 }
 
 // helpBar returns context-sensitive keybinding hints for the current view.
@@ -555,9 +615,23 @@ func savePreferredPath(repoConfigDir string, path string) tea.Cmd {
 	}
 }
 
+// removeMachineConfig deletes the machine-level skill_enforcement.json so
+// repo rules are the single source of truth. Silently ignores missing files.
+func removeMachineConfig(path string) tea.Cmd {
+	return func() tea.Msg {
+		err := os.Remove(path)
+		if err != nil && !os.IsNotExist(err) {
+			return saveResultMsg{err: fmt.Errorf("removing machine config: %w", err)}
+		}
+		return nil
+	}
+}
+
 // saveConfig writes the current config to disk as indented JSON.
+// Deduplicates rules before writing to prevent duplicate entries.
 func saveConfig(cfg engine.Config, path string) tea.Cmd {
 	return func() tea.Msg {
+		engine.DeduplicateRules(&cfg)
 		data, err := json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			return saveResultMsg{err: err}
@@ -567,6 +641,50 @@ func saveConfig(cfg engine.Config, path string) tea.Cmd {
 		}
 		return saveResultMsg{err: nil}
 	}
+}
+
+// renderSaveDialog overlays a centered dialog box on top of the existing screen content.
+func (a App) renderSaveDialog(background string) string {
+	lines := strings.Split(background, "\n")
+
+	dialogWidth := 48
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FBBF24")).
+		Padding(1, 2).
+		Width(dialogWidth)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FBBF24"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#D1D5DB"))
+
+	dialogContent := titleStyle.Render("Save rules to:") + "\n\n" +
+		"  " + keyStyle.Render("r") + descStyle.Render("  Repo — shared via git (.care-bear/)") + "\n" +
+		"  " + keyStyle.Render("m") + descStyle.Render("  Machine — local only (~/.care-bear/)") + "\n\n" +
+		"  " + keyStyle.Render("esc") + descStyle.Render("  Cancel")
+
+	box := boxStyle.Render(dialogContent)
+	boxLines := strings.Split(box, "\n")
+
+	// Center the dialog vertically and horizontally
+	startRow := (len(lines) - len(boxLines)) / 2
+	if startRow < 2 {
+		startRow = 2
+	}
+	startCol := (a.width - lipgloss.Width(box)) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	pad := strings.Repeat(" ", startCol)
+	for i, bLine := range boxLines {
+		row := startRow + i
+		if row < len(lines) {
+			lines[row] = pad + bLine
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // renderHookBadges renders colored badges showing hook health per agent.

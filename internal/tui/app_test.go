@@ -153,6 +153,59 @@ func TestRuleEditorSubmit(t *testing.T) {
 	}
 }
 
+func TestRulesSubmitted_ReplacesExistingSkillRules(t *testing.T) {
+	// Start with 2 existing rules for "git"
+	cfg := engine.Config{
+		Version: 1,
+		Tools: []engine.Rule{
+			{Tool: "Edit", Path: "**/*.go", Skill: "git", Agent: "*"},
+			{Tool: "Write", Path: "**/*.go", Skill: "git", Agent: "*"},
+			{Tool: "Edit", Path: "**/*.py", Skill: "linear", Agent: "*"},
+		},
+	}
+	app := NewApp(cfg, nil, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewRuleEditor
+
+	// Submit 1 new rule for "git" — should REPLACE the 2 existing, not append
+	newRule := engine.Rule{Tool: "Bash", Path: "**", Skill: "git", Agent: "claude"}
+	m, _ := app.Update(rulesSubmittedMsg{rules: []engine.Rule{newRule}})
+	app = m.(App)
+
+	// Should have 2 total: 1 new git rule + 1 existing linear rule
+	if len(app.config.Tools) != 2 {
+		t.Errorf("expected 2 rules (1 git + 1 linear), got %d", len(app.config.Tools))
+		for i, r := range app.config.Tools {
+			t.Logf("  rule[%d]: %s %s %s %s", i, r.Skill, r.Tool, r.Path, r.Agent)
+		}
+	}
+
+	// Verify the git rule is the new one
+	gitCount := 0
+	for _, r := range app.config.Tools {
+		if r.Skill == "git" {
+			gitCount++
+			if r.Tool != "Bash" {
+				t.Errorf("expected git rule tool=Bash, got %s", r.Tool)
+			}
+		}
+	}
+	if gitCount != 1 {
+		t.Errorf("expected 1 git rule, got %d", gitCount)
+	}
+}
+
+func TestRulesSubmitted_ShowsSavePrompt(t *testing.T) {
+	app := NewApp(engine.Config{Version: 1}, nil, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)
+	app.view = viewRuleEditor
+	rule := engine.Rule{Tool: "Edit", Path: "**", Skill: "linear", Agent: "*"}
+	m, _ := app.Update(rulesSubmittedMsg{rules: []engine.Rule{rule}})
+	app = m.(App)
+
+	if !app.savePrompt {
+		t.Error("expected savePrompt to be true after rulesSubmittedMsg")
+	}
+}
+
 func TestLoadedSkillsShown(t *testing.T) {
 	loaded := map[string]*state.SkillStatus{"linear": {Agents: []string{"claude"}}}
 	app := NewApp(testConfig(), nil, "/tmp/test.json", "/tmp", testSkills(), loaded, nil, "", nil)
@@ -948,16 +1001,16 @@ func TestApp_RulesSubmittedMultipleRules(t *testing.T) {
 		{Tool: "Bash", Path: "scripts/**", Skill: "go-coding", Agent: "*"},
 	}
 
-	m, cmd := app.Update(rulesSubmittedMsg{rules: rules})
+	m, _ := app.Update(rulesSubmittedMsg{rules: rules})
 	app = m.(App)
 	if len(app.config.Tools) != 3 {
 		t.Errorf("expected 3 rules, got %d", len(app.config.Tools))
 	}
-	// rulesSubmittedMsg saves and returns to dashboard immediately (no confirm screen)
+	// rulesSubmittedMsg returns to dashboard and shows save prompt
 	if app.view != viewDashboard {
 		t.Errorf("view = %d, want %d (should return to dashboard)", app.view, viewDashboard)
 	}
-	if cmd == nil {
-		t.Error("expected save command")
+	if !app.savePrompt {
+		t.Error("expected savePrompt to be true")
 	}
 }

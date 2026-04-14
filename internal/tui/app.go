@@ -334,7 +334,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.ruleEditor.Init()
 
 	case ruleSubmittedMsg:
-		// Single rule submitted (edit mode) — save and return to dashboard
+		// Single rule submitted (edit mode) — update config and prompt to save.
 		if msg.rule != nil {
 			if msg.ruleIndex >= 0 && msg.ruleIndex < len(a.config.Tools) {
 				a.config.Tools[msg.ruleIndex] = *msg.rule
@@ -346,21 +346,32 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.dashboard.LoadEventLog("")
 			a.dashboard.width = a.width
 			a.dashboard.height = a.height
-			a.statusMsg = "Rule saved!"
-			return a, saveConfig(a.config, a.configPath)
+			a.savePrompt = true
+			a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+			return a, nil
 		}
 		return a, nil
 
 	case rulesSubmittedMsg:
-		// Multiple rules submitted — save and return to dashboard
-		a.config.Tools = append(a.config.Tools, msg.rules...)
+		// Multiple rules submitted — replace existing rules for this skill, then prompt to save.
+		if len(msg.rules) > 0 {
+			skillName := msg.rules[0].Skill
+			var kept []engine.Rule
+			for _, r := range a.config.Tools {
+				if r.Skill != skillName {
+					kept = append(kept, r)
+				}
+			}
+			a.config.Tools = append(kept, msg.rules...)
+		}
 		a.view = viewDashboard
 		a.dashboard = NewDashboard(a.skills, a.config, a.styles, a.loadedSkills)
 		a.dashboard.LoadEventLog("")
 		a.dashboard.width = a.width
 		a.dashboard.height = a.height
-		a.statusMsg = fmt.Sprintf("%d rules saved!", len(msg.rules))
-		return a, saveConfig(a.config, a.configPath)
+		a.savePrompt = true
+		a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+		return a, nil
 
 	case ruleEditorDoneMsg:
 		// Editor is done (cancel or finished adding rules) — return to dashboard

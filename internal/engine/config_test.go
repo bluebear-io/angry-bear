@@ -604,3 +604,77 @@ func writeGlobalConfig(t *testing.T, path string, cfg GlobalConfig) {
 		t.Fatalf("failed to write global config to %s: %v", path, err)
 	}
 }
+
+func TestLoadGlobalConfigFromDir_ReadsSkillTTL(t *testing.T) {
+	dir := t.TempDir()
+	cfg := GlobalConfig{
+		SkillTTLMinutes: 5,
+		StateTTLHours:   48,
+		DefaultAgent:    "claude",
+	}
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, "config.json"), data, 0o644)
+
+	result, err := LoadGlobalConfigFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadGlobalConfigFromDir failed: %v", err)
+	}
+	if result.SkillTTLMinutes != 5 {
+		t.Errorf("SkillTTLMinutes = %d, want 5", result.SkillTTLMinutes)
+	}
+	if result.StateTTLHours != 48 {
+		t.Errorf("StateTTLHours = %d, want 48", result.StateTTLHours)
+	}
+	if result.DefaultAgent != "claude" {
+		t.Errorf("DefaultAgent = %q, want claude", result.DefaultAgent)
+	}
+}
+
+func TestLoadGlobalConfigFromDir_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	result, err := LoadGlobalConfigFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadGlobalConfigFromDir failed: %v", err)
+	}
+	// Should return defaults
+	if result.SkillTTLMinutes != 0 {
+		t.Errorf("SkillTTLMinutes = %d, want 0 (default)", result.SkillTTLMinutes)
+	}
+}
+
+func TestLoadGlobalConfigFromDir_EmptyString(t *testing.T) {
+	result, err := LoadGlobalConfigFromDir("")
+	if err != nil {
+		t.Fatalf("LoadGlobalConfigFromDir failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected defaults, got nil")
+	}
+}
+
+func TestLoadGlobalConfigFromDir_DoesNotAppendCareBear(t *testing.T) {
+	// Regression: LoadGlobalConfig appended .care-bear/config.json
+	// causing double nesting. LoadGlobalConfigFromDir must NOT do this.
+	dir := t.TempDir()
+
+	// Write config at dir/config.json (correct)
+	cfg := GlobalConfig{SkillTTLMinutes: 10}
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	_ = os.WriteFile(filepath.Join(dir, "config.json"), data, 0o644)
+
+	// Also write a WRONG file at dir/.care-bear/config.json
+	wrongDir := filepath.Join(dir, ".care-bear")
+	_ = os.MkdirAll(wrongDir, 0o755)
+	wrongCfg := GlobalConfig{SkillTTLMinutes: 99}
+	wrongData, _ := json.MarshalIndent(wrongCfg, "", "  ")
+	_ = os.WriteFile(filepath.Join(wrongDir, "config.json"), wrongData, 0o644)
+
+	result, err := LoadGlobalConfigFromDir(dir)
+	if err != nil {
+		t.Fatalf("failed: %v", err)
+	}
+	// Should read 10 from dir/config.json, NOT 99 from dir/.care-bear/config.json
+	if result.SkillTTLMinutes != 10 {
+		t.Errorf("SkillTTLMinutes = %d, want 10 (not 99 from wrong path)", result.SkillTTLMinutes)
+	}
+}

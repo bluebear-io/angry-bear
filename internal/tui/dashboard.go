@@ -681,19 +681,8 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
 	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
-	// Build table rows from rules.
-	tbl := Table{
-		Columns: []TableColumn{
-			{Name: "TOOL"},
-			{Name: "PATH", MaxWidth: 30},
-			{Name: "AGENT"},
-			{Name: "SOURCE"},
-		},
-		HeaderStyle:   d.styles.RuleHeader,
-		SelectedStyle: d.styles.Selected,
-		Scroll:        &d.ruleScroll,
-	}
-
+	// Build table rows.
+	var rows []TableRow
 	for _, ir := range rules {
 		srcStyle := machineStyle
 		srcText := "machine"
@@ -701,7 +690,7 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 			srcStyle = repoStyle
 			srcText = " repo"
 		}
-		tbl.Rows = append(tbl.Rows, TableRow{
+		rows = append(rows, TableRow{
 			Cells: []TableCell{
 				{Text: ir.rule.Tool, Style: d.styles.Tool},
 				{Text: ir.rule.Path, Style: d.styles.Path},
@@ -719,7 +708,15 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	if d.focusPanel == 1 && !d.editingPath {
 		focusRow = d.ruleScroll.Cursor
 	}
-	b.WriteString(tbl.Render(visibleRules, focusRow, d.focusPanel == 1))
+	b.WriteString(RenderTable(
+		[]string{"TOOL", "PATH", "AGENT", "SOURCE"},
+		rows,
+		d.styles.RuleHeader,
+		d.styles.Selected,
+		focusRow,
+		&d.ruleScroll,
+		visibleRules,
+	))
 
 	// Context help for right panel when focused
 	if d.focusPanel == 1 && !d.editingPath {
@@ -828,117 +825,53 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		return title + "\n" + d.styles.Description.Render("  No matching events.")
 	}
 
-	// Calculate max width for each column from actual data
-	colW := map[string]int{
-		"time": 5, "act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
-	}
-	for _, r := range allRows {
-		if len(r.Time) > colW["time"] {
-			colW["time"] = len(r.Time)
-		}
-		if len(r.Action) > colW["act"] {
-			colW["act"] = len(r.Action)
-		}
-		if len(r.Project) > colW["project"] {
-			colW["project"] = len(r.Project)
-		}
-		if len(r.Session) > colW["sess"] {
-			colW["sess"] = len(r.Session)
-		}
-		if len(r.Agent) > colW["agent"] {
-			colW["agent"] = len(r.Agent)
-		}
-		if len(r.Tool) > colW["tool"] {
-			colW["tool"] = len(r.Tool)
-		}
-		if len(r.Skill) > colW["skill"] {
-			colW["skill"] = len(r.Skill)
-		}
-		if len(r.Path) > colW["path"] {
-			colW["path"] = len(r.Path)
-		}
-	}
-
-	// Cap path width to fill remaining space
-	used := colW["time"] + colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
-	maxPath := width - used - 4
-	if maxPath < 10 {
-		maxPath = 10
-	}
-	if colW["path"] > maxPath {
-		colW["path"] = maxPath
-	}
-
-	// Build format string
-	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
-		colW["time"], colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
-
-	// Header — highlight the active filter column when in filter mode
-	if d.filterMode {
-		activeStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#FBBF24"))
-		headers := []string{"ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
-		colWidths := []int{colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"]}
-		var headerParts []string
-		for i, h := range headers {
-			padded := fmt.Sprintf("%-*s", colWidths[i], h)
-			if filterCol(i) == d.filterCursor && i < int(filterColCount) {
-				headerParts = append(headerParts, activeStyle.Render(padded))
-			} else if v, ok := d.logFilters[filterCol(i)]; ok && v != "" && i < int(filterColCount) {
-				filteredStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FBBF24"))
-				headerParts = append(headerParts, filteredStyle.Render(padded))
-			} else {
-				headerParts = append(headerParts, d.styles.Description.Render(padded))
-			}
-		}
-		title += "  " + strings.Join(headerParts, "  ")
-	} else {
-		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
-	}
-	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
-
-	// Scrolling — use shared ScrollView
-	var b strings.Builder
-	visible := height - 4
-	if visible < 3 {
-		visible = 3
-	}
-	start, end := d.logScroll.VisibleRange(len(allRows), visible)
-
+	// Color styles for event actions.
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Bold(true)
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22D3EE"))
+	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
 
-	for fi := start; fi < end; fi++ {
-		r := allRows[fi]
-
-		// Truncate path
-		path := r.Path
-		if len(path) > colW["path"] {
-			path = "…" + path[len(path)-colW["path"]+1:]
-		}
-
+	// Build table rows with per-row styling based on action type.
+	var rows []TableRow
+	for _, r := range allRows {
 		var sty lipgloss.Style
 		if r.IsBlock {
 			sty = red
 		} else if r.IsExpire {
-			sty = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
+			sty = yellow
 		} else if r.IsLoad {
 			sty = cyan
 		} else {
 			sty = green
 		}
 
-		focused := fi == d.logScroll.Cursor && d.focusPanel == 2
-		plain := fmt.Sprintf(fmtStr, r.Time, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
-
-		if focused {
-			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")
-		} else {
-			b.WriteString(sty.Render(plain) + "\n")
-		}
+		rows = append(rows, TableRow{
+			Cells: []TableCell{
+				{Text: r.Time, Style: sty},
+				{Text: r.Action, Style: sty},
+				{Text: r.Project, Style: sty},
+				{Text: r.Session, Style: sty},
+				{Text: r.Agent, Style: sty},
+				{Text: r.Tool, Style: sty},
+				{Text: r.Skill, Style: sty},
+				{Text: r.Path, Style: sty},
+			},
+		})
 	}
 
-	return title + b.String()
+	visible := height - 4
+	if visible < 3 {
+		visible = 3
+	}
+	focusRow := -1
+	if d.focusPanel == 2 {
+		focusRow = d.logScroll.Cursor
+	}
+
+	headers := []string{"TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
+	tableStr := RenderTable(headers, rows, d.styles.Description, d.styles.Selected, focusRow, &d.logScroll, visible)
+
+	return title + tableStr
 }
 
 // uniqueColumnValues returns the unique values for a given filter column

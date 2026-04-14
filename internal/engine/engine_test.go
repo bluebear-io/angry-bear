@@ -1136,10 +1136,10 @@ func TestLoadConfigFile_MultipleRules(t *testing.T) {
 		t.Errorf("rules[2].Path = %q, want **/stacks/**", rules[2].Rule.Path)
 	}
 
-	// Verify source is set.
+	// Verify source is set to machine (loaded via LoadConfig fallback).
 	for i, r := range rules {
-		if r.Source != configPath {
-			t.Errorf("rules[%d].Source = %q, want %q", i, r.Source, configPath)
+		if r.Source != SourceMachine {
+			t.Errorf("rules[%d].Source = %q, want %q", i, r.Source, SourceMachine)
 		}
 	}
 }

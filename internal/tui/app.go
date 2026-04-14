@@ -120,6 +120,7 @@ func (a *App) SetHookHealthFn(fn func() map[string]bool) {
 // availablePaths lists all local checkout directories for this repo (may be nil).
 func NewApp(
 	cfg engine.Config,
+	ruleSources []string,
 	configPath string,
 	projectRoot string,
 	skills []scanner.Skill,
@@ -144,6 +145,7 @@ func NewApp(
 		stateDir = filepath.Join(filepath.Dir(configPath), "state")
 	}
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)
+	dashboard.ruleSources = ruleSources
 	// hookHealthFn is set after creation by the CLI layer
 	return App{
 		config:         cfg,

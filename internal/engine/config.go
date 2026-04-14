@@ -121,6 +121,12 @@ func LoadConfig(startDir string, opts ...ConfigOption) ([]MatchedRule, error) {
 // Returns an error if the file exists but contains malformed JSON or
 // an unsupported config version.
 func loadConfigFile(path string) ([]MatchedRule, error) {
+	return loadConfigFileWithSource(path, SourceMachine)
+}
+
+// loadConfigFileWithSource reads and parses a single skill_enforcement.json file,
+// tagging each rule with the given source (SourceRepo or SourceMachine).
+func loadConfigFileWithSource(path, source string) ([]MatchedRule, error) {
 	// Check existence first with os.Stat to avoid unnecessary reads.
 	_, err := os.Stat(path)
 	if err != nil {
@@ -163,7 +169,7 @@ func loadConfigFile(path string) ([]MatchedRule, error) {
 		rule.Path = NormalizeGlob(rule.Path)
 		rules = append(rules, MatchedRule{
 			Rule:   rule,
-			Source: path,
+			Source: source,
 		})
 	}
 
@@ -325,6 +331,44 @@ func loadGlobalConfigFile(path string, defaults *GlobalConfig) (*GlobalConfig, e
 func LoadConfigFromDir(dir string) ([]MatchedRule, error) {
 	configPath := filepath.Join(dir, configFileName)
 	return loadConfigFile(configPath)
+}
+
+// LoadMergedConfig loads enforcement rules from both the project repo directory
+// (committed to git, tagged as SourceRepo) and the machine-level config directory
+// (local to this machine, tagged as SourceMachine). Rules from both sources are
+// merged into a single slice. Repo rules come first.
+func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) {
+	var allRules []MatchedRule
+
+	// Load repo-level rules from {project}/.care-bear/skill_enforcement.json
+	repoPath := filepath.Join(projectRoot, configDirName, configFileName)
+	repoRules, err := loadConfigFileWithSource(repoPath, SourceRepo)
+	if err != nil {
+		return nil, fmt.Errorf("loading repo config %s: %w", repoPath, err)
+	}
+	allRules = append(allRules, repoRules...)
+
+	// Also check .bluebear/ for backward compatibility
+	bluebearPath := filepath.Join(projectRoot, ".bluebear", configFileName)
+	bluebearRules, err := loadConfigFileWithSource(bluebearPath, SourceRepo)
+	if err != nil {
+		slog.Warn("failed to load .bluebear config", "path", bluebearPath, "error", err)
+	} else {
+		allRules = append(allRules, bluebearRules...)
+	}
+
+	// Load machine-level rules from ~/.care-bear/repos/{hash}/skill_enforcement.json
+	if repoConfigDir != "" {
+		machineConfigPath := filepath.Join(repoConfigDir, configFileName)
+		machineRules, mErr := loadConfigFileWithSource(machineConfigPath, SourceMachine)
+		if mErr != nil {
+			slog.Warn("failed to load machine config", "path", machineConfigPath, "error", mErr)
+		} else {
+			allRules = append(allRules, machineRules...)
+		}
+	}
+
+	return allRules, nil
 }
 
 // LoadGlobalConfigFromDir reads config.json directly from the given directory.

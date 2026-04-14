@@ -168,29 +168,21 @@ loadConfig:
 		}
 	}
 
-	// Load rules: repo config dir first, then project-level fallback
-	var rules []engine.MatchedRule
-	if repoConfigDir != "" {
-		rules, err = engine.LoadConfigFromDir(repoConfigDir)
-		if err != nil {
-			logger.Warn("failed to load repo config, trying project config", "error", err)
-			rules = nil
-		}
-	}
-	if len(rules) == 0 {
-		rules, err = engine.LoadConfig(projectRoot)
-	}
+	// Load rules: merge repo-level (committed) + machine-level (local) rules.
+	rules, err := engine.LoadMergedConfig(projectRoot, repoConfigDir)
 	if err != nil {
 		return false, fmt.Errorf("loading enforcement config: %w", err)
 	}
 
-	// Build a Config struct from loaded rules.
+	// Build a Config struct and source tracking from loaded rules.
 	cfg := engine.Config{Version: 1}
+	var ruleSources []string
 	for _, mr := range rules {
 		cfg.Tools = append(cfg.Tools, mr.Rule)
+		ruleSources = append(ruleSources, mr.Source)
 	}
 
-	// Determine the config file path for saving.
+	// Determine the config file path for saving (machine-level by default).
 	configPath, _ := cmd.Flags().GetString("config")
 	if configPath == "" {
 		if repoConfigDir != "" {
@@ -232,7 +224,7 @@ loadConfig:
 	}
 
 	// 8. Create TUI model and load event log.
-	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg, repoConfigDir, availablePaths)
+	model := tui.NewApp(cfg, ruleSources, configPath, projectRoot, skills, loadedSkills, globalCfg, repoConfigDir, availablePaths)
 	model.SetHookHealthFn(CheckHookHealth)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())

@@ -164,21 +164,9 @@ func runHook(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Step 6: Load enforcement config.
-	// Priority: repo-keyed config dir > project-level .care-bear/
-	var rules []engine.MatchedRule
-	if repoConfigDir != "" {
-		rules, err = engine.LoadConfigFromDir(repoConfigDir)
-		if err != nil {
-			logger.Warn("failed to load repo config, trying project config", "error", err)
-			rules = nil
-		}
-	}
-	if len(rules) == 0 {
-		rules, err = engine.LoadConfig(projectRoot)
-	}
+	// Step 6: Load enforcement config (merge repo + machine rules).
+	rules, err := engine.LoadMergedConfig(projectRoot, repoConfigDir)
 	if err != nil {
-		// Malformed JSON is surfaced as an error; other config errors fail open.
 		logger.Warn("failed to load config, allowing operation", "error", err)
 		return writeAllow(cmd, hookAdapter)
 	}

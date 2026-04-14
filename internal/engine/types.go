@@ -25,10 +25,18 @@ type GlobalConfig struct {
 	IgnorePatterns  []string `json:"ignore_patterns"`
 }
 
-// MatchedRule is a Rule paired with the file path it was loaded from.
+// RuleSource indicates where a rule was loaded from.
+const (
+	// SourceRepo means the rule is from the project's .care-bear/ directory (committed to git).
+	SourceRepo = "repo"
+	// SourceMachine means the rule is from ~/.care-bear/repos/{hash}/ (local to this machine).
+	SourceMachine = "machine"
+)
+
+// MatchedRule is a Rule paired with its origin.
 type MatchedRule struct {
 	Rule   Rule
-	Source string
+	Source string // SourceRepo or SourceMachine
 }
 
 // BlockResult represents the outcome of an enforcement check.

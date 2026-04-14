@@ -53,6 +53,7 @@ func filterColName(c filterCol) string {
 type Dashboard struct {
 	skills       []scanner.Skill
 	config       engine.Config
+	ruleSources  []string // Parallel to config.Tools — source per rule (SourceRepo/SourceMachine)
 	loadedSkills map[string]*state.SkillStatus
 	eventLines   []string // Recent event log lines
 	projectRoot  string   // For reading events.log
@@ -90,6 +91,7 @@ func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, load
 type indexedRule struct {
 	rule        engine.Rule
 	configIndex int
+	source      string // engine.SourceRepo or engine.SourceMachine
 }
 
 // rulesForSkill returns rules matching the currently selected skill.
@@ -100,8 +102,12 @@ func (d *Dashboard) rulesForSkill() []indexedRule {
 	name := d.skills[d.skillScroll.Cursor].Name
 	var rules []indexedRule
 	for i, r := range d.config.Tools {
+		source := engine.SourceMachine
+		if i < len(d.ruleSources) {
+			source = d.ruleSources[i]
+		}
 		if r.Skill == name {
-			rules = append(rules, indexedRule{rule: r, configIndex: i})
+			rules = append(rules, indexedRule{rule: r, configIndex: i, source: source})
 		}
 	}
 	return rules
@@ -662,8 +668,9 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	}
 
 	// Column header
-	header := fmt.Sprintf("  %-10s %-28s %s", "TOOL", "PATH", "AGENT")
+	header := fmt.Sprintf("  %-10s %-28s %-8s %s", "TOOL", "PATH", "AGENT", "")
 	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
+	gitBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Render(" ")
 
 	// Scrolling for rules list
 	visibleRules := height - 7
@@ -698,14 +705,19 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 			pathStr = pathStr[:25] + "..."
 		}
 
+		badge := ""
+		if ir.source == engine.SourceRepo {
+			badge = " " + gitBadge
+		}
+
 		if focused && !d.editingPath {
 			line := fmt.Sprintf("  %-10s %-28s %s", toolStr, pathStr, agentStr)
-			b.WriteString(d.styles.Selected.Render(line) + "\n")
+			b.WriteString(d.styles.Selected.Render(line) + badge + "\n")
 		} else {
 			tool := d.styles.Tool.Render(fmt.Sprintf("%-10s", toolStr))
 			path := d.styles.Path.Render(fmt.Sprintf("%-28s", pathStr))
 			agent := d.styles.Agent.Render(agentStr)
-			b.WriteString("  " + tool + " " + path + " " + agent + "\n")
+			b.WriteString("  " + tool + " " + path + " " + agent + badge + "\n")
 		}
 	}
 

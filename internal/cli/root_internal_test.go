@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
@@ -244,6 +245,90 @@ func TestResolveCheckoutPath_EmptyPreference(t *testing.T) {
 	// Empty preference falls to form.Run() which fails non-interactively.
 	if result != checkout1 {
 		t.Errorf("expected %s (empty preference), got %s", checkout1, result)
+	}
+}
+
+// --- countSkillsForProject tests ---
+
+// TestCountSkillsForProject_WithSkills verifies that countSkillsForProject
+// correctly counts SKILL.md files in the default .claude/skills/ directory.
+func TestCountSkillsForProject_WithSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	// Create .claude/skills with some skill directories containing SKILL.md files
+	skillsDir := filepath.Join(tmpDir, "myproject", ".claude", "skills")
+	for _, skillName := range []string{"git", "run-migration", "testing"} {
+		skillDir := filepath.Join(skillsDir, skillName)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill dir %s: %v", skillName, err)
+		}
+		skillFile := filepath.Join(skillDir, "SKILL.md")
+		content := "# " + skillName + "\nUse when doing " + skillName + " things."
+		if err := os.WriteFile(skillFile, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md for %s: %v", skillName, err)
+		}
+	}
+
+	projectPath := filepath.Join(tmpDir, "myproject")
+	count := countSkillsForProject(projectPath)
+	if count != 3 {
+		t.Errorf("countSkillsForProject() = %d, want 3", count)
+	}
+}
+
+// TestCountSkillsForProject_NoSkills verifies that countSkillsForProject
+// returns 0 when the project has no skills directory.
+func TestCountSkillsForProject_NoSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	// Create a project directory with no .claude/skills
+	projectPath := filepath.Join(tmpDir, "empty-project")
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	count := countSkillsForProject(projectPath)
+	if count != 0 {
+		t.Errorf("countSkillsForProject() = %d, want 0 for project with no skills", count)
+	}
+}
+
+// TestCountSkillsForProject_NonexistentPath verifies that countSkillsForProject
+// returns 0 for a path that does not exist.
+func TestCountSkillsForProject_NonexistentPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	count := countSkillsForProject("/nonexistent/path/that/does/not/exist")
+	if count != 0 {
+		t.Errorf("countSkillsForProject() = %d, want 0 for nonexistent path", count)
+	}
+}
+
+// TestCountSkillsForProject_MixedSkillTypes verifies counting with both
+// SKILL.md (Claude) and .mdc (Cursor) skill files.
+func TestCountSkillsForProject_MixedSkillTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	projectPath := filepath.Join(tmpDir, "mixed-project")
+
+	// Create Claude skills
+	claudeSkillsDir := filepath.Join(projectPath, ".claude", "skills")
+	for _, name := range []string{"skill-a", "skill-b"} {
+		dir := filepath.Join(claudeSkillsDir, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create skill dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# "+name), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+	}
+
+	count := countSkillsForProject(projectPath)
+	if count < 2 {
+		t.Errorf("countSkillsForProject() = %d, want at least 2 (Claude skills)", count)
 	}
 }
 

@@ -33,6 +33,7 @@ func NewRootCommand() *cobra.Command {
 			if name == "hook" || name == "completion" || name == "version" || name == "enable" || name == "disable" || name == "doctor" {
 				return nil
 			}
+			InitAgentOptions()
 			result := EnsureHooksInstalled()
 			PrintHookSetup(result)
 			return nil
@@ -94,16 +95,29 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 		}
 		projectRoot = engine.ResolveProjectRoot(cwd)
 	} else {
-		// Build options for the project picker
-		opts := make([]huh.Option[string], len(projects))
-		for i, p := range projects {
+		// Build options for the project picker — show skill count, filter out 0-skill projects
+		var opts []huh.Option[string]
+		for _, p := range projects {
+			skillCount := countSkillsForProject(p.Path)
+			if skillCount == 0 {
+				continue
+			}
 			agents := strings.Join(p.Agents, ", ")
 			copies := ""
 			if len(p.LocalPaths) > 1 {
 				copies = fmt.Sprintf(", %d copies", len(p.LocalPaths))
 			}
-			label := fmt.Sprintf("%s  (%s%s)", p.Name, agents, copies)
-			opts[i] = huh.NewOption(label, p.Path)
+			label := fmt.Sprintf("%s  (%s%s) [%d skills]", p.Name, agents, copies, skillCount)
+			opts = append(opts, huh.NewOption(label, p.Path))
+		}
+		if len(opts) == 0 {
+			cwd, cwdErr := os.Getwd()
+			if cwdErr != nil {
+				return false, fmt.Errorf("getting working directory: %w", cwdErr)
+			}
+			projectRoot = engine.ResolveProjectRoot(cwd)
+			// Skip the picker — go straight to TUI with cwd project
+			goto loadConfig
 		}
 
 		var selectedPath string
@@ -137,6 +151,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 		}
 	}
 
+loadConfig:
 	// 2. Resolve repo identity and load config from repo-keyed dir.
 	repo := engine.ResolveRepoIdentity(projectRoot)
 	var repoConfigDir string
@@ -218,6 +233,7 @@ func tuiRunOnce(cmd *cobra.Command, args []string) (bool, error) {
 
 	// 8. Create TUI model and load event log.
 	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg, repoConfigDir, availablePaths)
+	model.SetHookHealthFn(CheckHookHealth)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -295,6 +311,27 @@ func resolveCheckoutPath(selectedPath string, project *adapter.MergedProject, lo
 	}
 
 	return chosenPath, nil
+}
+
+// countSkillsForProject counts how many skills are available in a project directory.
+func countSkillsForProject(projectPath string) int {
+	globalCfg, err := engine.LoadGlobalConfig(projectPath)
+	if err != nil {
+		return 0
+	}
+	var skillPaths []string
+	for _, sp := range globalCfg.SkillPaths {
+		if filepath.IsAbs(sp) {
+			skillPaths = append(skillPaths, sp)
+		} else {
+			skillPaths = append(skillPaths, filepath.Join(projectPath, sp))
+		}
+	}
+	skills, err := scanner.ScanSkills(skillPaths)
+	if err != nil {
+		return 0
+	}
+	return len(skills)
 }
 
 // Execute runs the root command.

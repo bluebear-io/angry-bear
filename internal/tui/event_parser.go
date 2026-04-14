@@ -8,16 +8,18 @@ import "strings"
 
 // ParsedEvent holds the structured fields extracted from a single event log line.
 type ParsedEvent struct {
-	Action  string // "BLOCK", "ALLOW", or "LOAD"
-	Project string // Project name
-	Session string // Short session ID
-	Agent   string // "claude", "cursor", etc.
-	Tool    string // Tool name or "---" for LOAD events
-	Skill   string // Skill that triggered the event
-	Path    string // File path involved
-	IsBlock bool   // True if BLOCK action
-	IsLoad  bool   // True if SKILL-LOAD event
-	LineIdx int    // Original index in eventLines
+	Time     string // HH:MM timestamp
+	Action   string // "BLOCK", "ALLOW", "LOAD", or "EXPIR"
+	Project  string // Project name
+	Session  string // Short session ID
+	Agent    string // "claude", "cursor", etc.
+	Tool     string // Tool name or "---" for LOAD events
+	Skill    string // Skill that triggered the event
+	Path     string // File path involved
+	IsBlock  bool   // True if BLOCK action
+	IsLoad   bool   // True if SKILL-LOAD event
+	IsExpire bool   // True if SKILL-TTL expire event
+	LineIdx  int    // Original index in eventLines
 }
 
 // parseEventLine parses a single pipe-delimited event log line into a ParsedEvent.
@@ -30,6 +32,11 @@ func parseEventLine(line string, lineIdx int) (ParsedEvent, bool) {
 	}
 
 	ev := ParsedEvent{LineIdx: lineIdx}
+
+	// Extract HH:MM from RFC3339 timestamp (parts[0])
+	if len(parts) > 0 && len(parts[0]) >= 16 {
+		ev.Time = parts[0][11:16]
+	}
 
 	if len(parts) >= 8 {
 		// 8-col format: timestamp|project|agent|session|tool|path|action|skill
@@ -58,6 +65,7 @@ func parseEventLine(line string, lineIdx int) (ParsedEvent, bool) {
 
 	ev.IsBlock = strings.Contains(line, "| BLOCK")
 	ev.IsLoad = strings.Contains(line, "SKILL-LOAD")
+	ev.IsExpire = strings.Contains(line, "SKILL-TTL")
 
 	if ev.IsBlock {
 		ev.Action = "BLOCK"

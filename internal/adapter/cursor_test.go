@@ -3,6 +3,7 @@ package adapter
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -318,7 +319,7 @@ func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
 	}
 
 	// Verify it contains the care-bear hook entry
-	if !strings.Contains(string(data), "care-bear hook --agent cursor") {
+	if !strings.Contains(string(data), "care-bear hook cursor") {
 		t.Errorf("hooks.json missing care-bear hook command:\n%s", data)
 	}
 
@@ -361,7 +362,7 @@ func TestCursorInstallHook_RegistersAllRequiredHookTypes(t *testing.T) {
 	}
 
 	// All required hook types must be present
-	requiredTypes := []string{"preToolUse", "beforeFileEdit", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
+	requiredTypes := []string{"preToolUse"}
 	for _, hookType := range requiredTypes {
 		arr, ok := hooks[hookType].([]any)
 		if !ok {
@@ -417,7 +418,7 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Errorf("existing beforeFileEdit hook was removed:\n%s", content)
 	}
 	// care-bear hook must be present
-	if !strings.Contains(content, "care-bear hook --agent cursor") {
+	if !strings.Contains(content, "care-bear hook cursor") {
 		t.Errorf("care-bear hook not added:\n%s", content)
 	}
 }
@@ -446,9 +447,9 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 	}
 
 	// Count occurrences of "care-bear hook" -- should be exactly 5 (one per hook type)
-	count := strings.Count(string(data), "care-bear hook --agent cursor")
-	if count != 5 {
-		t.Errorf("care-bear hook appears %d times, want 5 (one per hook type):\n%s", count, data)
+	count := strings.Count(string(data), "care-bear hook cursor")
+	if count != 1 {
+		t.Errorf("care-bear hook appears %d times, want 1 (preToolUse only):\n%s", count, data)
 	}
 }
 
@@ -554,9 +555,9 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 		t.Fatal("missing 'hooks' key in config")
 	}
 
+	hookTypes := []string{"preToolUse"}
 	// Verify each hook type has the correct command
-	expectedTypes := []string{"preToolUse", "beforeFileEdit", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
-	for _, hookType := range expectedTypes {
+	for _, hookType := range hookTypes {
 		arr, ok := hooks[hookType].([]any)
 		if !ok {
 			t.Errorf("hook type %q not found or not an array", hookType)
@@ -571,7 +572,7 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 			t.Errorf("hook type %q entry is not a map", hookType)
 			continue
 		}
-		wantCmd := "/usr/local/bin/care-bear hook --agent cursor"
+		wantCmd := "care-bear hook cursor"
 		if entry["command"] != wantCmd {
 			t.Errorf("hook type %q command = %v, want %q", hookType, entry["command"], wantCmd)
 		}
@@ -668,12 +669,7 @@ func TestCursorParseInput_HookEventNameFallback(t *testing.T) {
 		name      string
 		eventName string
 		want      string
-	}{
-		{"beforeFileEdit maps to Edit", "beforeFileEdit", "Edit"},
-		{"beforeShellExecution maps to Bash", "beforeShellExecution", "Bash"},
-		{"beforeReadFile maps to Read", "beforeReadFile", "Read"},
-		{"beforeMCPExecution maps to Agent", "beforeMCPExecution", "Agent"},
-	}
+	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -841,10 +837,7 @@ func TestCursorCareBareHookExists_MalformedEntries(t *testing.T) {
 		"beforeFileEdit": []any{
 			"not a map",
 			42,
-		},
-		"beforeShellExecution": []any{
 			map[string]any{
-				// missing "command" key
 				"type": "webhook",
 			},
 		},
@@ -861,10 +854,8 @@ func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
 			map[string]any{
 				"command": "some-other-tool",
 			},
-		},
-		"beforeFileEdit": []any{
 			map[string]any{
-				"command": "/usr/bin/care-bear hook --agent cursor",
+				"command": "/usr/bin/care-bear hook cursor",
 			},
 		},
 	}
@@ -974,5 +965,397 @@ func TestCursorName(t *testing.T) {
 	adapter := &CursorAdapter{}
 	if adapter.Name() != "cursor" {
 		t.Errorf("Name() = %q, want %q", adapter.Name(), "cursor")
+	}
+}
+
+// TestCursorHookCommand_MatchesBluebearFormat verifies the Cursor hook command
+// uses the same format as the working bluebear hook (no --flag syntax).
+func TestCursorHookCommand_MatchesBluebearFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".cursor", "hooks.json"))
+	if err != nil {
+		t.Fatalf("failed to read hooks.json: %v", err)
+	}
+
+	// The command should NOT contain "--agent" flag syntax.
+	// Cursor hooks work with simple positional args like "bluebear hook cursor".
+	if strings.Contains(string(data), "--agent") {
+		t.Error("Cursor hook command should not use --agent flag; use positional arg like 'care-bear hook cursor'")
+	}
+	if !strings.Contains(string(data), "care-bear hook cursor") {
+		t.Errorf("expected 'care-bear hook cursor' in hooks.json, got: %s", string(data))
+	}
+}
+
+// TestCursorInstallHook_OnlyPreToolUse verifies that InstallHook only adds
+// care-bear to preToolUse. Other hook types should not be modified.
+// This is critical: adding entries to multiple hook types caused Cursor
+// to stop firing hooks entirely.
+func TestCursorInstallHook_OnlyPreToolUse(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-populate with existing hooks
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	_ = os.MkdirAll(cursorDir, 0o755)
+	existing := map[string]any{
+		"version": float64(1),
+		"hooks": map[string]any{
+			"preToolUse":   []any{map[string]any{"command": "other-tool"}},
+			"sessionStart": []any{map[string]any{"command": "logger start"}},
+		},
+	}
+	data, _ := json.MarshalIndent(existing, "", "  ")
+	_ = os.WriteFile(filepath.Join(cursorDir, "hooks.json"), data, 0o644)
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	result, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var config map[string]any
+	_ = json.Unmarshal(result, &config)
+	hooks := config["hooks"].(map[string]any)
+
+	// preToolUse should have care-bear prepended
+	preToolUse := hooks["preToolUse"].([]any)
+	firstCmd := preToolUse[0].(map[string]any)["command"].(string)
+	if !strings.Contains(firstCmd, "care-bear") {
+		t.Errorf("preToolUse first entry should be care-bear, got: %s", firstCmd)
+	}
+
+	// beforeFileEdit should NOT have care-bear (only preToolUse gets care-bear)
+	if arr, ok := hooks["beforeFileEdit"].([]any); ok {
+		for _, e := range arr {
+			if m, ok := e.(map[string]any); ok {
+				if cmd, ok := m["command"].(string); ok && strings.Contains(cmd, "care-bear") {
+					t.Errorf("beforeFileEdit should NOT have care-bear, got: %s", cmd)
+				}
+			}
+		}
+	}
+
+	// sessionStart should be untouched
+	sessionStart := hooks["sessionStart"].([]any)
+	if len(sessionStart) != 1 {
+		t.Errorf("sessionStart should have 1 entry, got %d", len(sessionStart))
+	}
+}
+
+// TestCursorInstallHook_WorksWithManyExistingHooks verifies that care-bear
+// installs correctly and the file remains valid when other tools have added
+// hundreds of hook entries across many hook types.
+func TestCursorInstallHook_WorksWithManyExistingHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	_ = os.MkdirAll(cursorDir, 0o755)
+
+	// Simulate a hooks.json with 1000+ entries from other tools
+	hooks := map[string]any{}
+	hookTypes := []string{
+		"preToolUse", "beforeFileEdit", "beforeShellExecution",
+		"afterFileEdit", "afterShellExecution", "sessionStart",
+		"sessionEnd", "beforeSubmitPrompt", "postToolUse",
+		"afterAgentResponse",
+	}
+	for _, ht := range hookTypes {
+		var entries []any
+		for i := 0; i < 100; i++ {
+			entries = append(entries, map[string]any{
+				"command": fmt.Sprintf("tool-%d hook %s", i, ht),
+			})
+		}
+		hooks[ht] = entries
+	}
+	config := map[string]any{"version": float64(1), "hooks": hooks}
+	data, _ := json.MarshalIndent(config, "", "  ")
+	_ = os.WriteFile(filepath.Join(cursorDir, "hooks.json"), data, 0o644)
+
+	// Install care-bear
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed with 1000 existing hooks: %v", err)
+	}
+
+	// Read result
+	result, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var resultConfig map[string]any
+	_ = json.Unmarshal(result, &resultConfig)
+	resultHooks := resultConfig["hooks"].(map[string]any)
+
+	// preToolUse should have care-bear as FIRST entry + 100 existing
+	preToolUse := resultHooks["preToolUse"].([]any)
+	if len(preToolUse) != 101 {
+		t.Errorf("preToolUse should have 101 entries (care-bear + 100 existing), got %d", len(preToolUse))
+	}
+	firstCmd := preToolUse[0].(map[string]any)["command"].(string)
+	if !strings.Contains(firstCmd, "care-bear") {
+		t.Errorf("care-bear should be first in preToolUse, got: %s", firstCmd)
+	}
+
+	// Other hook types should be untouched (100 entries each)
+	for _, ht := range hookTypes[1:] {
+		arr := resultHooks[ht].([]any)
+		if len(arr) != 100 {
+			t.Errorf("%s should have 100 entries (untouched), got %d", ht, len(arr))
+		}
+		for _, e := range arr {
+			cmd := e.(map[string]any)["command"].(string)
+			if strings.Contains(cmd, "care-bear") {
+				t.Errorf("%s should NOT have care-bear, got: %s", ht, cmd)
+			}
+		}
+	}
+
+	// Idempotent — install again should not duplicate
+	err = adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("second InstallHook failed: %v", err)
+	}
+	result2, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var resultConfig2 map[string]any
+	_ = json.Unmarshal(result2, &resultConfig2)
+	preToolUse2 := resultConfig2["hooks"].(map[string]any)["preToolUse"].([]any)
+	if len(preToolUse2) != 101 {
+		t.Errorf("after second install, preToolUse should still have 101 entries, got %d", len(preToolUse2))
+	}
+}
+
+// --- ExitCodeForDeny tests ---
+
+func TestCursorExitCodeForDeny_ReturnsTwo(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+
+	// Cursor blocks operations on non-zero exit codes. Exit code 2 signals a deny.
+	// This is different from Claude (which uses exit 0 and reads stdout JSON).
+	got := adapter.ExitCodeForDeny()
+	if got != 2 {
+		t.Errorf("ExitCodeForDeny() = %d, want 2 (Cursor blocks on non-zero exit)", got)
+	}
+}
+
+// --- UninstallHook tests ---
+
+func TestCursorUninstallHook_RemovesCareBareEntry(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("failed to create .cursor dir: %v", err)
+	}
+
+	// Write hooks.json with care-bear and other hooks
+	existing := `{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {"command": "care-bear hook cursor"},
+      {"command": "other-linter --check"}
+    ],
+    "beforeFileEdit": [
+      {"command": "format-on-save.sh"}
+    ]
+  }
+}`
+	hooksPath := filepath.Join(cursorDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to write hooks.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("failed to read hooks.json after uninstall: %v", err)
+	}
+
+	content := string(data)
+	// care-bear hook must be removed
+	if strings.Contains(content, "care-bear hook") {
+		t.Errorf("care-bear hook still present after UninstallHook:\n%s", content)
+	}
+	// Other hooks must be preserved
+	if !strings.Contains(content, "other-linter --check") {
+		t.Errorf("unrelated preToolUse hook was removed:\n%s", content)
+	}
+	if !strings.Contains(content, "format-on-save.sh") {
+		t.Errorf("beforeFileEdit hook was removed:\n%s", content)
+	}
+}
+
+func TestCursorUninstallHook_NoHooksFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// No .cursor/hooks.json exists -- should not error
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err != nil {
+		t.Fatalf("UninstallHook should succeed when hooks.json does not exist, got: %v", err)
+	}
+}
+
+func TestCursorUninstallHook_NoHooksSection(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("failed to create .cursor dir: %v", err)
+	}
+
+	// Config with version but no hooks section
+	existing := `{"version": 1}`
+	hooksPath := filepath.Join(cursorDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to write hooks.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err != nil {
+		t.Fatalf("UninstallHook should succeed with no hooks section, got: %v", err)
+	}
+}
+
+func TestCursorUninstallHook_MalformedJSON(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("failed to create .cursor dir: %v", err)
+	}
+
+	hooksPath := filepath.Join(cursorDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte("{not valid json!!"), 0o644); err != nil {
+		t.Fatalf("failed to write malformed hooks.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "parsing hooks.json") {
+		t.Errorf("error = %q, want it to mention parsing failure", err.Error())
+	}
+}
+
+func TestCursorUninstallHook_RoundTrip(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Install hook first, then uninstall -- verify clean removal
+	adapter := &CursorAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
+	if err := adapter.InstallHook(""); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	// Verify hook was installed
+	hooksPath := filepath.Join(tmpDir, ".cursor", "hooks.json")
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("hooks.json not found after install: %v", err)
+	}
+	if !strings.Contains(string(data), "care-bear hook") {
+		t.Fatal("care-bear hook not found after install")
+	}
+
+	// Uninstall
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err = os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("hooks.json not found after uninstall: %v", err)
+	}
+	if strings.Contains(string(data), "care-bear hook") {
+		t.Errorf("care-bear hook still present after uninstall:\n%s", data)
+	}
+
+	// Verify the file is still valid JSON with version preserved
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("hooks.json is not valid JSON after uninstall: %v", err)
+	}
+	if config["version"] != float64(1) {
+		t.Errorf("version = %v, want 1 (should be preserved after uninstall)", config["version"])
+	}
+}
+
+func TestCursorUninstallHook_RemovesFromMultipleHookTypes(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("failed to create .cursor dir: %v", err)
+	}
+
+	// Simulate care-bear entries in multiple hook types (e.g., from an older version)
+	existing := `{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {"command": "care-bear hook cursor"},
+      {"command": "other-tool"}
+    ],
+    "beforeFileEdit": [
+      {"command": "care-bear hook cursor"},
+      {"command": "lint-tool"}
+    ]
+  }
+}`
+	hooksPath := filepath.Join(cursorDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to write hooks.json: %v", err)
+	}
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("failed to read hooks.json: %v", err)
+	}
+
+	content := string(data)
+	// All care-bear hooks must be removed from all hook types
+	if strings.Contains(content, "care-bear hook") {
+		t.Errorf("care-bear hook still present in some hook type:\n%s", content)
+	}
+	// Other hooks must be preserved in both types
+	if !strings.Contains(content, "other-tool") {
+		t.Errorf("other-tool was removed from preToolUse:\n%s", content)
+	}
+	if !strings.Contains(content, "lint-tool") {
+		t.Errorf("lint-tool was removed from beforeFileEdit:\n%s", content)
+	}
+}
+
+// --- GlobalConfigPath additional tests ---
+
+func TestCursorGlobalConfigPath_DefaultFallback(t *testing.T) {
+	t.Parallel()
+	adapter := &CursorAdapter{}
+	got := adapter.GlobalConfigPath()
+
+	// The path must end with .cursor/hooks.json regardless of prefix
+	wantSuffix := filepath.Join(".cursor", "hooks.json")
+	if !strings.HasSuffix(got, wantSuffix) {
+		t.Errorf("GlobalConfigPath() = %q, want suffix %q", got, wantSuffix)
 	}
 }

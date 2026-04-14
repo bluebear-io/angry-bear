@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
 	"github.com/Blue-Bear-Security/care-bear/internal/engine"
 	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
 	"github.com/Blue-Bear-Security/care-bear/internal/tui"
@@ -23,7 +24,12 @@ import (
 var validToolNames = []string{"Edit", "Write", "Bash", "Read", "Glob", "Grep", "Agent", "*"}
 
 // validAgentNames lists the recognized agent names for flag validation and completion.
-var validAgentNames = []string{"claude", "cursor", "*"}
+// validAgentNames is built from the adapter registry at init time.
+func validAgentNames() []string {
+	registry := adapter.NewRegistry()
+	names := registry.Names()
+	return append(names, "*")
+}
 
 // NewAddCommand returns the add subcommand for creating enforcement rules.
 // It accepts a skill name as a positional argument, generates the cartesian
@@ -294,7 +300,7 @@ func completeToolNames(cmd *cobra.Command, args []string, toComplete string) ([]
 // completeAgentNames provides shell completion for the --agent flag.
 func completeAgentNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	var matches []string
-	for _, name := range validAgentNames {
+	for _, name := range validAgentNames() {
 		if strings.HasPrefix(name, toComplete) {
 			matches = append(matches, name)
 		}

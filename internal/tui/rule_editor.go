@@ -43,9 +43,8 @@ type listItem struct {
 	value    string // Underlying value (tool name, glob pattern, agent name)
 	section  string // "tools", "paths", "agents"
 	selected bool
-	indent   int      // Tree depth (0 for top-level)
-	expanded bool     // For directories
-	children []string // Child dir names (for lazy expansion)
+	indent   int  // Tree depth (0 for top-level)
+	expanded bool // For directories
 }
 
 // editorPhase tracks main vs confirm.
@@ -205,25 +204,35 @@ func (re *RuleEditor) buildPathTree() []listItem {
 
 	// Directories first (expandable)
 	for _, name := range dirNames {
-		var children []string
+		hasChildren := false
 		subEntries, err := os.ReadDir(filepath.Join(root, name))
 		if err == nil {
 			for _, se := range subEntries {
-				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
-					children = append(children, se.Name())
+				if strings.HasPrefix(se.Name(), ".") || DefaultIgnoreSet[se.Name()] {
+					continue
 				}
+				hasChildren = true
+				break
 			}
 		}
-		sort.Strings(children)
 
-		items = append(items, listItem{
-			typ:      itemTreeDir,
-			label:    name,
-			value:    name + "/**",
-			section:  "paths",
-			indent:   0,
-			children: children,
-		})
+		if hasChildren {
+			items = append(items, listItem{
+				typ:     itemTreeDir,
+				label:   name,
+				value:   name + "/**",
+				section: "paths",
+				indent:  0,
+			})
+		} else {
+			items = append(items, listItem{
+				typ:     itemCheckbox,
+				label:   name + "/",
+				value:   name + "/**",
+				section: "paths",
+				indent:  0,
+			})
+		}
 	}
 
 	// Files after directories
@@ -513,19 +522,20 @@ func (re *RuleEditor) expandPathDir(idx int) {
 	var newItems []listItem
 	for _, e := range dirEntries {
 		childPath := parentPath + "/" + e.Name()
-		var grandchildren []string
+		hasGrandchildren := false
 		subEntries, err := os.ReadDir(filepath.Join(root, childPath))
 		if err == nil {
 			for _, se := range subEntries {
-				if se.IsDir() && !DefaultIgnoreSet[se.Name()] && !strings.HasPrefix(se.Name(), ".") {
-					grandchildren = append(grandchildren, se.Name())
+				if !strings.HasPrefix(se.Name(), ".") && !DefaultIgnoreSet[se.Name()] {
+					hasGrandchildren = true
+					break
 				}
 			}
 		}
-		if len(grandchildren) > 0 {
+		if hasGrandchildren {
 			newItems = append(newItems, listItem{
 				typ: itemTreeDir, label: e.Name(), value: childPath + "/**",
-				section: "paths", indent: item.indent + 1, children: grandchildren,
+				section: "paths", indent: item.indent + 1,
 			})
 		} else {
 			newItems = append(newItems, listItem{

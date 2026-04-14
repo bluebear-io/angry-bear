@@ -344,6 +344,21 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return d, nil
 
+		case "K":
+			// Clear all logs from view and delete the events.log file
+			if d.focusPanel == 2 {
+				d.eventLines = nil
+				d.logScroll.Cursor = 0
+				d.logFilters = make(map[filterCol]string)
+				d.filterMode = false
+				// Delete the events.log file
+				home, _ := os.UserHomeDir()
+				if home != "" {
+					_ = os.Remove(filepath.Join(home, ".care-bear", "events.log"))
+				}
+			}
+			return d, nil
+
 		case "esc":
 			if d.focusPanel == 2 {
 				d.filterMode = false
@@ -441,7 +456,7 @@ func (d Dashboard) View() string {
 		return d.styles.Description.Render("  No skills discovered. Add skill paths to .care-bear/config.json")
 	}
 
-	leftWidth := d.width*30/100 - 2
+	leftWidth := d.width*25/100 - 2
 	rightWidth := d.width - leftWidth - 5
 	if leftWidth < 20 {
 		leftWidth = 25
@@ -516,18 +531,58 @@ func (d Dashboard) View() string {
 }
 
 // renderSkillList renders the left panel.
+// isProjectSkill returns true if the skill source is under the project root.
+func isProjectSkill(source, projectRoot string) bool {
+	if projectRoot == "" {
+		return false
+	}
+	return source == projectRoot || strings.HasPrefix(source, projectRoot+"/")
+}
+
 func (d Dashboard) renderSkillList(width, height int) string {
-	title := d.styles.RuleHeader.Render("SKILLS") + "\n\n"
+	title := d.styles.RuleHeader.Render("SKILLS") + "\n"
 
 	var b strings.Builder
 	visible := height - 3
 	if visible < 1 {
 		visible = len(d.skills)
 	}
-	scrollStart, end := d.skillScroll.VisibleRange(len(d.skills), visible)
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
 
-	for i := scrollStart; i < end; i++ {
+	// Build ordered index: project skills first, then global
+	var ordered []int
+	for i, skill := range d.skills {
+		if isProjectSkill(skill.Source, d.projectRoot) {
+			ordered = append(ordered, i)
+		}
+	}
+	projectCount := len(ordered)
+	for i, skill := range d.skills {
+		if !isProjectSkill(skill.Source, d.projectRoot) {
+			ordered = append(ordered, i)
+		}
+	}
+	_ = projectCount // used below for section headers
+
+	// Scroll over the ordered list
+	scrollStart, end := d.skillScroll.VisibleRange(len(ordered), visible)
+
+	renderedHeader := false
+	for oi := scrollStart; oi < end; oi++ {
+		i := ordered[oi]
 		skill := d.skills[i]
+
+		// Section header
+		if oi == 0 && projectCount > 0 {
+			b.WriteString("  " + sectionStyle.Render("── PROJECT ──") + "\n")
+			renderedHeader = true
+		}
+		if oi == projectCount && !renderedHeader {
+			b.WriteString("  " + sectionStyle.Render("── GLOBAL ──") + "\n")
+			renderedHeader = true
+		} else if oi == projectCount && renderedHeader {
+			b.WriteString("\n  " + sectionStyle.Render("── GLOBAL ──") + "\n")
+		}
 		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 
 		ruleCount := 0
@@ -542,61 +597,24 @@ func (d Dashboard) renderSkillList(width, height int) string {
 			name = name[:width-11] + "..."
 		}
 
-		status := d.loadedSkills[skill.Name]
-		isLoaded := status != nil && len(status.Agents) > 0
-
 		countStr := d.styles.Description.Render(fmt.Sprintf(" (%d)", ruleCount))
 		if ruleCount > 0 {
 			countStr = d.styles.Success.Render(fmt.Sprintf(" (%d)", ruleCount))
 		}
 
-		// Loaded indicator: show agent names as colored tags
-		loadedTag := ""
-		if isLoaded {
-			var tags []string
-			for _, a := range status.Agents {
-				if a == "unknown" {
-					continue // Skip old sessions without agent info
-				}
-				switch a {
-				case "claude":
-					tags = append(tags, lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#1F2937")).
-						Background(lipgloss.Color("#A78BFA")).
-						Padding(0, 1).
-						Render("claude"))
-				case "cursor":
-					tags = append(tags, lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#1F2937")).
-						Background(lipgloss.Color("#22D3EE")).
-						Padding(0, 1).
-						Render("cursor"))
-				}
-			}
-			if len(tags) > 0 {
-				loadedTag = " " + strings.Join(tags, " ")
-			}
-		}
-
 		if focused {
 			suffix := fmt.Sprintf(" (%d)", ruleCount)
-			if loadedTag != "" {
-				suffix += " loaded"
-			}
+
 			line := d.styles.Selected.Render(" ▸ " + name + suffix)
 			b.WriteString(line + "\n")
 		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName
-			if loadedTag != "" {
-				nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
-			}
-			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + loadedTag + "\n")
+
+			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + "\n")
 		} else {
 			nameStyle := lipgloss.NewStyle()
-			if loadedTag != "" {
-				nameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
-			}
-			b.WriteString("   " + nameStyle.Render(name) + countStr + loadedTag + "\n")
+
+			b.WriteString("   " + nameStyle.Render(name) + countStr + "\n")
 		}
 	}
 
@@ -813,9 +831,12 @@ func (d Dashboard) renderEventLog(width, height int) string {
 
 	// Calculate max width for each column from actual data
 	colW := map[string]int{
-		"act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
+		"time": 5, "act": 6, "project": 7, "sess": 4, "agent": 5, "tool": 4, "skill": 5, "path": 4,
 	}
 	for _, r := range allRows {
+		if len(r.Time) > colW["time"] {
+			colW["time"] = len(r.Time)
+		}
 		if len(r.Action) > colW["act"] {
 			colW["act"] = len(r.Action)
 		}
@@ -840,7 +861,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	// Cap path width to fill remaining space
-	used := colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
+	used := colW["time"] + colW["act"] + colW["project"] + colW["sess"] + colW["agent"] + colW["tool"] + colW["skill"] + 16 // padding
 	maxPath := width - used - 4
 	if maxPath < 10 {
 		maxPath = 10
@@ -850,8 +871,8 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	// Build format string
-	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
-		colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
+	fmtStr := fmt.Sprintf("  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds",
+		colW["time"], colW["act"], colW["project"], colW["sess"], colW["agent"], colW["tool"], colW["skill"], colW["path"])
 
 	// Header — highlight the active filter column when in filter mode
 	if d.filterMode {
@@ -872,7 +893,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 		title += "  " + strings.Join(headerParts, "  ")
 	} else {
-		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
+		title += d.styles.Description.Render(fmt.Sprintf(fmtStr, "TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"))
 	}
 	title += "\n" + d.styles.Divider.Render(strings.Repeat("─", width-2)) + "\n"
 
@@ -900,6 +921,8 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		var sty lipgloss.Style
 		if r.IsBlock {
 			sty = red
+		} else if r.IsExpire {
+			sty = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
 		} else if r.IsLoad {
 			sty = cyan
 		} else {
@@ -907,7 +930,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		}
 
 		focused := fi == d.logScroll.Cursor && d.focusPanel == 2
-		plain := fmt.Sprintf(fmtStr, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
+		plain := fmt.Sprintf(fmtStr, r.Time, r.Action, r.Project, r.Session, r.Agent, r.Tool, r.Skill, path)
 
 		if focused {
 			b.WriteString(d.styles.Selected.Render("▸"+plain[1:]) + "\n")

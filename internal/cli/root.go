@@ -13,17 +13,17 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bear/internal/state"
-	"github.com/Blue-Bear-Security/care-bear/internal/tui"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/angry-bear/internal/state"
+	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
 )
 
 // NewRootCommand builds and returns the root command with all subcommands.
 func NewRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:   "care-bear",
+		Use:   "angry-bear",
 		Short: "Enforce skill-loading requirements for AI coding agents",
 		RunE:  tuiRunE,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -57,7 +57,7 @@ func NewRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-// tuiRunE launches the interactive TUI when care-bear is run with no subcommand.
+// tuiRunE launches the interactive TUI when angry-bear is run with no subcommand.
 // First shows a project picker, then loads the selected project's config and skills.
 func tuiRunE(cmd *cobra.Command, args []string) error {
 	for {
@@ -188,7 +188,7 @@ loadConfig:
 		if repoConfigDir != "" {
 			configPath = filepath.Join(repoConfigDir, "skill_enforcement.json")
 		} else {
-			configPath = filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json")
+			configPath = filepath.Join(projectRoot, ".angry-bear", "skill_enforcement.json")
 		}
 	}
 
@@ -215,7 +215,7 @@ loadConfig:
 	}
 
 	// 6. Collect loaded skills from all active sessions.
-	loadedSkills := state.CollectLoadedSkills(filepath.Join(projectRoot, ".care-bear", "state"))
+	loadedSkills := state.CollectLoadedSkills(filepath.Join(projectRoot, ".angry-bear", "state"))
 
 	// 7. Build available local paths list for the TUI settings view.
 	var availablePaths []string

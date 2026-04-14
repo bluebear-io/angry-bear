@@ -1,4 +1,4 @@
-// Package engine implements the core skill enforcement logic for care-bear.
+// Package engine implements the core skill enforcement logic for angry-bear.
 // It handles rule matching, config loading, and the ShouldBlock decision.
 package engine
 
@@ -16,7 +16,7 @@ type Config struct {
 	Tools   []Rule `json:"tools"`
 }
 
-// GlobalConfig represents the global care-bear configuration.
+// GlobalConfig represents the global angry-bear configuration.
 type GlobalConfig struct {
 	SkillPaths      []string `json:"skill_paths"`
 	StateTTLHours   int      `json:"state_ttl_hours"`
@@ -27,9 +27,9 @@ type GlobalConfig struct {
 
 // RuleSource indicates where a rule was loaded from.
 const (
-	// SourceRepo means the rule is from the project's .care-bear/ directory (committed to git).
+	// SourceRepo means the rule is from the project's .angry-bear/ directory (committed to git).
 	SourceRepo = "repo"
-	// SourceMachine means the rule is from ~/.care-bear/repos/{hash}/ (local to this machine).
+	// SourceMachine means the rule is from ~/.angry-bear/repos/{hash}/ (local to this machine).
 	SourceMachine = "machine"
 )
 

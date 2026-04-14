@@ -1,11 +1,11 @@
 version: 2
 
-project_name: care-bear
+project_name: angry-bear
 
 builds:
-  - id: care-bear
-    main: ./cmd/care-bear/
-    binary: care-bear
+  - id: angry-bear
+    main: ./cmd/angry-bear/
+    binary: angry-bear
     env:
       - CGO_ENABLED=0
     flags:
@@ -60,24 +60,24 @@ changelog:
       - "^test:"
 
 brews:
-  - name: care-bear
+  - name: angry-bear
     repository:
       owner: Blue-Bear-Security
-      name: homebrew-care-bear
+      name: homebrew-angry-bear
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: https://github.com/Blue-Bear-Security/care-bear
+    homepage: https://github.com/Blue-Bear-Security/angry-bear
     description: "Enforce skill-loading requirements for AI coding agents"
     license: "Apache-2.0"
     install: |
-      bin.install "care-bear"
+      bin.install "angry-bear"
     test: |
-      system "#{bin}/care-bear", "version"
+      system "#{bin}/angry-bear", "version"
 
 release:
   github:
     owner: Blue-Bear-Security
-    name: care-bear
+    name: angry-bear
   draft: false
   prerelease: auto
   name_template: "{{ .Tag }}"

@@ -1,4 +1,4 @@
-// logo.go handles the care-bear logo display.
+// logo.go handles the angry-bear logo display.
 // The logo is embedded in the binary so it works on every machine.
 package cli
 
@@ -12,7 +12,7 @@ import (
 //go:embed logo.png
 var logoPNG []byte
 
-// printLogo displays the care-bear logo before the project picker.
+// printLogo displays the angry-bear logo before the project picker.
 // Uses iTerm2/Kitty inline image protocol for supported terminals,
 // falls back to gradient text for basic terminals.
 func printLogo() {
@@ -46,10 +46,10 @@ func printInlineImage() bool {
 	return true
 }
 
-// printGradientLogo prints gradient text "care-bear" for basic terminals.
+// printGradientLogo prints gradient text "angry-bear" for basic terminals.
 func printGradientLogo() {
 	colors := []int{69, 69, 75, 75, 81, 81, 117, 153, 177, 204}
-	text := " care-bear"
+	text := " angry-bear"
 	fmt.Fprint(os.Stderr, "\n    ")
 	for i, ch := range text {
 		ci := i

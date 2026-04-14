@@ -9,9 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bear/internal/state"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/angry-bear/internal/state"
 )
 
 // --- matchesFilters tests ---

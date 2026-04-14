@@ -1,4 +1,4 @@
-module github.com/Blue-Bear-Security/care-bear
+module github.com/Blue-Bear-Security/angry-bear
 
 go 1.24.0
 

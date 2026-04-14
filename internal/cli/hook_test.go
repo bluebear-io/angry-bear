@@ -1,4 +1,4 @@
-// hook_test.go contains integration tests for the care-bear hook command.
+// hook_test.go contains integration tests for the angry-bear hook command.
 // These tests exercise the full stdin-to-stdout flow by setting up real
 // config files and state files, piping JSON through the hook command via
 // cmd.SetIn(), and verifying stdout output and exit behavior.
@@ -14,16 +14,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/cli"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/state"
+	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/state"
 )
 
 // ---------------------------------------------------------------------------
 // Test helper functions
 // ---------------------------------------------------------------------------
 
-// writeEnforcementConfig writes a .care-bear/skill_enforcement.json file
+// writeEnforcementConfig writes a .angry-bear/skill_enforcement.json file
 // with the given rules and version 1 into the specified directory.
 func writeEnforcementConfig(t *testing.T, dir string, rules []engine.Rule) {
 	t.Helper()
@@ -31,9 +31,9 @@ func writeEnforcementConfig(t *testing.T, dir string, rules []engine.Rule) {
 		Version: 1,
 		Tools:   rules,
 	}
-	configDir := filepath.Join(dir, ".care-bear")
+	configDir := filepath.Join(dir, ".angry-bear")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		t.Fatalf("failed to create .care-bear directory: %v", err)
+		t.Fatalf("failed to create .angry-bear directory: %v", err)
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -44,11 +44,11 @@ func writeEnforcementConfig(t *testing.T, dir string, rules []engine.Rule) {
 	}
 }
 
-// writeStateFile writes a .care-bear/state/{sessionID}.json file with the
+// writeStateFile writes a .angry-bear/state/{sessionID}.json file with the
 // given invoked skills into the specified directory.
 func writeStateFile(t *testing.T, dir string, sessionID string, skills []string) {
 	t.Helper()
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
 	}
@@ -189,8 +189,8 @@ func TestHook_RecordsSkillInvocation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	// Create .care-bear so project root resolution finds it.
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	// Create .angry-bear so project root resolution finds it.
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,7 +215,7 @@ func TestHook_RecordsSkillInvocation(t *testing.T) {
 	}
 
 	// Verify state file was created with the skill recorded.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("sess1")
 	if err != nil {
@@ -232,8 +232,8 @@ func TestHook_AllowsWhenNoConfig(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	// Create .care-bear dir but no skill_enforcement.json.
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	// Create .angry-bear dir but no skill_enforcement.json.
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -263,7 +263,7 @@ func TestHook_ExitsZeroOnAllow(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -585,13 +585,13 @@ func TestHook_EmptyStdin(t *testing.T) {
 }
 
 // TestHook_SkillRecordingCreatesStateDir verifies that the hook creates
-// the .care-bear/state/ directory if it doesn't exist when recording skills.
+// the .angry-bear/state/ directory if it doesn't exist when recording skills.
 func TestHook_SkillRecordingCreatesStateDir(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	// Only create .care-bear, not .care-bear/state.
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	// Only create .angry-bear, not .angry-bear/state.
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -611,7 +611,7 @@ func TestHook_SkillRecordingCreatesStateDir(t *testing.T) {
 	}
 
 	// Verify the state directory was created.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	info, err := os.Stat(stateDir)
 	if err != nil {
 		t.Fatalf("state directory was not created: %v", err)
@@ -788,8 +788,8 @@ func TestHook_SkillMDReadRecordsSkill(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	// Create .care-bear so project root resolution finds it.
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	// Create .angry-bear so project root resolution finds it.
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -815,7 +815,7 @@ func TestHook_SkillMDReadRecordsSkill(t *testing.T) {
 	}
 
 	// Verify the skill was recorded in state.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("sess-skill-read")
 	if err != nil {
@@ -874,7 +874,7 @@ func TestHook_SkillMDReadDoesNotShortCircuit(t *testing.T) {
 	}
 
 	// Verify my-skill WAS still recorded from the SKILL.md read (even though the Read was blocked).
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("sess-block-read")
 	if err != nil {
@@ -891,7 +891,7 @@ func TestHook_NonSkillMDReadDoesNotRecordSkill(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -912,7 +912,7 @@ func TestHook_NonSkillMDReadDoesNotRecordSkill(t *testing.T) {
 	}
 
 	// Verify no state file was created for this session.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, _ := mgr.GetInvokedSkills("sess-no-skill")
 	if len(skills) > 0 {
@@ -925,7 +925,7 @@ func TestHook_NonSkillMDReadDoesNotRecordSkill(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestHook_LogEventWritesBlockEntry verifies that when a tool invocation
-// is blocked, a BLOCK entry is written to ~/.care-bear/events.log with
+// is blocked, a BLOCK entry is written to ~/.angry-bear/events.log with
 // the correct format including missing skill names.
 func TestHook_LogEventWritesBlockEntry(t *testing.T) {
 	// Cannot run in parallel: modifies HOME environment variable.
@@ -956,7 +956,7 @@ func TestHook_LogEventWritesBlockEntry(t *testing.T) {
 	}
 
 	// Read the events log.
-	logPath := filepath.Join(dir, ".care-bear", "events.log")
+	logPath := filepath.Join(dir, ".angry-bear", "events.log")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("failed to read events.log: %v", err)
@@ -1009,7 +1009,7 @@ func TestHook_LogEventWritesAllowEntry(t *testing.T) {
 	}
 
 	// Read the events log.
-	logPath := filepath.Join(dir, ".care-bear", "events.log")
+	logPath := filepath.Join(dir, ".angry-bear", "events.log")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("failed to read events.log: %v", err)
@@ -1038,7 +1038,7 @@ func TestHook_LogSkillEventWritesEntry(t *testing.T) {
 	t.Setenv("HOME", dir)
 
 	projectDir := filepath.Join(dir, "myproject")
-	if err := os.MkdirAll(filepath.Join(projectDir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(projectDir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1058,7 +1058,7 @@ func TestHook_LogSkillEventWritesEntry(t *testing.T) {
 	}
 
 	// Read the events log.
-	logPath := filepath.Join(dir, ".care-bear", "events.log")
+	logPath := filepath.Join(dir, ".angry-bear", "events.log")
 	logData, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("failed to read events.log: %v", err)
@@ -1142,7 +1142,7 @@ func TestHook_SkillInvocationRecordsAgent(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1162,7 +1162,7 @@ func TestHook_SkillInvocationRecordsAgent(t *testing.T) {
 	}
 
 	// Verify the state file contains both the skill and agent.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	stateFile := filepath.Join(stateDir, "sess-agent-rec.json")
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -1249,7 +1249,7 @@ func TestHook_CursorAutoDetect(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1290,7 +1290,7 @@ func TestHook_SkillMDReadViaCursor(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1320,7 +1320,7 @@ func TestHook_SkillMDReadViaCursor(t *testing.T) {
 	}
 
 	// Verify the skill was recorded.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("conv-cursor-skill")
 	if err != nil {
@@ -1337,7 +1337,7 @@ func TestHook_CursorAllowNoRules(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1375,7 +1375,7 @@ func TestHook_VerboseFlagEnablesDebugLogging(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1412,7 +1412,7 @@ func TestHook_BlockWithStateDirExistingTriggersSkillTTL(t *testing.T) {
 	})
 
 	// Create state directory with an old session (to test pruning path).
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1451,7 +1451,7 @@ func TestHook_AllowWithSkillTTLConfigured(t *testing.T) {
 	})
 
 	// Write config.json with skill TTL.
-	configDir := filepath.Join(dir, ".care-bear")
+	configDir := filepath.Join(dir, ".angry-bear")
 	cfg := engine.GlobalConfig{
 		SkillPaths:      []string{".claude/skills"},
 		StateTTLHours:   24,
@@ -1497,8 +1497,8 @@ func TestHook_NoStateDir(t *testing.T) {
 		{Tool: "Edit", Path: "**/*.go", Skill: "go-standards", Agent: "*"},
 	})
 
-	// Delete state directory (writeEnforcementConfig creates .care-bear/ but not state/).
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	// Delete state directory (writeEnforcementConfig creates .angry-bear/ but not state/).
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	_ = os.RemoveAll(stateDir)
 
 	stdin := claudeStdin("sess-nostate", "Edit", filepath.Join(dir, "main.go"), dir)
@@ -1587,7 +1587,7 @@ func TestHook_MalformedConfigFailsOpen(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write malformed enforcement config.
-	configDir := filepath.Join(dir, ".care-bear")
+	configDir := filepath.Join(dir, ".angry-bear")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1630,7 +1630,7 @@ func TestHook_MalformedGlobalConfigUsesDefaults(t *testing.T) {
 	writeStateFile(t, dir, "sess-badgcfg", []string{"go-standards"})
 
 	// Write malformed config.json.
-	configDir := filepath.Join(dir, ".care-bear")
+	configDir := filepath.Join(dir, ".angry-bear")
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte("{bad json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1718,8 +1718,8 @@ func TestHook_GitRepoProjectResolveIdentity(t *testing.T) {
 	// Initialize a git repo with a remote.
 	initGitRepoHelper(t, projectDir, "https://github.com/test-org/test-repo.git")
 
-	// Create .care-bear inside the project.
-	if err := os.MkdirAll(filepath.Join(projectDir, ".care-bear"), 0o755); err != nil {
+	// Create .angry-bear inside the project.
+	if err := os.MkdirAll(filepath.Join(projectDir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1772,7 +1772,7 @@ func TestHook_GitRepoProjectSkillInvocation(t *testing.T) {
 
 	initGitRepoHelper(t, projectDir, "https://github.com/test-org/skill-project.git")
 
-	if err := os.MkdirAll(filepath.Join(projectDir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(projectDir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1792,7 +1792,7 @@ func TestHook_GitRepoProjectSkillInvocation(t *testing.T) {
 	}
 
 	// Verify skill was recorded.
-	stateDir := filepath.Join(projectDir, ".care-bear", "state")
+	stateDir := filepath.Join(projectDir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("sess-git-skill")
 	if err != nil {
@@ -1859,8 +1859,8 @@ func TestHook_GitRepoWithRepoConfigDirRules(t *testing.T) {
 
 	initGitRepoHelper(t, projectDir, "https://github.com/test-org/repoconfig-project.git")
 
-	// Create .care-bear so project root resolution finds it.
-	if err := os.MkdirAll(filepath.Join(projectDir, ".care-bear"), 0o755); err != nil {
+	// Create .angry-bear so project root resolution finds it.
+	if err := os.MkdirAll(filepath.Join(projectDir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1982,8 +1982,8 @@ func TestHook_EnforcementConfigUnreadablePermissions(t *testing.T) {
 
 	dir := t.TempDir()
 
-	// Create a valid .care-bear directory with enforcement config.
-	configDir := filepath.Join(dir, ".care-bear")
+	// Create a valid .angry-bear directory with enforcement config.
+	configDir := filepath.Join(dir, ".angry-bear")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2039,7 +2039,7 @@ func TestHook_CorruptStateFileAllowsFallback(t *testing.T) {
 	})
 
 	// Write a corrupt state file.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2094,7 +2094,7 @@ func TestHook_ReadToolWithEmptyFilePath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2122,7 +2122,7 @@ func TestHook_ReadToolWithEmptyFilePath(t *testing.T) {
 	}
 
 	// No skill should be recorded.
-	stateDir := filepath.Join(dir, ".care-bear", "state")
+	stateDir := filepath.Join(dir, ".angry-bear", "state")
 	mgr := state.NewStateManager(stateDir)
 	skills, _ := mgr.GetInvokedSkills("sess-empty-fp")
 	if len(skills) > 0 {

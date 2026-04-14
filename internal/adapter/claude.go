@@ -1,6 +1,6 @@
 // claude.go implements the HookAdapter interface for Claude Code.
 // It handles parsing Claude Code's PreToolUse hook JSON, formatting allow/deny
-// responses, detecting skill invocations, and installing the care-bear hook
+// responses, detecting skill invocations, and installing the angry-bear hook
 // into .claude/settings.json.
 package adapter
 
@@ -13,17 +13,17 @@ import (
 	"strings"
 )
 
-// resolveCareBareCommand returns the path to the care-bear binary for use
+// resolveCareBareCommand returns the path to the angry-bear binary for use
 // in hook configurations. Uses binaryPath if non-empty, otherwise resolves the
 // absolute path to the running binary. This ensures hooks work regardless
-// of whether care-bear is on PATH.
+// of whether angry-bear is on PATH.
 func resolveCareBareCommand(binaryPath string) string {
 	if binaryPath != "" {
 		return binaryPath
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return "care-bear" // fallback to PATH-based lookup
+		return "angry-bear" // fallback to PATH-based lookup
 	}
 	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {
@@ -125,7 +125,7 @@ func (a *ClaudeAdapter) GlobalConfigPath() string {
 	return filepath.Join(home, ".claude", "settings.json")
 }
 
-// InstallHook adds a care-bear PreToolUse hook to the GLOBAL Claude Code settings.
+// InstallHook adds a angry-bear PreToolUse hook to the GLOBAL Claude Code settings.
 // This ensures enforcement works in every project without per-project init.
 // projectDir is ignored — hooks are always installed globally.
 // This method is idempotent -- calling it twice does not duplicate the hook entry.
@@ -163,12 +163,12 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 		preToolUse = existing
 	}
 
-	// Check if care-bear hook already exists (idempotency check)
+	// Check if angry-bear hook already exists (idempotency check)
 	if careBareHookExists(preToolUse) {
 		return nil
 	}
 
-	// Append the care-bear hook entry using the absolute binary path
+	// Append the angry-bear hook entry using the absolute binary path
 	binPath := resolveCareBareCommand(a.BinaryPath)
 	careBareEntry := map[string]any{
 		"matcher": "*",
@@ -198,7 +198,7 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 }
 
 // careBareHookExists checks if any hook entry in the PreToolUse array already
-// contains the care-bear hook command. Used for idempotency.
+// contains the angry-bear hook command. Used for idempotency.
 func careBareHookExists(preToolUse []any) bool {
 	for _, entry := range preToolUse {
 		entryMap, ok := entry.(map[string]any)
@@ -215,7 +215,7 @@ func careBareHookExists(preToolUse []any) bool {
 				continue
 			}
 			if cmd, ok := hookMap["command"].(string); ok {
-				if strings.Contains(cmd, "care-bear hook") {
+				if strings.Contains(cmd, "angry-bear hook") {
 					return true
 				}
 			}
@@ -224,7 +224,7 @@ func careBareHookExists(preToolUse []any) bool {
 	return false
 }
 
-// UninstallHook removes all care-bear hooks from Claude Code's global settings.
+// UninstallHook removes all angry-bear hooks from Claude Code's global settings.
 func (a *ClaudeAdapter) UninstallHook() error {
 	settingsPath := a.GlobalConfigPath()
 	data, err := os.ReadFile(settingsPath)
@@ -250,7 +250,7 @@ func (a *ClaudeAdapter) UninstallHook() error {
 		return nil
 	}
 
-	// Filter out entries containing care-bear hook commands
+	// Filter out entries containing angry-bear hook commands
 	var filtered []any
 	for _, entry := range preToolUse {
 		entryMap, ok := entry.(map[string]any)
@@ -269,7 +269,7 @@ func (a *ClaudeAdapter) UninstallHook() error {
 			if !ok {
 				continue
 			}
-			if cmd, ok := hookMap["command"].(string); ok && strings.Contains(cmd, "care-bear hook") {
+			if cmd, ok := hookMap["command"].(string); ok && strings.Contains(cmd, "angry-bear hook") {
 				hasCareBare = true
 				break
 			}

@@ -82,8 +82,8 @@ func MatchPath(pattern, filePath string) (bool, error) {
 }
 
 // ResolveProjectRoot finds the project root directory by walking up from startDir.
-// Uses .git/ directory as the project root marker. All care-bear data lives
-// under ~/.care-bear/, not in project directories.
+// Uses .git/ directory as the project root marker. All angry-bear data lives
+// under ~/.angry-bear/, not in project directories.
 //
 // Resolution order:
 //  1. Nearest directory containing .git/

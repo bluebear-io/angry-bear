@@ -1,6 +1,6 @@
 // config.go handles loading and merging enforcement configurations from
 // user-level and project-level config files. It implements a two-level
-// merge strategy: user-level (~/.care-bear/) rules are loaded first,
+// merge strategy: user-level (~/.angry-bear/) rules are loaded first,
 // then project-level rules are accumulated by walking up from the start
 // directory to the filesystem root or user home directory.
 package engine
@@ -16,8 +16,8 @@ import (
 // configFileName is the name of the skill enforcement config file.
 const configFileName = "skill_enforcement.json"
 
-// configDirName is the name of the care-bear config directory.
-const configDirName = ".care-bear"
+// configDirName is the name of the angry-bear config directory.
+const configDirName = ".angry-bear"
 
 // ConfigOption configures the behavior of LoadConfig.
 type ConfigOption func(*configOptions)
@@ -39,8 +39,8 @@ func WithHomeDir(dir string) ConfigOption {
 // project-level config files. Returns all accumulated rules.
 //
 // The loading order is:
-//  1. User-level: ~/.care-bear/skill_enforcement.json
-//  2. Project-level: walk up from startDir collecting .care-bear/skill_enforcement.json
+//  1. User-level: ~/.angry-bear/skill_enforcement.json
+//  2. Project-level: walk up from startDir collecting .angry-bear/skill_enforcement.json
 //     files at each directory level, stopping at filesystem root or user home.
 //
 // Behavior:
@@ -69,7 +69,7 @@ func LoadConfig(startDir string, opts ...ConfigOption) ([]MatchedRule, error) {
 
 	var allRules []MatchedRule
 
-	// 1. Load user-level config from ~/.care-bear/skill_enforcement.json.
+	// 1. Load user-level config from ~/.angry-bear/skill_enforcement.json.
 	if homeDir != "" {
 		userConfigPath := filepath.Join(homeDir, configDirName, configFileName)
 		rules, err := loadConfigFile(userConfigPath)
@@ -177,7 +177,7 @@ func loadConfigFileWithSource(path, source string) ([]MatchedRule, error) {
 }
 
 // RepoPreferences holds per-repo user preferences such as the preferred
-// local checkout path. Stored at ~/.care-bear/repos/{hash}-{slug}/preferences.json.
+// local checkout path. Stored at ~/.angry-bear/repos/{hash}-{slug}/preferences.json.
 type RepoPreferences struct {
 	PreferredPath string `json:"preferred_path"`
 }
@@ -240,7 +240,7 @@ func globalConfigDefaults() *GlobalConfig {
 	}
 }
 
-// LoadGlobalDefaults reads ~/.care-bear/config.json (machine-level defaults).
+// LoadGlobalDefaults reads ~/.angry-bear/config.json (machine-level defaults).
 // Returns built-in defaults if the file does not exist.
 func LoadGlobalDefaults() (*GlobalConfig, error) {
 	defaults := globalConfigDefaults()
@@ -256,7 +256,7 @@ func LoadGlobalDefaults() (*GlobalConfig, error) {
 }
 
 // LoadGlobalConfig reads project-level config.json from the project root and
-// merges it on top of the global defaults from ~/.care-bear/config.json.
+// merges it on top of the global defaults from ~/.angry-bear/config.json.
 // Project-level non-zero fields override global values.
 // Returns defaults if neither file exists.
 func LoadGlobalConfig(projectRoot string) (*GlobalConfig, error) {
@@ -340,7 +340,7 @@ func LoadConfigFromDir(dir string) ([]MatchedRule, error) {
 func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) {
 	var allRules []MatchedRule
 
-	// Load repo-level rules from {project}/.care-bear/skill_enforcement.json
+	// Load repo-level rules from {project}/.angry-bear/skill_enforcement.json
 	repoPath := filepath.Join(projectRoot, configDirName, configFileName)
 	repoRules, err := loadConfigFileWithSource(repoPath, SourceRepo)
 	if err != nil {
@@ -381,7 +381,7 @@ func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) 
 
 // LoadGlobalConfigFromDir reads config.json directly from the given directory.
 // Used for repo-keyed config dirs where config.json is at the root level
-// (not inside a .care-bear/ subdirectory).
+// (not inside a .angry-bear/ subdirectory).
 func LoadGlobalConfigFromDir(dir string) (*GlobalConfig, error) {
 	base, err := LoadGlobalDefaults()
 	if err != nil {

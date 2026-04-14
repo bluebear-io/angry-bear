@@ -1,9 +1,9 @@
 ---
 name: pr-review
-description: "Review PRs against care-bear architecture and coding guidelines. Use when: reviewing code, checking PRs, validating changes, auditing architecture compliance."
+description: "Review PRs against angry-bear architecture and coding guidelines. Use when: reviewing code, checking PRs, validating changes, auditing architecture compliance."
 ---
 
-# PR Review — care-bear Guidelines
+# PR Review — angry-bear Guidelines
 
 ## Architecture Rules (NON-NEGOTIABLE)
 
@@ -23,10 +23,10 @@ Every piece of agent knowledge belongs in the adapter:
 - Hook installation iterates over registered adapters
 - Config file detection uses `adapter.GlobalConfigPath()`
 
-### 4. All data under ~/.care-bear/
-- No project-level `.care-bear/` directories
-- Config, state, logs all under `~/.care-bear/repos/{hash}/`
-- `ResolveProjectRoot` uses `.git/` only (not `.care-bear/`)
+### 4. All data under ~/.angry-bear/
+- No project-level `.angry-bear/` directories
+- Config, state, logs all under `~/.angry-bear/repos/{hash}/`
+- `ResolveProjectRoot` uses `.git/` only (not `.angry-bear/`)
 
 ## Code Standards
 
@@ -42,7 +42,7 @@ Every piece of agent knowledge belongs in the adapter:
 - All exported types and functions must have doc comments
 - One function, one responsibility
 - Adapters contain ALL agent knowledge
-- Fail-open on config/state errors (never block developers due to care-bear bugs)
+- Fail-open on config/state errors (never block developers due to angry-bear bugs)
 - Fail-hard on user mistakes (malformed JSON, bad config versions)
 
 ## Review Checklist

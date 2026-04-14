@@ -8,7 +8,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 all: lint test build
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o bin/care-bear ./cmd/care-bear
+	go build -ldflags "$(LDFLAGS)" -o bin/angry-bear ./cmd/angry-bear
 
 test:
 	go test -race ./...
@@ -20,7 +20,7 @@ clean:
 	rm -rf bin/ dist/ coverage.out
 
 install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/care-bear
+	go install -ldflags "$(LDFLAGS)" ./cmd/angry-bear
 
 demos:
 	@command -v vhs >/dev/null 2>&1 || { echo "VHS is required for demos. Install: https://github.com/charmbracelet/vhs"; exit 1; }

@@ -28,11 +28,11 @@ type HookAdapter interface {
 	// ConfigPath returns the relative path to the agent's hook config file.
 	// Used to detect if this agent is present in a project.
 	ConfigPath() string
-	// InstallHook modifies the agent's global config to add a care-bear hook.
+	// InstallHook modifies the agent's global config to add a angry-bear hook.
 	InstallHook(projectDir string) error
 	// GlobalConfigPath returns the absolute path to the agent's global hook config file.
 	GlobalConfigPath() string
-	// UninstallHook removes all care-bear hooks from the agent's global config.
+	// UninstallHook removes all angry-bear hooks from the agent's global config.
 	UninstallHook() error
 	// ExitCodeForDeny returns the process exit code for a deny response.
 	// Claude Code uses 0 (reads deny from stdout JSON), Cursor uses 2.

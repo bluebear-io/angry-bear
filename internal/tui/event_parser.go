@@ -69,6 +69,10 @@ func parseEventLine(line string, lineIdx int) (ParsedEvent, bool) {
 
 	if ev.IsBlock {
 		ev.Action = "BLOCK"
+	} else if ev.IsExpire {
+		ev.Action = "EXPIR"
+		ev.Tool = "SKILL-TTL"
+		ev.Path = ""
 	} else if ev.IsLoad {
 		ev.Action = "LOAD"
 		ev.Tool = "\u2014" // em-dash

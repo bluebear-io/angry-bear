@@ -209,12 +209,15 @@ func runHook(cmd *cobra.Command, args []string) error {
 			logger.Warn("failed to read session state, treating as empty", "error", err)
 			invokedSkills = make(map[string]bool)
 		}
-		// Log expired skills
+		// Log expired skills (once per skill per session).
 		if skillTTL > 0 {
 			for skill := range allSkills {
-				if !invokedSkills[skill] {
+				if !invokedSkills[skill] && !mgr.IsSkillExpired(hookInput.SessionID, skill) {
 					logSkillEvent(projectRoot, hookInput, skill, "expired")
 					logger.Debug("skill expired", "skill", skill, "ttl_minutes", globalCfg.SkillTTLMinutes)
+					if markErr := mgr.MarkSkillExpired(hookInput.SessionID, skill); markErr != nil {
+						logger.Warn("failed to mark skill as expired", "skill", skill, "error", markErr)
+					}
 				}
 			}
 		}

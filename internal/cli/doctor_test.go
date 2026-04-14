@@ -48,6 +48,7 @@ func runDoctorInDir(t *testing.T, dir string) (string, error) {
 // setupHealthyProject creates a fully valid care-bear project in the temp dir
 // with valid configs, state directory, a detected agent with hooks, and skills.
 func setupHealthyProject(t *testing.T, dir string) {
+	t.Setenv("HOME", dir)
 	t.Helper()
 
 	// Create .care-bear/ with valid skill_enforcement.json.

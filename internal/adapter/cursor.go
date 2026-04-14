@@ -206,7 +206,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 
 	// Cursor requires relative binary name (not absolute path) for hook execution.
 	binPath := "angry-bear"
-	careBareEntry := map[string]any{
+	angryBearEntry := map[string]any{
 		"command": binPath + " hook cursor",
 	}
 
@@ -217,7 +217,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 			existing = arr
 		}
 		// Prepend angry-bear entry so it runs before other hooks
-		hooks[hookType] = append([]any{careBareEntry}, existing...)
+		hooks[hookType] = append([]any{angryBearEntry}, existing...)
 	}
 
 	// Write back with 2-space indent for readability

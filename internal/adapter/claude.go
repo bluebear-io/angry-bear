@@ -164,13 +164,13 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 	}
 
 	// Check if angry-bear hook already exists (idempotency check)
-	if careBareHookExists(preToolUse) {
+	if angryBearHookExists(preToolUse) {
 		return nil
 	}
 
 	// Append the angry-bear hook entry using the absolute binary path
 	binPath := resolveCareBareCommand(a.BinaryPath)
-	careBareEntry := map[string]any{
+	angryBearEntry := map[string]any{
 		"matcher": "*",
 		"hooks": []any{
 			map[string]any{
@@ -179,7 +179,7 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 			},
 		},
 	}
-	preToolUse = append(preToolUse, careBareEntry)
+	preToolUse = append(preToolUse, angryBearEntry)
 	hooks["PreToolUse"] = preToolUse
 
 	// Write back with 2-space indent for readability
@@ -197,9 +197,9 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 	return nil
 }
 
-// careBareHookExists checks if any hook entry in the PreToolUse array already
+// angryBearHookExists checks if any hook entry in the PreToolUse array already
 // contains the angry-bear hook command. Used for idempotency.
-func careBareHookExists(preToolUse []any) bool {
+func angryBearHookExists(preToolUse []any) bool {
 	for _, entry := range preToolUse {
 		entryMap, ok := entry.(map[string]any)
 		if !ok {

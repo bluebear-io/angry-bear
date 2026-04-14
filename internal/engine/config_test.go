@@ -652,7 +652,7 @@ func TestLoadGlobalConfigFromDir_EmptyString(t *testing.T) {
 	}
 }
 
-func TestLoadGlobalConfigFromDir_DoesNotAppendCareBear(t *testing.T) {
+func TestLoadGlobalConfigFromDir_DoesNotAppendAngryBear(t *testing.T) {
 	// Regression: LoadGlobalConfig appended .angry-bear/config.json
 	// causing double nesting. LoadGlobalConfigFromDir must NOT do this.
 	dir := t.TempDir()

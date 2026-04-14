@@ -1152,14 +1152,14 @@ func TestReadProjectPathFromIndex_MultipleEntries_ReturnsFirst(t *testing.T) {
 	}
 }
 
-// --- careBareHookExists tests ---
+// --- angryBearHookExists tests ---
 
 func TestCareBareHookExists_EmptyArray(t *testing.T) {
 	t.Parallel()
-	if careBareHookExists(nil) {
+	if angryBearHookExists(nil) {
 		t.Error("expected false for nil array")
 	}
-	if careBareHookExists([]any{}) {
+	if angryBearHookExists([]any{}) {
 		t.Error("expected false for empty array")
 	}
 }
@@ -1172,7 +1172,7 @@ func TestCareBareHookExists_MalformedEntries(t *testing.T) {
 		42,
 		nil,
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false for array with non-map entries")
 	}
 }
@@ -1185,7 +1185,7 @@ func TestCareBareHookExists_EntryWithoutHooksList(t *testing.T) {
 			// "hooks" key missing
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when entry has no hooks list")
 	}
 }
@@ -1198,7 +1198,7 @@ func TestCareBareHookExists_HooksListWithNonMapEntries(t *testing.T) {
 			"hooks":   []any{"not a map", 42},
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when hooks contain non-map entries")
 	}
 }
@@ -1216,7 +1216,7 @@ func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
 			},
 		},
 	}
-	if !careBareHookExists(entries) {
+	if !angryBearHookExists(entries) {
 		t.Error("expected true when angry-bear hook exists")
 	}
 }
@@ -1234,7 +1234,7 @@ func TestCareBareHookExists_IgnoresUnrelatedHooks(t *testing.T) {
 			},
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when no angry-bear hook is present")
 	}
 }

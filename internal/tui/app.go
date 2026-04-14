@@ -398,11 +398,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i := range a.dashboard.ruleSources {
 			a.dashboard.ruleSources[i] = engine.SourceRepo
 		}
-		// Remove machine-level config so repo is the single source of truth.
-		return a, tea.Batch(
-			saveConfig(a.config, repoPath),
-			removeMachineConfig(a.configPath),
-		)
+		return a, saveConfig(a.config, repoPath)
 
 	case saveToMachineMsg:
 		a.savePrompt = false

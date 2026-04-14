@@ -402,8 +402,13 @@ func greedyBuildPath(prefix string, parts []string) string {
 	// Try longest component first (more dashes joined = more specific)
 	for i := len(parts); i >= 1; i-- {
 		component := strings.Join(parts[:i], "-")
-		// Try as-is, then with underscores replacing dashes
-		for _, variant := range []string{component, strings.ReplaceAll(component, "-", "_")} {
+		// Try as-is, then with dots, then with underscores replacing dashes.
+		// Dots are needed for usernames like "amir.shaked" which encode as "amir-shaked".
+		for _, variant := range []string{
+			component,
+			strings.ReplaceAll(component, "-", "."),
+			strings.ReplaceAll(component, "-", "_"),
+		} {
 			candidate := filepath.Join(prefix, variant)
 			if i == len(parts) {
 				if _, err := os.Stat(candidate); err == nil {

@@ -1376,6 +1376,40 @@ func TestGreedyBuildPath_NestedHyphenatedDirs(t *testing.T) {
 	}
 }
 
+func TestGreedyBuildPath_DottedDirectoryName(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create path with dots: Users/amir.shaked/Development/blueden
+	targetDir := filepath.Join(tmpDir, "Users", "amir.shaked", "Development", "blueden")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded as: Users-amir-shaked-Development-blueden
+	result := greedyBuildPath(tmpDir, []string{"Users", "amir", "shaked", "Development", "blueden"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q", result, targetDir)
+	}
+}
+
+func TestGreedyDecodeDirName_DottedUsername(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Simulate /Users/amir.shaked/dev/blueden
+	targetDir := filepath.Join(tmpDir, "amir.shaked", "dev", "blueden")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	// Encoded directory name (without leading tmpDir prefix — test greedyBuildPath directly)
+	result := greedyBuildPath(tmpDir, []string{"amir", "shaked", "dev", "blueden"})
+	if result != targetDir {
+		t.Errorf("greedyBuildPath = %q, want %q", result, targetDir)
+	}
+}
+
 // --- ConfigPath test ---
 
 func TestClaudeConfigPath(t *testing.T) {

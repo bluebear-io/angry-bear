@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -78,6 +79,16 @@ func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, load
 	if loadedSkills == nil {
 		loadedSkills = make(map[string]*state.SkillStatus)
 	}
+	// Sort: project skills first, then global, alphabetical within each
+	home, _ := os.UserHomeDir()
+	sort.SliceStable(skills, func(i, j int) bool {
+		iGlobal := home != "" && strings.HasPrefix(skills[i].Source, home)
+		jGlobal := home != "" && strings.HasPrefix(skills[j].Source, home)
+		if iGlobal != jGlobal {
+			return !iGlobal // project first
+		}
+		return skills[i].Name < skills[j].Name
+	})
 	return Dashboard{
 		skills:       skills,
 		config:       cfg,
@@ -517,7 +528,9 @@ func (d Dashboard) View() string {
 
 // renderSkillList renders the left panel.
 func (d Dashboard) renderSkillList(width, height int) string {
-	title := d.styles.RuleHeader.Render("SKILLS") + "\n\n"
+	title := d.styles.RuleHeader.Render("SKILLS") + "\n"
+
+	home, _ := os.UserHomeDir()
 
 	var b strings.Builder
 	visible := height - 3
@@ -526,8 +539,24 @@ func (d Dashboard) renderSkillList(width, height int) string {
 	}
 	scrollStart, end := d.skillScroll.VisibleRange(len(d.skills), visible)
 
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
+	lastSection := ""
+
 	for i := scrollStart; i < end; i++ {
 		skill := d.skills[i]
+
+		// Determine section and render header if changed
+		section := "PROJECT"
+		if home != "" && strings.HasPrefix(skill.Source, home) {
+			section = "GLOBAL"
+		}
+		if section != lastSection {
+			if lastSection != "" {
+				b.WriteString("\n")
+			}
+			b.WriteString("  " + sectionStyle.Render("── "+section+" ──") + "\n")
+			lastSection = section
+		}
 		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 
 		ruleCount := 0

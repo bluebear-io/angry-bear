@@ -543,6 +543,227 @@ func TestClaudeScanProjects_MissingProjectsDir(t *testing.T) {
 	}
 }
 
+// --- ExitCodeForDeny tests ---
+
+func TestClaudeExitCodeForDeny_ReturnsZero(t *testing.T) {
+	t.Parallel()
+	adapter := &ClaudeAdapter{}
+
+	// Claude Code reads deny decision from stdout JSON, so the exit code is 0
+	// even when denying. This is fundamental to the Claude hook protocol.
+	got := adapter.ExitCodeForDeny()
+	if got != 0 {
+		t.Errorf("ExitCodeForDeny() = %d, want 0 (Claude reads deny from stdout JSON, not exit code)", got)
+	}
+}
+
+// --- UninstallHook tests ---
+
+func TestClaudeUninstallHook_RemovesCareBareEntry(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	// Write settings with both a care-bear hook and an unrelated hook
+	existing := `{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "some-linter.sh"}
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {"type": "command", "command": "/usr/local/bin/care-bear hook claude"}
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "linear@claude-plugins-official": true
+  }
+}`
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to write settings: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read settings after uninstall: %v", err)
+	}
+
+	content := string(data)
+	// care-bear hook must be removed
+	if strings.Contains(content, "care-bear hook") {
+		t.Errorf("care-bear hook still present after UninstallHook:\n%s", content)
+	}
+	// Unrelated linter hook must be preserved
+	if !strings.Contains(content, "some-linter.sh") {
+		t.Errorf("unrelated hook was removed by UninstallHook:\n%s", content)
+	}
+	// Other config keys must be preserved
+	if !strings.Contains(content, "linear@claude-plugins-official") {
+		t.Errorf("enabledPlugins was removed by UninstallHook:\n%s", content)
+	}
+}
+
+func TestClaudeUninstallHook_NoSettingsFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// No .claude/settings.json exists -- should not error
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err != nil {
+		t.Fatalf("UninstallHook should succeed when settings.json does not exist, got: %v", err)
+	}
+}
+
+func TestClaudeUninstallHook_NoHooksSection(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	// Settings file with no hooks section at all
+	existing := `{"enabledPlugins": {"some-plugin": true}}`
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("failed to write settings: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err != nil {
+		t.Fatalf("UninstallHook should succeed with no hooks section, got: %v", err)
+	}
+}
+
+func TestClaudeUninstallHook_MalformedJSON(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude dir: %v", err)
+	}
+
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte("{broken json!!"), 0o644); err != nil {
+		t.Fatalf("failed to write malformed settings: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir}
+	err := adapter.UninstallHook()
+	if err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "parsing settings.json") {
+		t.Errorf("error = %q, want it to mention parsing failure", err.Error())
+	}
+}
+
+func TestClaudeUninstallHook_RoundTrip(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Install hook first, then uninstall -- verify clean removal
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
+	if err := adapter.InstallHook(""); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	// Verify hook was installed
+	settingsPath := filepath.Join(tmpDir, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("settings.json not found after install: %v", err)
+	}
+	if !strings.Contains(string(data), "care-bear hook") {
+		t.Fatal("care-bear hook not found after install")
+	}
+
+	// Uninstall
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err = os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("settings.json not found after uninstall: %v", err)
+	}
+	if strings.Contains(string(data), "care-bear hook") {
+		t.Errorf("care-bear hook still present after uninstall:\n%s", data)
+	}
+
+	// Verify the file is still valid JSON
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON after uninstall: %v", err)
+	}
+}
+
+func TestClaudeUninstallHook_TrailingNewline(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	adapter := &ClaudeAdapter{HomeDir: tmpDir, BinaryPath: "care-bear"}
+	if err := adapter.InstallHook(""); err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+	if err := adapter.UninstallHook(); err != nil {
+		t.Fatalf("UninstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("failed to read settings.json: %v", err)
+	}
+	if !strings.HasSuffix(string(data), "\n") {
+		t.Error("settings.json does not end with trailing newline after uninstall")
+	}
+}
+
+// --- GlobalConfigPath additional tests ---
+
+func TestClaudeGlobalConfigPath_DefaultFallback(t *testing.T) {
+	t.Parallel()
+	// When HomeDir is empty and os.UserHomeDir() works, the path should include
+	// the home directory. We can only test the format here since os.UserHomeDir()
+	// is system-dependent.
+	adapter := &ClaudeAdapter{}
+	got := adapter.GlobalConfigPath()
+
+	// The path must end with .claude/settings.json regardless of prefix
+	wantSuffix := filepath.Join(".claude", "settings.json")
+	if !strings.HasSuffix(got, wantSuffix) {
+		t.Errorf("GlobalConfigPath() = %q, want suffix %q", got, wantSuffix)
+	}
+
+	// The path should be absolute (either from os.UserHomeDir or the fallback)
+	if got == wantSuffix {
+		// This means os.UserHomeDir() failed, which is unlikely in a test
+		// but still valid behavior (returns relative path as fallback)
+		return
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("GlobalConfigPath() = %q, want absolute path", got)
+	}
+}
+
 func TestClaudeScanProjects_WithSessionsIndex(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

@@ -198,13 +198,10 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 		return nil
 	}
 
-	// Hook types that care-bear needs to intercept for skill enforcement
+	// Only preToolUse can block operations in Cursor (exit code 2).
+	// Other before* hooks are observe-only — they cannot prevent actions.
 	hookTypes := []string{
 		"preToolUse",
-		"beforeFileEdit",
-		"beforeShellExecution",
-		"beforeReadFile",
-		"beforeMCPExecution",
 	}
 
 	// Cursor requires relative binary name (not absolute path) for hook execution.

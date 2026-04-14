@@ -361,7 +361,7 @@ func TestCursorInstallHook_RegistersAllRequiredHookTypes(t *testing.T) {
 	}
 
 	// All required hook types must be present
-	requiredTypes := []string{"preToolUse", "beforeFileEdit", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
+	requiredTypes := []string{"preToolUse"}
 	for _, hookType := range requiredTypes {
 		arr, ok := hooks[hookType].([]any)
 		if !ok {
@@ -447,8 +447,8 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 
 	// Count occurrences of "care-bear hook" -- should be exactly 5 (one per hook type)
 	count := strings.Count(string(data), "care-bear hook cursor")
-	if count != 5 {
-		t.Errorf("care-bear hook appears %d times, want 5 (one per hook type):\n%s", count, data)
+	if count != 1 {
+		t.Errorf("care-bear hook appears %d times, want 1 (preToolUse only):\n%s", count, data)
 	}
 }
 
@@ -554,9 +554,9 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 		t.Fatal("missing 'hooks' key in config")
 	}
 
+	hookTypes := []string{"preToolUse"}
 	// Verify each hook type has the correct command
-	expectedTypes := []string{"preToolUse", "beforeFileEdit", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
-	for _, hookType := range expectedTypes {
+	for _, hookType := range hookTypes {
 		arr, ok := hooks[hookType].([]any)
 		if !ok {
 			t.Errorf("hook type %q not found or not an array", hookType)
@@ -668,12 +668,7 @@ func TestCursorParseInput_HookEventNameFallback(t *testing.T) {
 		name      string
 		eventName string
 		want      string
-	}{
-		{"beforeFileEdit maps to Edit", "beforeFileEdit", "Edit"},
-		{"beforeShellExecution maps to Bash", "beforeShellExecution", "Bash"},
-		{"beforeReadFile maps to Read", "beforeReadFile", "Read"},
-		{"beforeMCPExecution maps to Agent", "beforeMCPExecution", "Agent"},
-	}
+	}{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -841,10 +836,7 @@ func TestCursorCareBareHookExists_MalformedEntries(t *testing.T) {
 		"beforeFileEdit": []any{
 			"not a map",
 			42,
-		},
-		"beforeShellExecution": []any{
 			map[string]any{
-				// missing "command" key
 				"type": "webhook",
 			},
 		},
@@ -861,8 +853,6 @@ func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
 			map[string]any{
 				"command": "some-other-tool",
 			},
-		},
-		"beforeFileEdit": []any{
 			map[string]any{
 				"command": "/usr/bin/care-bear hook cursor",
 			},
@@ -999,5 +989,61 @@ func TestCursorHookCommand_MatchesBluebearFormat(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "care-bear hook cursor") {
 		t.Errorf("expected 'care-bear hook cursor' in hooks.json, got: %s", string(data))
+	}
+}
+
+// TestCursorInstallHook_OnlyPreToolUse verifies that InstallHook only adds
+// care-bear to preToolUse. Other hook types should not be modified.
+// This is critical: adding entries to multiple hook types caused Cursor
+// to stop firing hooks entirely.
+func TestCursorInstallHook_OnlyPreToolUse(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-populate with existing hooks
+	cursorDir := filepath.Join(tmpDir, ".cursor")
+	_ = os.MkdirAll(cursorDir, 0o755)
+	existing := map[string]any{
+		"version": float64(1),
+		"hooks": map[string]any{
+			"preToolUse":   []any{map[string]any{"command": "other-tool"}},
+			"sessionStart": []any{map[string]any{"command": "logger start"}},
+		},
+	}
+	data, _ := json.MarshalIndent(existing, "", "  ")
+	_ = os.WriteFile(filepath.Join(cursorDir, "hooks.json"), data, 0o644)
+
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	result, _ := os.ReadFile(filepath.Join(cursorDir, "hooks.json"))
+	var config map[string]any
+	_ = json.Unmarshal(result, &config)
+	hooks := config["hooks"].(map[string]any)
+
+	// preToolUse should have care-bear prepended
+	preToolUse := hooks["preToolUse"].([]any)
+	firstCmd := preToolUse[0].(map[string]any)["command"].(string)
+	if !strings.Contains(firstCmd, "care-bear") {
+		t.Errorf("preToolUse first entry should be care-bear, got: %s", firstCmd)
+	}
+
+	// beforeFileEdit should NOT have care-bear (only preToolUse gets care-bear)
+	if arr, ok := hooks["beforeFileEdit"].([]any); ok {
+		for _, e := range arr {
+			if m, ok := e.(map[string]any); ok {
+				if cmd, ok := m["command"].(string); ok && strings.Contains(cmd, "care-bear") {
+					t.Errorf("beforeFileEdit should NOT have care-bear, got: %s", cmd)
+				}
+			}
+		}
+	}
+
+	// sessionStart should be untouched
+	sessionStart := hooks["sessionStart"].([]any)
+	if len(sessionStart) != 1 {
+		t.Errorf("sessionStart should have 1 entry, got %d", len(sessionStart))
 	}
 }

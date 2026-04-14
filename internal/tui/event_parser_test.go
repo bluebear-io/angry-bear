@@ -220,3 +220,39 @@ func TestParseAllEvents_AllUnparseable(t *testing.T) {
 		t.Errorf("got %d events, want 0 when all lines are unparseable", len(events))
 	}
 }
+
+func TestParseEventLine_ExtractsTime(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		wantTime string
+	}{
+		{
+			name:     "standard RFC3339 timestamp",
+			line:     "2026-04-14T07:43:33Z | Blue-Bear-Security/blueden | claude | abc12 | Edit | test.go | BLOCK | linear",
+			wantTime: "07:43",
+		},
+		{
+			name:     "different time",
+			line:     "2026-04-14T15:30:00Z | proj | claude | sess1 | SKILL-LOAD | | LOAD | git",
+			wantTime: "15:30",
+		},
+		{
+			name:     "short timestamp fallback",
+			line:     "2026-04-14 | proj | claude | s | Edit | f | BLOCK | x",
+			wantTime: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev, ok := parseEventLine(tt.line, 0)
+			if !ok {
+				t.Fatal("parseEventLine returned false")
+			}
+			if ev.Time != tt.wantTime {
+				t.Errorf("Time = %q, want %q", ev.Time, tt.wantTime)
+			}
+		})
+	}
+}

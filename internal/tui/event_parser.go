@@ -32,6 +32,11 @@ func parseEventLine(line string, lineIdx int) (ParsedEvent, bool) {
 
 	ev := ParsedEvent{LineIdx: lineIdx}
 
+	// Extract HH:MM from RFC3339 timestamp (parts[0])
+	if len(parts) > 0 && len(parts[0]) >= 16 {
+		ev.Time = parts[0][11:16]
+	}
+
 	if len(parts) >= 8 {
 		// 8-col format: timestamp|project|agent|session|tool|path|action|skill
 		ev.Project = parts[1]

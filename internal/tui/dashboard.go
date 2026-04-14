@@ -594,15 +594,24 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 
 		ruleCount := 0
-		for _, r := range d.config.Tools {
+		hasRepoRule := false
+		for idx, r := range d.config.Tools {
 			if r.Skill == skill.Name {
 				ruleCount++
+				if idx < len(d.ruleSources) && d.ruleSources[idx] == engine.SourceRepo {
+					hasRepoRule = true
+				}
 			}
 		}
 
 		name := skill.Name
 		if len(name) > width-8 {
 			name = name[:width-11] + "..."
+		}
+
+		repoTag := ""
+		if hasRepoRule {
+			repoTag = lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Render(" ")
 		}
 
 		countStr := d.styles.Description.Render(fmt.Sprintf(" (%d)", ruleCount))
@@ -613,16 +622,16 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		if focused {
 			suffix := fmt.Sprintf(" (%d)", ruleCount)
 
-			line := d.styles.Selected.Render(" ▸ " + name + suffix)
+			line := d.styles.Selected.Render(" ▸ " + name + suffix) + repoTag
 			b.WriteString(line + "\n")
 		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName
 
-			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + "\n")
+			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + repoTag + "\n")
 		} else {
 			nameStyle := lipgloss.NewStyle()
 
-			b.WriteString("   " + nameStyle.Render(name) + countStr + "\n")
+			b.WriteString("   " + nameStyle.Render(name) + countStr + repoTag + "\n")
 		}
 	}
 

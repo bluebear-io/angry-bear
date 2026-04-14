@@ -1330,3 +1330,85 @@ func TestRuleEditor_UpAtTopOfToolsStays(t *testing.T) {
 		t.Errorf("toolScroll.Cursor = %d, want 0 (should not change)", re.toolScroll.Cursor)
 	}
 }
+
+// TestBuildPathTree_DirWithOnlyFilesIsExpandable verifies that directories
+// containing only files (no subdirectories) still show as expandable tree dirs.
+func TestBuildPathTree_DirWithOnlyFilesIsExpandable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a directory with only files, no subdirs
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	_ = os.MkdirAll(scriptsDir, 0o755)
+	_ = os.WriteFile(filepath.Join(scriptsDir, "deploy.sh"), []byte("#!/bin/bash"), 0o644)
+	_ = os.WriteFile(filepath.Join(scriptsDir, "migrate.py"), []byte("# migration"), 0o644)
+
+	// Create a directory with subdirs (for comparison)
+	srcDir := filepath.Join(tmpDir, "src")
+	_ = os.MkdirAll(filepath.Join(srcDir, "handlers"), 0o755)
+
+	re := NewRuleEditor("test-skill", nil, -1, DefaultStyles())
+	re.SetExistingRules(nil)
+	re.SetProjectRoot(tmpDir)
+
+	// Find scripts in pathItems — should be itemTreeDir (expandable), not itemCheckbox
+	foundScripts := false
+	for _, item := range re.pathItems {
+		if item.label == "scripts" && item.section == "paths" {
+			foundScripts = true
+			if item.typ != itemTreeDir {
+				t.Errorf("scripts/ has files but rendered as checkbox, want expandable tree dir")
+			}
+			break
+		}
+	}
+	if !foundScripts {
+		t.Error("scripts/ directory not found in path items")
+	}
+
+	// Expand scripts — should show the files
+	for i, item := range re.pathItems {
+		if item.label == "scripts" && item.typ == itemTreeDir {
+			re.expandPathDir(i)
+			break
+		}
+	}
+
+	// Check files are visible after expand
+	foundDeploy := false
+	foundMigrate := false
+	for _, item := range re.pathItems {
+		if item.label == "deploy.sh" {
+			foundDeploy = true
+		}
+		if item.label == "migrate.py" {
+			foundMigrate = true
+		}
+	}
+	if !foundDeploy {
+		t.Error("deploy.sh not visible after expanding scripts/")
+	}
+	if !foundMigrate {
+		t.Error("migrate.py not visible after expanding scripts/")
+	}
+}
+
+// TestBuildPathTree_EmptyDirIsCheckbox verifies that truly empty directories
+// render as plain checkboxes (not expandable).
+func TestBuildPathTree_EmptyDirIsCheckbox(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tmpDir, "empty-dir"), 0o755)
+
+	re := NewRuleEditor("test-skill", nil, -1, DefaultStyles())
+	re.SetExistingRules(nil)
+	re.SetProjectRoot(tmpDir)
+
+	for _, item := range re.pathItems {
+		if strings.Contains(item.label, "empty-dir") {
+			if item.typ == itemTreeDir {
+				t.Error("empty directory should be checkbox, not expandable tree dir")
+			}
+			return
+		}
+	}
+	t.Error("empty-dir not found in path items")
+}

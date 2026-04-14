@@ -921,6 +921,8 @@ func (d Dashboard) renderEventLog(width, height int) string {
 		var sty lipgloss.Style
 		if r.IsBlock {
 			sty = red
+		} else if r.IsExpire {
+			sty = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Bold(true)
 		} else if r.IsLoad {
 			sty = cyan
 		} else {

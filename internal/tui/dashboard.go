@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -79,16 +78,6 @@ func NewDashboard(skills []scanner.Skill, cfg engine.Config, styles Styles, load
 	if loadedSkills == nil {
 		loadedSkills = make(map[string]*state.SkillStatus)
 	}
-	// Sort: project skills first, then global, alphabetical within each
-	home, _ := os.UserHomeDir()
-	sort.SliceStable(skills, func(i, j int) bool {
-		iGlobal := home != "" && strings.HasPrefix(skills[i].Source, home)
-		jGlobal := home != "" && strings.HasPrefix(skills[j].Source, home)
-		if iGlobal != jGlobal {
-			return !iGlobal // project first
-		}
-		return skills[i].Name < skills[j].Name
-	})
 	return Dashboard{
 		skills:       skills,
 		config:       cfg,
@@ -527,35 +516,57 @@ func (d Dashboard) View() string {
 }
 
 // renderSkillList renders the left panel.
+// isProjectSkill returns true if the skill source is under the project root.
+func isProjectSkill(source, projectRoot string) bool {
+	if projectRoot == "" {
+		return false
+	}
+	return source == projectRoot || strings.HasPrefix(source, projectRoot+"/")
+}
+
 func (d Dashboard) renderSkillList(width, height int) string {
 	title := d.styles.RuleHeader.Render("SKILLS") + "\n"
-
-	home, _ := os.UserHomeDir()
 
 	var b strings.Builder
 	visible := height - 3
 	if visible < 1 {
 		visible = len(d.skills)
 	}
-	scrollStart, end := d.skillScroll.VisibleRange(len(d.skills), visible)
-
 	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
-	lastSection := ""
 
-	for i := scrollStart; i < end; i++ {
+	// Build ordered index: project skills first, then global
+	var ordered []int
+	for i, skill := range d.skills {
+		if isProjectSkill(skill.Source, d.projectRoot) {
+			ordered = append(ordered, i)
+		}
+	}
+	projectCount := len(ordered)
+	for i, skill := range d.skills {
+		if !isProjectSkill(skill.Source, d.projectRoot) {
+			ordered = append(ordered, i)
+		}
+	}
+	_ = projectCount // used below for section headers
+
+	// Scroll over the ordered list
+	scrollStart, end := d.skillScroll.VisibleRange(len(ordered), visible)
+
+	renderedHeader := false
+	for oi := scrollStart; oi < end; oi++ {
+		i := ordered[oi]
 		skill := d.skills[i]
 
-		// Determine section and render header if changed
-		section := "PROJECT"
-		if home != "" && strings.HasPrefix(skill.Source, home) {
-			section = "GLOBAL"
+		// Section header
+		if oi == 0 && projectCount > 0 {
+			b.WriteString("  " + sectionStyle.Render("── PROJECT ──") + "\n")
+			renderedHeader = true
 		}
-		if section != lastSection {
-			if lastSection != "" {
-				b.WriteString("\n")
-			}
-			b.WriteString("  " + sectionStyle.Render("── "+section+" ──") + "\n")
-			lastSection = section
+		if oi == projectCount && !renderedHeader {
+			b.WriteString("  " + sectionStyle.Render("── GLOBAL ──") + "\n")
+			renderedHeader = true
+		} else if oi == projectCount && renderedHeader {
+			b.WriteString("\n  " + sectionStyle.Render("── GLOBAL ──") + "\n")
 		}
 		focused := i == d.skillScroll.Cursor && d.focusPanel == 0
 

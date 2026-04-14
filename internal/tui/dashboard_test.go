@@ -1619,3 +1619,55 @@ func TestDashboard_RightFromSkillsResetsRuleCursor(t *testing.T) {
 		t.Errorf("ruleScroll.Cursor = %d, want 0 (should reset on panel switch)", d.ruleScroll.Cursor)
 	}
 }
+
+func TestIsProjectSkill(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      string
+		projectRoot string
+		want        bool
+	}{
+		{"project skill", "/work/blueden/.claude/skills/linear/SKILL.md", "/work/blueden", true},
+		{"global skill", "/Users/me/.claude/skills/git/SKILL.md", "/work/blueden", false},
+		{"empty project root", "/work/blueden/.claude/skills/linear/SKILL.md", "", false},
+		{"exact match", "/work/blueden", "/work/blueden", true},
+		{"similar prefix but different project", "/work/blueden-fork/.claude/skills/x/SKILL.md", "/work/blueden", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isProjectSkill(tt.source, tt.projectRoot)
+			if got != tt.want {
+				t.Errorf("isProjectSkill(%q, %q) = %v, want %v", tt.source, tt.projectRoot, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSkillListSections(t *testing.T) {
+	skills := []scanner.Skill{
+		{Name: "linear", Source: "/work/blueden/.claude/skills/linear/SKILL.md"},
+		{Name: "git-global", Source: "/Users/me/.claude/skills/git/SKILL.md"},
+		{Name: "testing", Source: "/work/blueden/.claude/skills/testing/SKILL.md"},
+	}
+	cfg := engine.Config{Version: 1}
+	styles := DefaultStyles()
+	d := NewDashboard(skills, cfg, styles, nil)
+	d.projectRoot = "/work/blueden"
+	d.width = 60
+	d.height = 30
+
+	output := d.renderSkillList(30, 25)
+
+	if !strings.Contains(output, "PROJECT") {
+		t.Error("expected PROJECT section header in skill list")
+	}
+	if !strings.Contains(output, "GLOBAL") {
+		t.Error("expected GLOBAL section header in skill list")
+	}
+	// Project skills should appear before global
+	projectIdx := strings.Index(output, "linear")
+	globalIdx := strings.Index(output, "git-global")
+	if projectIdx > globalIdx {
+		t.Error("project skills should appear before global skills")
+	}
+}

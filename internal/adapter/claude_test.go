@@ -1376,6 +1376,27 @@ func TestGreedyBuildPath_NestedHyphenatedDirs(t *testing.T) {
 	}
 }
 
+func TestGreedyBuildPath_RealDashPreferredOverDot(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Both my-project (real dashes) and my.project (dots) exist.
+	// The as-is variant (real dashes) should win because it's tried first.
+	dashDir := filepath.Join(tmpDir, "my-project")
+	dotDir := filepath.Join(tmpDir, "my.project")
+	if err := os.MkdirAll(dashDir, 0o755); err != nil {
+		t.Fatalf("failed to create dash dir: %v", err)
+	}
+	if err := os.MkdirAll(dotDir, 0o755); err != nil {
+		t.Fatalf("failed to create dot dir: %v", err)
+	}
+
+	result := greedyBuildPath(tmpDir, []string{"my", "project"})
+	if result != dashDir {
+		t.Errorf("greedyBuildPath = %q, want %q (real dashes should be preferred)", result, dashDir)
+	}
+}
+
 func TestGreedyBuildPath_DottedDirectoryName(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

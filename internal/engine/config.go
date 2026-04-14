@@ -357,14 +357,22 @@ func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) 
 		allRules = append(allRules, bluebearRules...)
 	}
 
-	// Load machine-level rules from ~/.care-bear/repos/{hash}/skill_enforcement.json
+	// Load machine-level rules, skipping any that already exist from repo sources.
 	if repoConfigDir != "" {
 		machineConfigPath := filepath.Join(repoConfigDir, configFileName)
 		machineRules, mErr := loadConfigFileWithSource(machineConfigPath, SourceMachine)
 		if mErr != nil {
 			slog.Warn("failed to load machine config", "path", machineConfigPath, "error", mErr)
 		} else {
-			allRules = append(allRules, machineRules...)
+			seen := make(map[Rule]bool, len(allRules))
+			for _, r := range allRules {
+				seen[r.Rule] = true
+			}
+			for _, mr := range machineRules {
+				if !seen[mr.Rule] {
+					allRules = append(allRules, mr)
+				}
+			}
 		}
 	}
 

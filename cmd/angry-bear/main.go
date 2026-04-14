@@ -1,4 +1,4 @@
-// Package main is the entry point for the care-bear CLI tool.
+// Package main is the entry point for the angry-bear CLI tool.
 // It sets version info from ldflags and delegates to the cli package.
 package main
 
@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/cli"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
 )
 
 // Version information injected at build time via ldflags.

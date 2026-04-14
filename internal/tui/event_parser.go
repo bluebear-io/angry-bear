@@ -1,5 +1,5 @@
 // event_parser.go provides a structured parser for the pipe-delimited event log
-// format used by care-bear hooks. Centralizing the parsing avoids duplicating
+// format used by angry-bear hooks. Centralizing the parsing avoids duplicating
 // the column-extraction logic across renderEventLog, uniqueColumnValues, and
 // jumpToLogEntry in dashboard.go.
 package tui

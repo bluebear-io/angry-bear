@@ -1,4 +1,4 @@
-// version.go implements the care-bear version command.
+// version.go implements the angry-bear version command.
 package cli
 
 import (
@@ -27,7 +27,7 @@ func NewVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "care-bear version %s (commit: %s, built: %s)\n", version, commit, date)
+			fmt.Fprintf(cmd.OutOrStdout(), "angry-bear version %s (commit: %s, built: %s)\n", version, commit, date)
 			return nil
 		},
 	}

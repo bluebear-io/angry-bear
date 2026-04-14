@@ -1,13 +1,13 @@
-// enable.go implements care-bear enable and care-bear disable commands.
+// enable.go implements angry-bear enable and angry-bear disable commands.
 // Enable installs hooks into all detected agent configs.
-// Disable removes ALL care-bear hooks from all agent configs.
+// Disable removes ALL angry-bear hooks from all agent configs.
 package cli
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +15,7 @@ import (
 func NewEnableCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable",
-		Short: "Install care-bear hooks into all AI agent configs",
+		Short: "Install angry-bear hooks into all AI agent configs",
 		Long:  "Installs PreToolUse hooks into Claude Code and Cursor global configs.\nSafe to run multiple times — existing hooks are not duplicated.",
 		RunE:  runEnable,
 	}
@@ -25,8 +25,8 @@ func NewEnableCommand() *cobra.Command {
 func NewDisableCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable",
-		Short: "Remove ALL care-bear hooks from AI agent configs",
-		Long:  "Removes all care-bear hook entries from Claude Code and Cursor.\nEnforcement stops immediately. Rules are preserved — run 'enable' to re-activate.",
+		Short: "Remove ALL angry-bear hooks from AI agent configs",
+		Long:  "Removes all angry-bear hook entries from Claude Code and Cursor.\nEnforcement stops immediately. Rules are preserved — run 'enable' to re-activate.",
 		RunE:  runDisable,
 	}
 }
@@ -87,7 +87,7 @@ func runDisable(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  No hooks found to remove.")
 	} else {
 		fmt.Fprintln(out, "\nEnforcement is disabled. Rules are preserved.")
-		fmt.Fprintln(out, "Run 'care-bear enable' to re-activate.")
+		fmt.Fprintln(out, "Run 'angry-bear enable' to re-activate.")
 	}
 	return nil
 }

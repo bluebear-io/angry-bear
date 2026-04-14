@@ -1,4 +1,4 @@
-// add_test.go contains integration tests for the care-bear add command.
+// add_test.go contains integration tests for the angry-bear add command.
 // Tests exercise the command against real temporary filesystems, verifying
 // that rules are created correctly, cartesian products are generated, and
 // deduplication works as expected.
@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/cli"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
 )
 
 // runAddInDir executes the add command with the working directory set to dir
@@ -36,7 +36,7 @@ func runAddInDir(t *testing.T, dir string, extraArgs ...string) (string, error) 
 		}
 	})
 
-	configPath := filepath.Join(dir, ".care-bear", "skill_enforcement.json")
+	configPath := filepath.Join(dir, ".angry-bear", "skill_enforcement.json")
 
 	cmd := cli.NewRootCommand()
 	outBuf := new(bytes.Buffer)
@@ -54,7 +54,7 @@ func runAddInDir(t *testing.T, dir string, extraArgs ...string) (string, error) 
 // readConfigFromDir reads and parses the skill_enforcement.json from a temp dir.
 func readConfigFromDir(t *testing.T, dir string) engine.Config {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, ".care-bear", "skill_enforcement.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".angry-bear", "skill_enforcement.json"))
 	if err != nil {
 		t.Fatalf("failed to read config: %v", err)
 	}
@@ -71,10 +71,10 @@ func readConfigFromDir(t *testing.T, dir string) engine.Config {
 func TestAdd_CreatesRulesWithDefaults(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .care-bear directory so project root resolves.
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	// Create .angry-bear directory so project root resolves.
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	output, err := runAddInDir(t, dir, "my-skill")
@@ -110,9 +110,9 @@ func TestAdd_CreatesRulesWithDefaults(t *testing.T) {
 // generate the correct cartesian product of rules.
 func TestAdd_CartesianProduct(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	output, err := runAddInDir(t, dir, "go-standards",
@@ -163,9 +163,9 @@ func TestAdd_CartesianProduct(t *testing.T) {
 // the **/ prefix via NormalizeGlob.
 func TestAdd_NormalizesGlob(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	_, err = runAddInDir(t, dir, "sst-architect",
@@ -190,9 +190,9 @@ func TestAdd_NormalizesGlob(t *testing.T) {
 // parameters does not create duplicate rules.
 func TestAdd_DeduplicatesRules(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	// First add.
@@ -254,9 +254,9 @@ func TestAdd_AppendsToExistingConfig(t *testing.T) {
 // is provided.
 func TestAdd_RequiresSkillArgument(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	_, execErr := runAddInDir(t, dir)
@@ -265,13 +265,13 @@ func TestAdd_RequiresSkillArgument(t *testing.T) {
 	}
 }
 
-// TestAdd_CreatesConfigDirectory verifies that add creates the .care-bear
+// TestAdd_CreatesConfigDirectory verifies that add creates the .angry-bear
 // directory if it does not exist.
 func TestAdd_CreatesConfigDirectory(t *testing.T) {
 	dir := t.TempDir()
 
 	// Use --config flag to point to a path within the temp dir.
-	configPath := filepath.Join(dir, ".care-bear", "skill_enforcement.json")
+	configPath := filepath.Join(dir, ".angry-bear", "skill_enforcement.json")
 
 	origDir, err := os.Getwd()
 	if err != nil {
@@ -309,9 +309,9 @@ func TestAdd_CreatesConfigDirectory(t *testing.T) {
 // paths are each normalized independently.
 func TestAdd_MultiplePathsNormalized(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".care-bear"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755)
 	if err != nil {
-		t.Fatalf("failed to create .care-bear: %v", err)
+		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
 
 	_, err = runAddInDir(t, dir, "linear",

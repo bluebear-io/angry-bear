@@ -99,11 +99,11 @@ func ShortHash(s string) string {
 	return fmt.Sprintf("%x", h[:4])
 }
 
-// RepoConfigDir returns the path to a repo's care-bear config directory.
-// Config is stored at ~/.care-bear/repos/{hash}-{slug}/
+// RepoConfigDir returns the path to a repo's angry-bear config directory.
+// Config is stored at ~/.angry-bear/repos/{hash}-{slug}/
 func RepoConfigDir(homeDir string, repo *RepoIdentity) string {
 	// Use hash-slug for both uniqueness and readability
 	safeName := strings.ReplaceAll(repo.Slug, "/", "-")
 	dirName := fmt.Sprintf("%s-%s", repo.Hash, safeName)
-	return filepath.Join(homeDir, ".care-bear", "repos", dirName)
+	return filepath.Join(homeDir, ".angry-bear", "repos", dirName)
 }

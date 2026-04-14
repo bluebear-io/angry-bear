@@ -1,30 +1,30 @@
-# care-bear
+# angry-bear
 
 <p align="center">
-  <img src="assets/logo.png" alt="care-bear" width="400">
+  <img src="assets/logo.png" alt="angry-bear" width="400">
 </p>
 
-[![CI](https://github.com/Blue-Bear-Security/care-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/care-bear/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/Blue-Bear-Security/care-bear)
+[![CI](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/Blue-Bear-Security/angry-bear)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 **Enforce skill-loading requirements for AI coding agents.**
 
-care-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifying files until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
+angry-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifying files until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
 
 ## Install
 
 ```bash
 # Homebrew (recommended)
-brew tap Blue-Bear-Security/care-bear
-brew install care-bear
+brew tap Blue-Bear-Security/angry-bear
+brew install angry-bear
 
 # Go (requires $GOPATH/bin on your PATH)
-go install github.com/Blue-Bear-Security/care-bear/cmd/care-bear@latest
+go install github.com/Blue-Bear-Security/angry-bear/cmd/angry-bear@latest
 
 # From source
-git clone https://github.com/Blue-Bear-Security/care-bear.git
-cd care-bear && make install
+git clone https://github.com/Blue-Bear-Security/angry-bear.git
+cd angry-bear && make install
 # Binary installed to $GOPATH/bin — ensure it's on your PATH:
 # export PATH="$HOME/go/bin:$PATH"  # add to ~/.zshrc or ~/.bashrc
 ```
@@ -33,7 +33,7 @@ cd care-bear && make install
 
 ```bash
 cd your-project
-care-bear add go-standards --tool Edit,Write --path "**/*.go"
+angry-bear add go-standards --tool Edit,Write --path "**/*.go"
 # ✓ Hooks installed for claude
 # ✓ Hooks installed for cursor
 # Added 2 rules for skill "go-standards"
@@ -42,7 +42,7 @@ care-bear add go-standards --tool Edit,Write --path "**/*.go"
 Hooks auto-install on first use. When an agent tries to edit a Go file without loading `go-standards`:
 
 ```
-Blocked by care-bear skill enforcement.
+Blocked by angry-bear skill enforcement.
 Required skills not loaded: "go-standards".
 Load them by running: /go-standards
 ```
@@ -51,11 +51,11 @@ The agent loads the skill, retries, and succeeds.
 
 ## CLI Reference
 
-### `care-bear add` — Add enforcement rules
+### `angry-bear add` — Add enforcement rules
 
 ```bash
-care-bear add                    # Interactive mode — pick skill, tools, paths, agents
-care-bear add <skill> [flags]    # One-liner — cartesian product of tools × paths × agents
+angry-bear add                    # Interactive mode — pick skill, tools, paths, agents
+angry-bear add <skill> [flags]    # One-liner — cartesian product of tools × paths × agents
 ```
 
 | Flag | Default | Description |
@@ -65,65 +65,65 @@ care-bear add <skill> [flags]    # One-liner — cartesian product of tools × p
 | `--agent` | `*` | `claude`, `cursor`, `*` (all) |
 
 ```bash
-care-bear add sst-architect --tool Edit,Write --path "stacks/**"
-care-bear add linear                                            # all tools, all paths
-care-bear add testing --path "**/*_test.go,**/test_*.py"        # multiple patterns
+angry-bear add sst-architect --tool Edit,Write --path "stacks/**"
+angry-bear add linear                                            # all tools, all paths
+angry-bear add testing --path "**/*_test.go,**/test_*.py"        # multiple patterns
 ```
 
-### `care-bear rules` — List rules
+### `angry-bear rules` — List rules
 
 ```bash
-care-bear rules                    # table format
-care-bear rules --skill linear     # filter by skill
-care-bear rules --json             # JSON for scripting
+angry-bear rules                    # table format
+angry-bear rules --skill linear     # filter by skill
+angry-bear rules --json             # JSON for scripting
 ```
 
-### `care-bear rm` — Remove rules
+### `angry-bear rm` — Remove rules
 
 ```bash
-care-bear rm <skill>                           # all rules for a skill
-care-bear rm go-standards --tool Bash           # specific matches only
-care-bear rm testing --path "**/*_test.go"
+angry-bear rm <skill>                           # all rules for a skill
+angry-bear rm go-standards --tool Bash           # specific matches only
+angry-bear rm testing --path "**/*_test.go"
 ```
 
-### `care-bear enable` / `disable` — Hook management
+### `angry-bear enable` / `disable` — Hook management
 
 ```bash
-care-bear enable     # Install hooks into Claude + Cursor configs
-care-bear disable    # Remove ALL care-bear hooks (stops enforcement)
+angry-bear enable     # Install hooks into Claude + Cursor configs
+angry-bear disable    # Remove ALL angry-bear hooks (stops enforcement)
 ```
 
 Rules are preserved when disabled. `enable` re-activates.
 
-### `care-bear status` — Project overview
+### `angry-bear status` — Project overview
 
 Shows enforcement rules, active sessions with loaded skills, discovered skill definitions, and detected agent integrations.
 
-### `care-bear doctor` — Health check
+### `angry-bear doctor` — Health check
 
 Checks config validity, hook installation, state directory, binary on PATH, and skill paths. Each failure includes a fix hint.
 
-### `care-bear clean` — Session cleanup
+### `angry-bear clean` — Session cleanup
 
 ```bash
-care-bear clean                    # remove expired sessions (TTL-based)
-care-bear clean --all              # remove ALL sessions
-care-bear clean --session <id>     # remove specific session
+angry-bear clean                    # remove expired sessions (TTL-based)
+angry-bear clean --all              # remove ALL sessions
+angry-bear clean --session <id>     # remove specific session
 ```
 
-### `care-bear version`
+### `angry-bear version`
 
 ```bash
-care-bear version
-# care-bear version v0.6.0 (commit: c9e9b85, built: 2026-04-13T16:29:05Z)
+angry-bear version
+# angry-bear version v0.6.0 (commit: c9e9b85, built: 2026-04-13T16:29:05Z)
 ```
 
-### `care-bear completion` — Shell completions
+### `angry-bear completion` — Shell completions
 
 ```bash
-care-bear completion zsh > "${fpath[1]}/_care-bear"     # Zsh
-care-bear completion bash > /etc/bash_completion.d/care-bear  # Bash
-care-bear completion fish > ~/.config/fish/completions/care-bear.fish  # Fish
+angry-bear completion zsh > "${fpath[1]}/_angry-bear"     # Zsh
+angry-bear completion bash > /etc/bash_completion.d/angry-bear  # Bash
+angry-bear completion fish > ~/.config/fish/completions/angry-bear.fish  # Fish
 ```
 
 Tab-completes skill names, tool names, and agent names.
@@ -138,7 +138,7 @@ Tab-completes skill names, tool names, and agent names.
 ## Interactive TUI
 
 ```bash
-care-bear    # launches the TUI
+angry-bear    # launches the TUI
 ```
 
 ### Dashboard Keys
@@ -198,7 +198,7 @@ AI Agent (Claude Code / Cursor)
     |
     | PreToolUse event (JSON via stdin)
     v
-care-bear hook
+angry-bear hook
     |
     +-- Parse input (adapter normalizes agent-specific format)
     +-- Check skill invocation → record in session state
@@ -212,10 +212,10 @@ care-bear hook
 
 ### Data Storage
 
-All data under `~/.care-bear/`. Nothing in project directories.
+All data under `~/.angry-bear/`. Nothing in project directories.
 
 ```
-~/.care-bear/
+~/.angry-bear/
   config.json                      # global defaults
   events.log                       # enforcement log
   repos/{hash}-{slug}/             # per-repo
@@ -259,7 +259,7 @@ See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture.
 
 ## Troubleshooting
 
-### `care-bear: command not found`
+### `angry-bear: command not found`
 
 ```bash
 export PATH="$HOME/go/bin:$PATH"  # add to ~/.zshrc
@@ -268,11 +268,11 @@ export PATH="$HOME/go/bin:$PATH"  # add to ~/.zshrc
 ### Hook not firing?
 
 ```bash
-care-bear doctor        # check "Hook installed" lines
-care-bear enable        # reinstall hooks
+angry-bear doctor        # check "Hook installed" lines
+angry-bear enable        # reinstall hooks
 ```
 
-Check `~/.claude/settings.json` → `hooks.PreToolUse` for a care-bear entry. Note: `settings.local.json` permission entries are NOT hooks.
+Check `~/.claude/settings.json` → `hooks.PreToolUse` for a angry-bear entry. Note: `settings.local.json` permission entries are NOT hooks.
 
 ### Rules not showing?
 
@@ -281,8 +281,8 @@ Run from within the project directory (needs `.git/` to identify the repo).
 ### Agent blocked but shouldn't be?
 
 ```bash
-care-bear status        # check loaded skills
-care-bear clean --all   # reset sessions
+angry-bear status        # check loaded skills
+angry-bear clean --all   # reset sessions
 ```
 
 ## Contributing

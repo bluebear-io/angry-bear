@@ -1,4 +1,4 @@
-// enable_test.go contains tests for care-bear enable and care-bear disable commands.
+// enable_test.go contains tests for angry-bear enable and angry-bear disable commands.
 // These tests verify that hook installation and removal work through the CLI layer.
 package cli
 
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
 )
 
 // TestRunEnable_InstallsHooksForDetectedAgents verifies that the enable command
@@ -25,7 +25,7 @@ func TestRunEnable_InstallsHooksForDetectedAgents(t *testing.T) {
 	}
 
 	// Set registry defaults so adapters use our temp home
-	adapter.SetRegistryDefaults(tmpDir, "care-bear")
+	adapter.SetRegistryDefaults(tmpDir, "angry-bear")
 	defer adapter.SetRegistryDefaults("", "")
 
 	cmd := NewRootCommand()
@@ -51,8 +51,8 @@ func TestRunEnable_InstallsHooksForDetectedAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.json not created after enable: %v", err)
 	}
-	if !strings.Contains(string(data), "care-bear hook") {
-		t.Errorf("settings.json missing care-bear hook after enable:\n%s", data)
+	if !strings.Contains(string(data), "angry-bear hook") {
+		t.Errorf("settings.json missing angry-bear hook after enable:\n%s", data)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestRunEnable_ReportsSkippedAgents(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 
 	// Don't create any agent config dirs
-	adapter.SetRegistryDefaults(tmpDir, "care-bear")
+	adapter.SetRegistryDefaults(tmpDir, "angry-bear")
 	defer adapter.SetRegistryDefaults("", "")
 
 	cmd := NewRootCommand()
@@ -84,7 +84,7 @@ func TestRunEnable_ReportsSkippedAgents(t *testing.T) {
 	}
 }
 
-// TestRunDisable_RemovesHooks verifies that the disable command removes care-bear
+// TestRunDisable_RemovesHooks verifies that the disable command removes angry-bear
 // hooks from agent configs.
 func TestRunDisable_RemovesHooks(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -103,7 +103,7 @@ func TestRunDisable_RemovesHooks(t *testing.T) {
       {
         "matcher": "*",
         "hooks": [
-          {"type": "command", "command": "care-bear hook claude"}
+          {"type": "command", "command": "angry-bear hook claude"}
         ]
       }
     ]
@@ -113,7 +113,7 @@ func TestRunDisable_RemovesHooks(t *testing.T) {
 		t.Fatalf("failed to write settings.json: %v", err)
 	}
 
-	adapter.SetRegistryDefaults(tmpDir, "care-bear")
+	adapter.SetRegistryDefaults(tmpDir, "angry-bear")
 	defer adapter.SetRegistryDefaults("", "")
 
 	cmd := NewRootCommand()
@@ -141,8 +141,8 @@ func TestRunDisable_RemovesHooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.json not found after disable: %v", err)
 	}
-	if strings.Contains(string(data), "care-bear hook") {
-		t.Errorf("care-bear hook still present after disable:\n%s", data)
+	if strings.Contains(string(data), "angry-bear hook") {
+		t.Errorf("angry-bear hook still present after disable:\n%s", data)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestRunDisable_NoHooksToRemove(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 
 	// Don't create any agent directories
-	adapter.SetRegistryDefaults(tmpDir, "care-bear")
+	adapter.SetRegistryDefaults(tmpDir, "angry-bear")
 	defer adapter.SetRegistryDefaults("", "")
 
 	cmd := NewRootCommand()
@@ -193,7 +193,7 @@ func TestRunDisable_BothAgents(t *testing.T) {
 	claudeSettings := `{
   "hooks": {
     "PreToolUse": [
-      {"matcher": "*", "hooks": [{"type": "command", "command": "care-bear hook claude"}]}
+      {"matcher": "*", "hooks": [{"type": "command", "command": "angry-bear hook claude"}]}
     ]
   }
 }`
@@ -206,7 +206,7 @@ func TestRunDisable_BothAgents(t *testing.T) {
   "version": 1,
   "hooks": {
     "preToolUse": [
-      {"command": "care-bear hook cursor"}
+      {"command": "angry-bear hook cursor"}
     ]
   }
 }`
@@ -214,7 +214,7 @@ func TestRunDisable_BothAgents(t *testing.T) {
 		t.Fatalf("failed to write cursor hooks: %v", err)
 	}
 
-	adapter.SetRegistryDefaults(tmpDir, "care-bear")
+	adapter.SetRegistryDefaults(tmpDir, "angry-bear")
 	defer adapter.SetRegistryDefaults("", "")
 
 	cmd := NewRootCommand()

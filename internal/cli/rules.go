@@ -1,4 +1,4 @@
-// rules.go implements the care-bear rules command for listing enforcement rules.
+// rules.go implements the angry-bear rules command for listing enforcement rules.
 // It displays rules in a table format by default, with optional JSON output
 // for scripting and a --skill filter for showing rules for a specific skill.
 package cli
@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +26,9 @@ Shows rules in a table format by default. Use --json for machine-readable output
 Use --skill to filter rules for a specific skill name.
 
 Examples:
-  care-bear rules
-  care-bear rules --skill go-standards
-  care-bear rules --json`,
+  angry-bear rules
+  angry-bear rules --skill go-standards
+  angry-bear rules --json`,
 		RunE: runRules,
 	}
 

@@ -1,4 +1,4 @@
-// Package tui implements the Charmbracelet-based Terminal User Interface for care-bear.
+// Package tui implements the Charmbracelet-based Terminal User Interface for angry-bear.
 package tui
 
 import "github.com/charmbracelet/lipgloss"

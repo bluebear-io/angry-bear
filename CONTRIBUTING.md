@@ -1,20 +1,20 @@
-# Contributing to care-bear
+# Contributing to angry-bear
 
-Thank you for your interest in contributing to care-bear! This project is open source under the Apache 2.0 license, and we welcome contributions of all kinds.
+Thank you for your interest in contributing to angry-bear! This project is open source under the Apache 2.0 license, and we welcome contributions of all kinds.
 
 ## Reporting Bugs
 
-Use [GitHub Issues](https://github.com/Blue-Bear-Security/care-bear/issues). Please include:
+Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues). Please include:
 
 - **Go version:** `go version`
 - **OS:** macOS, Linux, or Windows with version
-- **care-bear version:** `care-bear version`
+- **angry-bear version:** `angry-bear version`
 - **Steps to reproduce**
 - **Expected vs actual behavior**
 
 ## Suggesting Features
 
-Use [GitHub Issues](https://github.com/Blue-Bear-Security/care-bear/issues) with the `enhancement` label. Describe the **use case**, not just the solution.
+Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues) with the `enhancement` label. Describe the **use case**, not just the solution.
 
 ## Development Setup
 
@@ -27,9 +27,9 @@ Use [GitHub Issues](https://github.com/Blue-Bear-Security/care-bear/issues) with
 ### Build & Test
 
 ```bash
-git clone https://github.com/Blue-Bear-Security/care-bear.git
-cd care-bear
-make build    # Build binary to bin/care-bear
+git clone https://github.com/Blue-Bear-Security/angry-bear.git
+cd angry-bear
+make build    # Build binary to bin/angry-bear
 make test     # Run all tests with race detection
 make lint     # Run linter
 make install  # Install to $GOPATH/bin
@@ -88,13 +88,13 @@ Every method has a clear responsibility:
 | `FormatAllow()` | Formats the agent-specific "allow" response |
 | `FormatDeny()` | Formats the agent-specific "deny/block" response |
 | `ConfigPath()` | Returns the path to detect if this agent is present in a project |
-| `InstallHook()` | Installs care-bear hooks into the agent's global config file |
+| `InstallHook()` | Installs angry-bear hooks into the agent's global config file |
 | `DetectSkillInvocation()` | Detects if the current tool call is a skill being loaded |
 | `ScanProjects()` | Discovers all projects that have sessions with this agent |
 
 ## Adding a New Agent Adapter
 
-This is the primary way the community extends care-bear. Here's the complete guide:
+This is the primary way the community extends angry-bear. Here's the complete guide:
 
 ### 1. Create the adapter file
 
@@ -133,7 +133,7 @@ func (a *MyAgentAdapter) InstallHook(projectDir string) error {
     UninstallHook() error
     ExitCodeForDeny() int
     GlobalConfigPath() string
-    // Add care-bear hook to the agent's GLOBAL config file
+    // Add angry-bear hook to the agent's GLOBAL config file
     // Use resolveCareBareCommand() for the absolute binary path
     // Preserve existing hooks — prepend, don't replace
     // Must be idempotent (safe to call twice)
@@ -180,7 +180,7 @@ if _, ok := parsed["myagent_version"]; ok {
 
 ### 4. Add tool name normalization
 
-If your agent uses different tool names than care-bear's canonical names, create a mapping in your adapter (see `cursorToolMap` in `cursor.go` for an example):
+If your agent uses different tool names than angry-bear's canonical names, create a mapping in your adapter (see `cursorToolMap` in `cursor.go` for an example):
 
 ```go
 var myAgentToolMap = map[string]string{
@@ -207,7 +207,7 @@ No other code needs to change. The engine, TUI, CLI commands, state manager, and
 ## Key Design Principles
 
 1. **Adapters contain all agent knowledge** — engine is agent-agnostic
-2. **Fail-open on config/state errors** — never block developers due to care-bear bugs
+2. **Fail-open on config/state errors** — never block developers due to angry-bear bugs
 3. **Fail-hard on user mistakes** — malformed JSON, bad config versions surface clearly
 4. **File-based state** — no daemon, no background process, single static binary
 5. **Hooks are global, rules are per-project** — install once, enforce per-project

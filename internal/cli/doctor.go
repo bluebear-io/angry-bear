@@ -1,4 +1,4 @@
-// doctor.go implements the care-bear doctor command for installation diagnostics.
+// doctor.go implements the angry-bear doctor command for installation diagnostics.
 // It runs a series of health checks and reports pass/fail status with fix
 // suggestions for any failures. Exits with code 1 if any check fails.
 package cli
@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -22,17 +22,17 @@ type checkResult struct {
 	Name    string // e.g., "Config validity: skill_enforcement.json"
 	Passed  bool
 	Detail  string // e.g., "version 1, 3 rules"
-	FixHint string // e.g., "Run 'care-bear add'..."
+	FixHint string // e.g., "Run 'angry-bear add'..."
 }
 
 // NewDoctorCommand returns the doctor subcommand.
-// It validates the health of the care-bear installation with a pass/fail
+// It validates the health of the angry-bear installation with a pass/fail
 // checklist and actionable fix suggestions.
 func NewDoctorCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check care-bear installation health",
-		Long: `Validate the health of the care-bear installation.
+		Short: "Check angry-bear installation health",
+		Long: `Validate the health of the angry-bear installation.
 
 Runs diagnostic checks on:
 - Config file validity
@@ -58,7 +58,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
 
-	fmt.Fprintln(out, "care-bear doctor")
+	fmt.Fprintln(out, "angry-bear doctor")
 	fmt.Fprintln(out, "================")
 	fmt.Fprintln(out)
 
@@ -112,7 +112,7 @@ func checkConfigValidity(projectRoot string) []checkResult {
 	var results []checkResult
 
 	// Check skill_enforcement.json via the shared resolver so we look in the
-	// same repo-keyed directory (~/.care-bear/repos/{hash}/) that the hook uses.
+	// same repo-keyed directory (~/.angry-bear/repos/{hash}/) that the hook uses.
 	enforcementPath, err := ResolveConfigForProject(projectRoot)
 	if err != nil {
 		results = append(results, checkResult{
@@ -126,7 +126,7 @@ func checkConfigValidity(projectRoot string) []checkResult {
 	}
 
 	// Check config.json.
-	configPath := filepath.Join(projectRoot, ".care-bear", "config.json")
+	configPath := filepath.Join(projectRoot, ".angry-bear", "config.json")
 	results = append(results, checkGlobalConfig(configPath))
 
 	return results
@@ -149,7 +149,7 @@ func checkEnforcementConfig(path string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  fmt.Sprintf("cannot read: %v", err),
-			FixHint: "Check file permissions on .care-bear/skill_enforcement.json.",
+			FixHint: "Check file permissions on .angry-bear/skill_enforcement.json.",
 		}
 	}
 
@@ -160,7 +160,7 @@ func checkEnforcementConfig(path string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  fmt.Sprintf("invalid JSON: %v", err),
-			FixHint: "Fix the JSON syntax in .care-bear/skill_enforcement.json.",
+			FixHint: "Fix the JSON syntax in .angry-bear/skill_enforcement.json.",
 		}
 	}
 
@@ -197,7 +197,7 @@ func checkGlobalConfig(path string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  fmt.Sprintf("cannot read: %v", err),
-			FixHint: "Check file permissions on .care-bear/config.json.",
+			FixHint: "Check file permissions on .angry-bear/config.json.",
 		}
 	}
 
@@ -208,7 +208,7 @@ func checkGlobalConfig(path string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  fmt.Sprintf("invalid JSON: %v", err),
-			FixHint: "Fix the JSON syntax in .care-bear/config.json.",
+			FixHint: "Fix the JSON syntax in .angry-bear/config.json.",
 		}
 	}
 
@@ -219,7 +219,7 @@ func checkGlobalConfig(path string) checkResult {
 	}
 }
 
-// checkHookInstallation verifies that care-bear hooks are installed for
+// checkHookInstallation verifies that angry-bear hooks are installed for
 // each detected agent. Returns one check result per detected agent.
 func checkHookInstallation(projectRoot string) []checkResult {
 	var results []checkResult
@@ -246,7 +246,7 @@ func checkHookInstallation(projectRoot string) []checkResult {
 	return results
 }
 
-// checkAgentHook reads the agent's config file and checks for a care-bear hook entry.
+// checkAgentHook reads the agent's config file and checks for a angry-bear hook entry.
 func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapter) checkResult {
 	name := fmt.Sprintf("Hook installed: %s (%s)", agentName, hookAdapter.ConfigPath())
 
@@ -258,7 +258,7 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 				Name:    name,
 				Passed:  false,
 				Detail:  "config file not found",
-				FixHint: fmt.Sprintf("Run 'care-bear add' to install hooks for %s.", agentName),
+				FixHint: fmt.Sprintf("Run 'angry-bear add' to install hooks for %s.", agentName),
 			}
 		}
 		return checkResult{
@@ -269,12 +269,12 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 		}
 	}
 
-	if !strings.Contains(string(data), "care-bear hook") {
+	if !strings.Contains(string(data), "angry-bear hook") {
 		return checkResult{
 			Name:    name,
 			Passed:  false,
 			Detail:  "hook entry not found",
-			FixHint: fmt.Sprintf("Run 'care-bear add' to install hooks for %s.", agentName),
+			FixHint: fmt.Sprintf("Run 'angry-bear add' to install hooks for %s.", agentName),
 		}
 	}
 
@@ -284,12 +284,12 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 	}
 }
 
-// checkStateDirectory verifies that .care-bear/state/ exists and is writable.
+// checkStateDirectory verifies that .angry-bear/state/ exists and is writable.
 // A missing state directory is not a failure because it is created lazily on
 // first hook invocation. It is reported as PASS with an informational note.
 func checkStateDirectory(projectRoot string) checkResult {
-	name := "State directory: .care-bear/state/"
-	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
+	name := "State directory: .angry-bear/state/"
+	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
 
 	info, err := os.Stat(stateDir)
 	if err != nil {
@@ -304,7 +304,7 @@ func checkStateDirectory(projectRoot string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  fmt.Sprintf("cannot stat: %v", err),
-			FixHint: "Check directory permissions on .care-bear/state/.",
+			FixHint: "Check directory permissions on .angry-bear/state/.",
 		}
 	}
 
@@ -313,7 +313,7 @@ func checkStateDirectory(projectRoot string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  "exists but is not a directory",
-			FixHint: "Remove .care-bear/state and run 'care-bear add'.",
+			FixHint: "Remove .angry-bear/state and run 'angry-bear add'.",
 		}
 	}
 
@@ -325,7 +325,7 @@ func checkStateDirectory(projectRoot string) checkResult {
 			Name:    name,
 			Passed:  false,
 			Detail:  "exists but is not writable",
-			FixHint: "Check directory permissions on .care-bear/state/.",
+			FixHint: "Check directory permissions on .angry-bear/state/.",
 		}
 	}
 	os.Remove(tmpPath)
@@ -337,17 +337,17 @@ func checkStateDirectory(projectRoot string) checkResult {
 	}
 }
 
-// checkBinaryOnPath uses exec.LookPath to verify care-bear is on the system PATH.
+// checkBinaryOnPath uses exec.LookPath to verify angry-bear is on the system PATH.
 func checkBinaryOnPath() checkResult {
 	name := "Binary on PATH"
 
-	path, err := exec.LookPath("care-bear")
+	path, err := exec.LookPath("angry-bear")
 	if err != nil {
 		return checkResult{
 			Name:    name,
 			Passed:  false,
-			Detail:  "care-bear not found on PATH",
-			FixHint: "Add care-bear to your PATH or install via 'brew install blue-bear-security/tap/care-bear'.",
+			Detail:  "angry-bear not found on PATH",
+			FixHint: "Add angry-bear to your PATH or install via 'brew install blue-bear-security/tap/angry-bear'.",
 		}
 	}
 
@@ -362,7 +362,7 @@ func checkBinaryOnPath() checkResult {
 // for existence and discoverable skill files. Relative skill paths are resolved
 // against cwd (the actual project directory) rather than projectRoot, because
 // skills are project-level and projectRoot may resolve to the home directory
-// when ~/.care-bear/ exists.
+// when ~/.angry-bear/ exists.
 func checkSkillPaths(projectRoot, cwd string) []checkResult {
 	var results []checkResult
 
@@ -372,7 +372,7 @@ func checkSkillPaths(projectRoot, cwd string) []checkResult {
 			Name:    "Skill paths",
 			Passed:  false,
 			Detail:  fmt.Sprintf("cannot load config: %v", err),
-			FixHint: "Fix .care-bear/config.json.",
+			FixHint: "Fix .angry-bear/config.json.",
 		})
 		return results
 	}

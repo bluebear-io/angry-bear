@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bear/internal/state"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/angry-bear/internal/state"
 )
 
 // filterCol identifies a filterable column in the event log.
@@ -362,7 +362,7 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Delete the events.log file
 				home, _ := os.UserHomeDir()
 				if home != "" {
-					_ = os.Remove(filepath.Join(home, ".care-bear", "events.log"))
+					_ = os.Remove(filepath.Join(home, ".angry-bear", "events.log"))
 				}
 			}
 			return d, nil
@@ -461,7 +461,7 @@ func nextAgent(current string) string {
 // View renders the split-pane layout.
 func (d Dashboard) View() string {
 	if len(d.skills) == 0 {
-		return d.styles.Description.Render("  No skills discovered. Add skill paths to .care-bear/config.json")
+		return d.styles.Description.Render("  No skills discovered. Add skill paths to .angry-bear/config.json")
 	}
 
 	leftWidth := d.width*25/100 - 2
@@ -1005,7 +1005,7 @@ func (d *Dashboard) jumpToLogEntry() {
 func (d *Dashboard) LoadEventLog(projectRoot string) {
 	d.projectRoot = projectRoot
 	home, _ := os.UserHomeDir()
-	logPath := filepath.Join(home, ".care-bear", "events.log")
+	logPath := filepath.Join(home, ".angry-bear", "events.log")
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		d.eventLines = nil

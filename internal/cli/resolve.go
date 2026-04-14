@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/tui"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
 )
 
 // ResolveRepoDir returns the repo-keyed config directory for a project.
@@ -29,8 +29,8 @@ func ResolveRepoDir(projectRoot string) (string, error) {
 }
 
 // ResolveConfigForProject determines the config file path for a given project
-// root directory. It checks repo-keyed config dir first (~/.care-bear/repos/{hash}/),
-// then falls back to project-level ({projectRoot}/.care-bear/).
+// root directory. It checks repo-keyed config dir first (~/.angry-bear/repos/{hash}/),
+// then falls back to project-level ({projectRoot}/.angry-bear/).
 //
 // This is the canonical way to find the config file for any project root and
 // should be used by all commands that need to read or write config.
@@ -45,7 +45,7 @@ func ResolveConfigForProject(projectRoot string) (string, error) {
 	}
 
 	// Fall back to project-level config.
-	return filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json"), nil
+	return filepath.Join(projectRoot, ".angry-bear", "skill_enforcement.json"), nil
 }
 
 // HookSetupResult reports what happened during hook installation.
@@ -55,7 +55,7 @@ type HookSetupResult struct {
 	Warnings  []string // Errors during installation
 }
 
-// EnsureHooksInstalled checks if care-bear hooks are installed in agent configs.
+// EnsureHooksInstalled checks if angry-bear hooks are installed in agent configs.
 // If not, installs them and reports what happened. Idempotent — safe to call
 // on every CLI invocation.
 func EnsureHooksInstalled() HookSetupResult {
@@ -91,13 +91,13 @@ func EnsureHooksInstalled() HookSetupResult {
 	return result
 }
 
-// hookAlreadyInstalled checks if care-bear hook is already in the agent's config.
+// hookAlreadyInstalled checks if angry-bear hook is already in the agent's config.
 func hookAlreadyInstalled(a adapter.HookAdapter, _ string) bool {
 	data, err := os.ReadFile(a.GlobalConfigPath())
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(data), "care-bear hook")
+	return strings.Contains(string(data), "angry-bear hook")
 }
 
 // PrintHookSetup logs hook installation results to stderr on first run.
@@ -128,7 +128,7 @@ func CheckHookHealth() map[string]bool {
 		if err != nil {
 			continue
 		}
-		health[name] = strings.Contains(string(data), "care-bear hook")
+		health[name] = strings.Contains(string(data), "angry-bear hook")
 	}
 	return health
 }

@@ -1,4 +1,4 @@
-// validate_test.go tests session ID validation rules for care-bear state management.
+// validate_test.go tests session ID validation rules for angry-bear state management.
 // It ensures session IDs are safe for use as filenames and reject path traversal attacks.
 package state
 

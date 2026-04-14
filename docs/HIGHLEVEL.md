@@ -1,4 +1,4 @@
-# care-bear — How It Works
+# angry-bear — How It Works
 
 This document explains the complete internals: enforcement flow, file management, state lifecycle, real-time updates, and hook installation.
 
@@ -8,9 +8,9 @@ This document explains the complete internals: enforcement flow, file management
 AI Agent (Claude Code / Cursor / future agents)
     |
     | Agent performs a tool call (Edit, Write, Bash, etc.)
-    | Agent's hook system sends JSON to care-bear via stdin
+    | Agent's hook system sends JSON to angry-bear via stdin
     v
-care-bear hook (PreToolUse)
+angry-bear hook (PreToolUse)
     |
     +-- 1. Parse agent-specific JSON via adapter
     +-- 2. Detect skill invocations → record in session state
@@ -25,10 +25,10 @@ care-bear hook (PreToolUse)
 
 ## Data Layout
 
-ALL care-bear data lives under `~/.care-bear/`. Nothing is stored in project directories.
+ALL angry-bear data lives under `~/.angry-bear/`. Nothing is stored in project directories.
 
 ```
-~/.care-bear/
+~/.angry-bear/
 │
 ├── config.json                                    # Global config defaults
 ├── events.log                                     # Global enforcement event log (append-only)
@@ -43,7 +43,7 @@ ALL care-bear data lives under `~/.care-bear/`. Nothing is stored in project dir
     │       ├── {session-id}.lock                   #     Advisory lock file
     │       └── .last-prune                         #     Timestamp of last prune run
     │
-    └── bb1bf16d-Blue-Bear-Security-care-bear/      # Another repo
+    └── bb1bf16d-Blue-Bear-Security-angry-bear/      # Another repo
         └── ...
 ```
 
@@ -53,9 +53,9 @@ Directory name format: `{hash}-{slug}` where hash = first 8 chars of SHA-256(`or
 
 | File | Created when | Updated when | Read by |
 |------|-------------|--------------|---------|
-| `~/.care-bear/config.json` | User runs TUI settings (global level) | Settings page saves | Hook (for skill_ttl, state_ttl), all commands |
-| `~/.care-bear/events.log` | First enforcement event | Every BLOCK, ALLOW, or SKILL-LOAD | TUI dashboard (read + fsnotify watch) |
-| `repos/{hash}/skill_enforcement.json` | First `care-bear add` for this repo | `add`, `rm`, TUI rule editor | Hook (every invocation), `rules`, `status`, `doctor` |
+| `~/.angry-bear/config.json` | User runs TUI settings (global level) | Settings page saves | Hook (for skill_ttl, state_ttl), all commands |
+| `~/.angry-bear/events.log` | First enforcement event | Every BLOCK, ALLOW, or SKILL-LOAD | TUI dashboard (read + fsnotify watch) |
+| `repos/{hash}/skill_enforcement.json` | First `angry-bear add` for this repo | `add`, `rm`, TUI rule editor | Hook (every invocation), `rules`, `status`, `doctor` |
 | `repos/{hash}/config.json` | TUI settings (project level) | Settings page saves | Hook, TUI (overrides global defaults) |
 | `repos/{hash}/preferences.json` | User picks a checkout path | TUI settings, project picker | TUI project picker, settings |
 | `repos/{hash}/state/{session}.json` | First skill load or enforcement in a session | Every skill invocation (timestamp refresh) | Hook (every invocation to check loaded skills) |
@@ -133,11 +133,11 @@ Runs automatically during hook invocations (throttled to once per hour):
 - `state_ttl_hours` (default: 24) controls file retention
 - Uses file modification time (mtime) — no JSON parsing needed
 - `.last-prune` file tracks when pruning last ran
-- Explicit: `care-bear clean [--all] [--session <id>]`
+- Explicit: `angry-bear clean [--all] [--session <id>]`
 
 ## Event Log
 
-`~/.care-bear/events.log` — append-only, one line per event:
+`~/.angry-bear/events.log` — append-only, one line per event:
 
 ```
 2024-01-01T10:30:00Z | blueden | claude | abc12 | Edit       | services/bff/handler.py | BLOCK | backend-python-standards
@@ -161,7 +161,7 @@ Actions: `BLOCK`, `ALLOW`, `LOAD` (skill loaded), `EXPIR` (skill TTL expired)
 
 The TUI watches two paths for live updates:
 
-1. **`~/.care-bear/events.log`** — `watchEventsLog()` in `app.go`
+1. **`~/.angry-bear/events.log`** — `watchEventsLog()` in `app.go`
    - On file write/create → sends `eventsUpdatedMsg` → dashboard reloads log + auto-scrolls to latest
    - Watcher restarts after each event (single-shot pattern)
 
@@ -179,7 +179,7 @@ Every CLI command (except `hook`, `completion`, `version`, `enable`, `disable`) 
 
 1. For each registered adapter (claude, cursor):
    - Check if `~/.{agent}/` exists (agent present on machine)
-   - Check if hook config already contains "care-bear hook" (already installed)
+   - Check if hook config already contains "angry-bear hook" (already installed)
    - If not installed: call `adapter.InstallHook("")`
 2. Print `✓ Hooks installed for claude` on first install (silent if already installed)
 
@@ -189,7 +189,7 @@ Written to `~/.claude/settings.json` → `hooks.PreToolUse[]`:
 ```json
 {
   "matcher": "*",
-  "hooks": [{"type": "command", "command": "/path/to/care-bear hook --agent claude"}]
+  "hooks": [{"type": "command", "command": "/path/to/angry-bear hook --agent claude"}]
 }
 ```
 Uses absolute binary path from `os.Executable()` for reliability.
@@ -198,16 +198,16 @@ Uses absolute binary path from `os.Executable()` for reliability.
 
 Written to `~/.cursor/hooks.json` → `hooks.{hookType}[]`:
 - Prepended to: `preToolUse`, `beforeFileEdit`, `beforeShellExecution`, `beforeReadFile`, `beforeMCPExecution`
-- Format: `{"command": "/path/to/care-bear hook --agent cursor"}`
+- Format: `{"command": "/path/to/angry-bear hook --agent cursor"}`
 - Cursor blocks on exit code 2 (unlike Claude which reads stdout JSON)
 
 ### enable / disable commands
 
-- `care-bear enable` — calls `InstallHook()` on all detected agents
-- `care-bear disable` — calls `UninstallHook()` on all detected agents
-  - Claude: filters care-bear entries from `settings.json` `PreToolUse[]`
-  - Cursor: filters care-bear entries from all hook type arrays in `hooks.json`
-  - Preserves all non-care-bear hooks
+- `angry-bear enable` — calls `InstallHook()` on all detected agents
+- `angry-bear disable` — calls `UninstallHook()` on all detected agents
+  - Claude: filters angry-bear entries from `settings.json` `PreToolUse[]`
+  - Cursor: filters angry-bear entries from all hook type arrays in `hooks.json`
+  - Preserves all non-angry-bear hooks
 
 ## Project Discovery
 
@@ -227,7 +227,7 @@ For each directory:
 `add`, `rules`, `status`, `doctor` use current directory:
 1. Walk up from `os.Getwd()` looking for `.git/` → project root
 2. `git remote get-url origin` → normalize → repo identity
-3. Config at `~/.care-bear/repos/{hash}-{slug}/`
+3. Config at `~/.angry-bear/repos/{hash}-{slug}/`
 
 ## Agent Adapters
 

@@ -1,4 +1,4 @@
-// add.go implements the care-bear add command for creating enforcement rules.
+// add.go implements the angry-bear add command for creating enforcement rules.
 // It generates the cartesian product of tools x paths x agents as separate
 // rules and appends them to the config file, deduplicating against existing rules.
 package cli
@@ -14,10 +14,10 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/care-bear/internal/tui"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
+	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
 )
 
 // validToolNames lists the recognized tool names for flag validation and completion.
@@ -46,10 +46,10 @@ paths, and agents. With arguments, creates rules from the cartesian product
 of --tool, --path, and --agent values.
 
 Examples:
-  care-bear add                    # Interactive mode
-  care-bear add go-standards --tool Edit,Write --path "**/*.go" --agent claude
-  care-bear add linear --tool Edit --path "**/*.py,**/*.ts"
-  care-bear add sst-architect --path "bluebear-backend/stacks/**"`,
+  angry-bear add                    # Interactive mode
+  angry-bear add go-standards --tool Edit,Write --path "**/*.go" --agent claude
+  angry-bear add linear --tool Edit --path "**/*.py,**/*.ts"
+  angry-bear add sst-architect --path "bluebear-backend/stacks/**"`,
 		Args:              cobra.MaximumNArgs(1),
 		RunE:              runAdd,
 		ValidArgsFunction: completeSkillNames,
@@ -58,7 +58,7 @@ Examples:
 	cmd.Flags().String("tool", "*", "Comma-separated tool names: Edit, Write, Bash, Read, Glob, Grep, Agent, *")
 	cmd.Flags().String("path", "**", "Comma-separated glob patterns")
 	cmd.Flags().String("agent", "*", "Comma-separated agent names: claude, cursor, *")
-	cmd.Flags().Bool("repo", false, "Save to repo .care-bear/ directory (shared via git) instead of machine config")
+	cmd.Flags().Bool("repo", false, "Save to repo .angry-bear/ directory (shared via git) instead of machine config")
 
 	// Register completions for flag values.
 	_ = cmd.RegisterFlagCompletionFunc("tool", completeToolNames)
@@ -178,7 +178,7 @@ func resolveConfigPath(cmd *cobra.Command) (string, error) {
 	// --repo flag: save to project directory (shared via git).
 	repoFlag, _ := cmd.Flags().GetBool("repo")
 	if repoFlag {
-		return filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json"), nil
+		return filepath.Join(projectRoot, ".angry-bear", "skill_enforcement.json"), nil
 	}
 
 	// Default: try repo-keyed config dir (machine-level).
@@ -192,7 +192,7 @@ func resolveConfigPath(cmd *cobra.Command) (string, error) {
 	}
 
 	// Fall back to project-level config.
-	return filepath.Join(projectRoot, ".care-bear", "skill_enforcement.json"), nil
+	return filepath.Join(projectRoot, ".angry-bear", "skill_enforcement.json"), nil
 }
 
 // loadOrCreateConfig reads an existing config file or returns a new empty config.

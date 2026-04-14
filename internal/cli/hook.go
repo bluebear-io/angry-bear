@@ -1,4 +1,4 @@
-// hook.go implements the care-bear hook command for PreToolUse enforcement.
+// hook.go implements the angry-bear hook command for PreToolUse enforcement.
 // It is invoked by AI agents on every tool use as a pre-tool-use hook.
 // The command reads JSON from stdin, determines whether the operation should
 // be allowed or blocked based on enforcement rules and loaded skills, and
@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/care-bear/internal/engine"
-	"github.com/Blue-Bear-Security/care-bear/internal/state"
+	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/Blue-Bear-Security/angry-bear/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +75,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	logger.Debug("read stdin", "bytes", len(stdinBytes))
 
 	// Step 2: Select adapter.
-	// Accept agent as positional arg ("care-bear hook cursor") or flag ("--agent cursor").
+	// Accept agent as positional arg ("angry-bear hook cursor") or flag ("--agent cursor").
 	agentFlag, _ := cmd.Flags().GetString("agent")
 	if agentFlag == "" && len(args) > 0 {
 		agentFlag = args[0]
@@ -133,7 +133,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	if isSkill {
 		logger.Debug("skill invocation detected", "skill", skillName)
 		logSkillEvent(projectRoot, hookInput, skillName, "invoke")
-		stateDir := filepath.Join(projectRoot, ".care-bear", "state")
+		stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
 		if err := os.MkdirAll(stateDir, 0o755); err != nil {
 			logger.Warn("failed to create state directory", "error", err)
 			// Fail open: allow the skill invocation even if we can't record it.
@@ -153,7 +153,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 		if skillName := detectSkillFromPath(hookInput.FilePath); skillName != "" {
 			logger.Debug("skill file read detected", "skill", skillName, "path", hookInput.FilePath)
 			logSkillEvent(projectRoot, hookInput, skillName, "read")
-			stateDir := filepath.Join(projectRoot, ".care-bear", "state")
+			stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
 			if err := os.MkdirAll(stateDir, 0o755); err == nil {
 				mgr := state.NewStateManager(stateDir)
 				if err := mgr.RecordSkillWithAgent(hookInput.SessionID, skillName, hookInput.Agent); err != nil {
@@ -178,7 +178,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 7: Load session state with skill TTL.
-	// Load config from repo-keyed dir (config.json is directly in repoConfigDir, not in a .care-bear/ subdir)
+	// Load config from repo-keyed dir (config.json is directly in repoConfigDir, not in a .angry-bear/ subdir)
 	globalCfg, cfgErr := engine.LoadGlobalConfigFromDir(repoConfigDir)
 	if cfgErr != nil {
 		logger.Warn("failed to load global config, using defaults", "error", cfgErr)
@@ -186,7 +186,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 	skillTTL := time.Duration(globalCfg.SkillTTLMinutes) * time.Minute
 
-	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
+	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
 	var invokedSkills map[string]bool
 	if _, err := os.Stat(stateDir); err == nil {
 		mgr := state.NewStateManager(stateDir)
@@ -313,7 +313,7 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 	if err != nil {
 		return
 	}
-	logDir := filepath.Join(home, ".care-bear")
+	logDir := filepath.Join(home, ".angry-bear")
 	os.MkdirAll(logDir, 0o755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)
@@ -344,7 +344,7 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 	f.WriteString(line)
 }
 
-// logEvent appends a line to .care-bear/events.log for every hook invocation.
+// logEvent appends a line to .angry-bear/events.log for every hook invocation.
 // Log format: timestamp | agent | tool | path | decision | skills
 // For BLOCK events, skills come from result.Missing (the skills that were not loaded).
 // For ALLOW events, skills come from matchedSkills (the skills that were required and satisfied).
@@ -354,7 +354,7 @@ func logEvent(projectRoot string, input *adapter.HookInput, normalizedPath strin
 	if err != nil {
 		return
 	}
-	logDir := filepath.Join(home, ".care-bear")
+	logDir := filepath.Join(home, ".angry-bear")
 	os.MkdirAll(logDir, 0o755)
 	logPath := filepath.Join(logDir, "events.log")
 	projectName := filepath.Base(projectRoot)

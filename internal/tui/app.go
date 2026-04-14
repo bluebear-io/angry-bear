@@ -575,12 +575,16 @@ func (a App) renderHookBadges() string {
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#EF4444")).Padding(0, 1)
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
+	// Refresh hook health if map is empty but the function is available.
+	// This handles the case where Bubble Tea's value-receiver model copy
+	// loses the initial hookHealth set by SetHookHealthFn.
+	health := a.hookHealth
+	if len(health) == 0 && a.hookHealthFn != nil {
+		health = a.hookHealthFn()
+	}
+
 	var badges []string
-	for agent := range a.hookHealth {
-		healthy, exists := a.hookHealth[agent]
-		if !exists {
-			continue
-		}
+	for agent, healthy := range health {
 		if healthy {
 			badges = append(badges, green.Render(agent+" ✓"))
 		} else {

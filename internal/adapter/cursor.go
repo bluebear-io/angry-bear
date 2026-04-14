@@ -207,7 +207,8 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 		"beforeMCPExecution",
 	}
 
-	binPath := resolveCareBareCommand(a.BinaryPath)
+	// Cursor requires relative binary name (not absolute path) for hook execution.
+	binPath := "care-bear"
 	careBareEntry := map[string]any{
 		"command": binPath + " hook --agent cursor",
 	}

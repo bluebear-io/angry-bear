@@ -571,7 +571,7 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 			t.Errorf("hook type %q entry is not a map", hookType)
 			continue
 		}
-		wantCmd := "/usr/local/bin/care-bear hook --agent cursor"
+		wantCmd := "care-bear hook --agent cursor"
 		if entry["command"] != wantCmd {
 			t.Errorf("hook type %q command = %v, want %q", hookType, entry["command"], wantCmd)
 		}

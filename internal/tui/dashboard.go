@@ -716,6 +716,7 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 		focusRow,
 		&d.ruleScroll,
 		visibleRules,
+		width,
 	))
 
 	// Context help for right panel when focused
@@ -869,7 +870,7 @@ func (d Dashboard) renderEventLog(width, height int) string {
 	}
 
 	headers := []string{"TIME", "ACTION", "PROJECT", "SESS", "AGENT", "TOOL", "SKILL", "PATH"}
-	tableStr := RenderTable(headers, rows, d.styles.Description, d.styles.Selected, focusRow, &d.logScroll, visible)
+	tableStr := RenderTable(headers, rows, d.styles.Description, d.styles.Selected, focusRow, &d.logScroll, visible, width)
 
 	return title + tableStr
 }

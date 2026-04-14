@@ -1,5 +1,5 @@
 // table.go provides a reusable table component wrapping lipgloss/table
-// for proper ANSI-aware column alignment. Used by the rules panel.
+// for proper ANSI-aware column alignment.
 package tui
 
 import (
@@ -18,6 +18,10 @@ type TableRow struct {
 	Cells []TableCell
 }
 
+// baseStyle is the consistent cell style used for all cells.
+// Only foreground color varies per cell.
+var baseStyle = lipgloss.NewStyle().PaddingRight(2)
+
 // RenderTable renders rows with headers using lipgloss/table for proper alignment.
 // focusRow highlights a specific row (-1 for none).
 func RenderTable(
@@ -28,6 +32,7 @@ func RenderTable(
 	focusRow int,
 	scroll *ScrollView,
 	visibleRows int,
+	width int,
 ) string {
 	if len(rows) == 0 {
 		return ""
@@ -50,7 +55,7 @@ func RenderTable(
 		strRows = append(strRows, cells)
 	}
 
-	t := table.New().
+	tb := table.New().
 		Headers(headers...).
 		Rows(strRows...).
 		BorderTop(false).
@@ -58,14 +63,17 @@ func RenderTable(
 		BorderLeft(false).
 		BorderRight(false).
 		BorderColumn(false).
-		BorderHeader(false).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			// Add right padding for column spacing.
-			pad := lipgloss.NewStyle().PaddingRight(1)
+		BorderHeader(false)
 
-			// Header row.
+	if width > 0 {
+		tb = tb.Width(width)
+	}
+
+	tb = tb.
+		StyleFunc(func(row, col int) lipgloss.Style {
+			// Header row — use base style with header foreground.
 			if row == table.HeaderRow {
-				return headerStyle.PaddingRight(1)
+				return baseStyle.Inherit(headerStyle)
 			}
 
 			// Map visible row index back to original data index.
@@ -73,16 +81,22 @@ func RenderTable(
 
 			// Focused row.
 			if dataIdx == focusRow {
-				return selectedStyle.PaddingRight(1)
+				return baseStyle.Inherit(selectedStyle)
 			}
 
-			// Per-cell style from the row data.
+			// Per-cell color: use base style + only the foreground from the cell style.
 			if dataIdx < len(rows) && col < len(rows[dataIdx].Cells) {
-				return rows[dataIdx].Cells[col].Style.PaddingRight(1)
+				cellStyle := rows[dataIdx].Cells[col].Style
+				fg := cellStyle.GetForeground()
+				s := baseStyle.Foreground(fg)
+				if cellStyle.GetBold() {
+					s = s.Bold(true)
+				}
+				return s
 			}
 
-			return pad
+			return baseStyle
 		})
 
-	return t.Render()
+	return tb.Render()
 }

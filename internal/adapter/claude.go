@@ -38,7 +38,9 @@ type ClaudeAdapter struct {
 	BinaryPath string // Override binary path (empty = auto-detect)
 }
 
-// Name returns "claude".
+// ExitCodeForDeny returns 0. Claude reads the deny decision from stdout JSON.
+func (a *ClaudeAdapter) ExitCodeForDeny() int { return 0 }
+
 func (a *ClaudeAdapter) Name() string { return "claude" }
 
 // ParseInput reads Claude Code hook JSON from stdin and returns a normalized HookInput.

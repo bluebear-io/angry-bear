@@ -117,5 +117,5 @@ func readLastPrune(stateDir string) (time.Time, error) {
 // writeLastPrune writes the current UTC time as an RFC 3339 timestamp to the .last-prune file.
 func writeLastPrune(stateDir string) error {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
-	return os.WriteFile(filepath.Join(stateDir, lastPruneFile), []byte(timestamp), 0600)
+	return os.WriteFile(filepath.Join(stateDir, lastPruneFile), []byte(timestamp), 0o600)
 }

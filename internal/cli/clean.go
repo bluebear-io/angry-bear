@@ -57,7 +57,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 	// Check if state directory exists.
 	stateDir := filepath.Join(projectRoot, ".care-bear", "state")
 	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
-		fmt.Fprintln(out, "No state directory found. Run 'care-bear init' first.")
+		fmt.Fprintln(out, "No state directory found. No sessions found.")
 		return nil
 	}
 

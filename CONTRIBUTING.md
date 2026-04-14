@@ -71,6 +71,9 @@ type HookAdapter interface {
     FormatDeny(reason string) ([]byte, error)
     ConfigPath() string
     InstallHook(projectDir string) error
+    UninstallHook() error
+    ExitCodeForDeny() int
+    GlobalConfigPath() string
     DetectSkillInvocation(input *HookInput) (skillName string, isSkill bool)
     ScanProjects() ([]AgentProject, error)
 }
@@ -127,6 +130,9 @@ func (a *MyAgentAdapter) ConfigPath() string {
 }
 
 func (a *MyAgentAdapter) InstallHook(projectDir string) error {
+    UninstallHook() error
+    ExitCodeForDeny() int
+    GlobalConfigPath() string
     // Add care-bear hook to the agent's GLOBAL config file
     // Use resolveCareBareCommand() for the absolute binary path
     // Preserve existing hooks — prepend, don't replace

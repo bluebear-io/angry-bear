@@ -175,7 +175,7 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": binPath + " hook --agent claude",
+				"command": binPath + " hook claude",
 			},
 		},
 	}

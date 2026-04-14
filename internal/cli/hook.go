@@ -75,7 +75,11 @@ func runHook(cmd *cobra.Command, args []string) error {
 	logger.Debug("read stdin", "bytes", len(stdinBytes))
 
 	// Step 2: Select adapter.
+	// Accept agent as positional arg ("care-bear hook cursor") or flag ("--agent cursor").
 	agentFlag, _ := cmd.Flags().GetString("agent")
+	if agentFlag == "" && len(args) > 0 {
+		agentFlag = args[0]
+	}
 	registry := adapter.NewRegistry()
 
 	var hookAdapter adapter.HookAdapter

@@ -318,7 +318,7 @@ func TestCursorInstallHook_CreatesHooksJsonWhenMissing(t *testing.T) {
 	}
 
 	// Verify it contains the care-bear hook entry
-	if !strings.Contains(string(data), "care-bear hook --agent cursor") {
+	if !strings.Contains(string(data), "care-bear hook cursor") {
 		t.Errorf("hooks.json missing care-bear hook command:\n%s", data)
 	}
 
@@ -417,7 +417,7 @@ func TestCursorInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Errorf("existing beforeFileEdit hook was removed:\n%s", content)
 	}
 	// care-bear hook must be present
-	if !strings.Contains(content, "care-bear hook --agent cursor") {
+	if !strings.Contains(content, "care-bear hook cursor") {
 		t.Errorf("care-bear hook not added:\n%s", content)
 	}
 }
@@ -446,7 +446,7 @@ func TestCursorInstallHook_Idempotent(t *testing.T) {
 	}
 
 	// Count occurrences of "care-bear hook" -- should be exactly 5 (one per hook type)
-	count := strings.Count(string(data), "care-bear hook --agent cursor")
+	count := strings.Count(string(data), "care-bear hook cursor")
 	if count != 5 {
 		t.Errorf("care-bear hook appears %d times, want 5 (one per hook type):\n%s", count, data)
 	}
@@ -571,7 +571,7 @@ func TestCursorInstallHook_CorrectJSONStructure(t *testing.T) {
 			t.Errorf("hook type %q entry is not a map", hookType)
 			continue
 		}
-		wantCmd := "care-bear hook --agent cursor"
+		wantCmd := "care-bear hook cursor"
 		if entry["command"] != wantCmd {
 			t.Errorf("hook type %q command = %v, want %q", hookType, entry["command"], wantCmd)
 		}
@@ -864,7 +864,7 @@ func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
 		},
 		"beforeFileEdit": []any{
 			map[string]any{
-				"command": "/usr/bin/care-bear hook --agent cursor",
+				"command": "/usr/bin/care-bear hook cursor",
 			},
 		},
 	}
@@ -974,5 +974,30 @@ func TestCursorName(t *testing.T) {
 	adapter := &CursorAdapter{}
 	if adapter.Name() != "cursor" {
 		t.Errorf("Name() = %q, want %q", adapter.Name(), "cursor")
+	}
+}
+
+// TestCursorHookCommand_MatchesBluebearFormat verifies the Cursor hook command
+// uses the same format as the working bluebear hook (no --flag syntax).
+func TestCursorHookCommand_MatchesBluebearFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	adapter := &CursorAdapter{HomeDir: tmpDir}
+	err := adapter.InstallHook("")
+	if err != nil {
+		t.Fatalf("InstallHook failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".cursor", "hooks.json"))
+	if err != nil {
+		t.Fatalf("failed to read hooks.json: %v", err)
+	}
+
+	// The command should NOT contain "--agent" flag syntax.
+	// Cursor hooks work with simple positional args like "bluebear hook cursor".
+	if strings.Contains(string(data), "--agent") {
+		t.Error("Cursor hook command should not use --agent flag; use positional arg like 'care-bear hook cursor'")
+	}
+	if !strings.Contains(string(data), "care-bear hook cursor") {
+		t.Errorf("expected 'care-bear hook cursor' in hooks.json, got: %s", string(data))
 	}
 }

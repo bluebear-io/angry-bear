@@ -210,7 +210,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 	// Cursor requires relative binary name (not absolute path) for hook execution.
 	binPath := "care-bear"
 	careBareEntry := map[string]any{
-		"command": binPath + " hook --agent cursor",
+		"command": binPath + " hook cursor",
 	}
 
 	// Prepend care-bear hook to each hook type, preserving existing entries

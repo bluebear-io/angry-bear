@@ -282,7 +282,7 @@ func TestClaudeInstallHook_CreatesSettingsWhenMissing(t *testing.T) {
 	}
 
 	// Verify it contains the care-bear hook entry
-	if !strings.Contains(string(data), "care-bear hook --agent claude") {
+	if !strings.Contains(string(data), "care-bear hook claude") {
 		t.Errorf("settings.json missing care-bear hook command:\n%s", data)
 	}
 }
@@ -331,7 +331,7 @@ func TestClaudeInstallHook_PreservesExistingHooks(t *testing.T) {
 		t.Errorf("existing Bash hook was removed:\n%s", content)
 	}
 	// care-bear hook must be present
-	if !strings.Contains(content, "care-bear hook --agent claude") {
+	if !strings.Contains(content, "care-bear hook claude") {
 		t.Errorf("care-bear hook not added:\n%s", content)
 	}
 	// enabledPlugins must be preserved
@@ -364,7 +364,7 @@ func TestClaudeInstallHook_Idempotent(t *testing.T) {
 	}
 
 	// Count occurrences of "care-bear hook" -- should be exactly 1
-	count := strings.Count(string(data), "care-bear hook --agent claude")
+	count := strings.Count(string(data), "care-bear hook claude")
 	if count != 1 {
 		t.Errorf("care-bear hook appears %d times, want 1:\n%s", count, data)
 	}
@@ -446,8 +446,8 @@ func TestClaudeInstallHook_CorrectJSONStructure(t *testing.T) {
 	if hookEntry["type"] != "command" {
 		t.Errorf("type = %v, want %q", hookEntry["type"], "command")
 	}
-	if hookEntry["command"] != "/usr/local/bin/care-bear hook --agent claude" {
-		t.Errorf("command = %v, want %q", hookEntry["command"], "/usr/local/bin/care-bear hook --agent claude")
+	if hookEntry["command"] != "/usr/local/bin/care-bear hook claude" {
+		t.Errorf("command = %v, want %q", hookEntry["command"], "/usr/local/bin/care-bear hook claude")
 	}
 }
 
@@ -990,7 +990,7 @@ func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
 			"hooks": []any{
 				map[string]any{
 					"type":    "command",
-					"command": "/usr/bin/care-bear hook --agent claude",
+					"command": "/usr/bin/care-bear hook claude",
 				},
 			},
 		},

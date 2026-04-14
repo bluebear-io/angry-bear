@@ -679,9 +679,10 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	}
 
 	// Column header
-	header := fmt.Sprintf("  %-10s %-28s %-8s %s", "TOOL", "PATH", "AGENT", "")
+	header := fmt.Sprintf("  %-10s %-22s %-8s %s", "TOOL", "PATH", "AGENT", "SOURCE")
 	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
-	gitBadge := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316")).Render(" ")
+	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
+	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
 	// Scrolling for rules list
 	visibleRules := height - 7
@@ -709,26 +710,26 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 				after = d.pathBuffer[d.pathCurPos+1:]
 			}
 			pathStr = before + d.styles.Selected.Render(cursor) + after
-			if len(pathStr) > 28 {
-				pathStr = pathStr[:28]
+			if len(pathStr) > 22 {
+				pathStr = pathStr[:22]
 			}
-		} else if len(pathStr) > 28 {
-			pathStr = pathStr[:25] + "..."
+		} else if len(pathStr) > 22 {
+			pathStr = pathStr[:19] + "..."
 		}
 
-		badge := ""
+		sourceStr := machineStyle.Render("machine")
 		if ir.source == engine.SourceRepo {
-			badge = " " + gitBadge
+			sourceStr = repoStyle.Render(" repo")
 		}
 
 		if focused && !d.editingPath {
-			line := fmt.Sprintf("  %-10s %-28s %s", toolStr, pathStr, agentStr)
-			b.WriteString(d.styles.Selected.Render(line) + badge + "\n")
+			line := fmt.Sprintf("  %-10s %-22s %-8s", toolStr, pathStr, agentStr)
+			b.WriteString(d.styles.Selected.Render(line) + " " + sourceStr + "\n")
 		} else {
 			tool := d.styles.Tool.Render(fmt.Sprintf("%-10s", toolStr))
-			path := d.styles.Path.Render(fmt.Sprintf("%-28s", pathStr))
-			agent := d.styles.Agent.Render(agentStr)
-			b.WriteString("  " + tool + " " + path + " " + agent + badge + "\n")
+			path := d.styles.Path.Render(fmt.Sprintf("%-22s", pathStr))
+			agent := d.styles.Agent.Render(fmt.Sprintf("%-8s", agentStr))
+			b.WriteString("  " + tool + " " + path + " " + agent + " " + sourceStr + "\n")
 		}
 	}
 

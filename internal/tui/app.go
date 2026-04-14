@@ -393,11 +393,25 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.savePrompt = false
 		repoPath := filepath.Join(a.projectRoot, ".care-bear", "skill_enforcement.json")
 		a.dashboard.config = a.config
-		return a, saveConfig(a.config, repoPath)
+		// Mark all rules as repo-sourced.
+		a.dashboard.ruleSources = make([]string, len(a.config.Tools))
+		for i := range a.dashboard.ruleSources {
+			a.dashboard.ruleSources[i] = engine.SourceRepo
+		}
+		// Remove machine-level config so repo is the single source of truth.
+		return a, tea.Batch(
+			saveConfig(a.config, repoPath),
+			removeMachineConfig(a.configPath),
+		)
 
 	case saveToMachineMsg:
 		a.savePrompt = false
 		a.dashboard.config = a.config
+		// Mark all rules as machine-sourced.
+		a.dashboard.ruleSources = make([]string, len(a.config.Tools))
+		for i := range a.dashboard.ruleSources {
+			a.dashboard.ruleSources[i] = engine.SourceMachine
+		}
 		return a, saveConfig(a.config, a.configPath)
 
 	case openTreePickerMsg:
@@ -602,6 +616,18 @@ func savePreferredPath(repoConfigDir string, path string) tea.Cmd {
 			return saveResultMsg{err: fmt.Errorf("saving preferred path: %w", err)}
 		}
 		return saveResultMsg{err: nil}
+	}
+}
+
+// removeMachineConfig deletes the machine-level skill_enforcement.json so
+// repo rules are the single source of truth. Silently ignores missing files.
+func removeMachineConfig(path string) tea.Cmd {
+	return func() tea.Msg {
+		err := os.Remove(path)
+		if err != nil && !os.IsNotExist(err) {
+			return saveResultMsg{err: fmt.Errorf("removing machine config: %w", err)}
+		}
+		return nil
 	}
 }
 

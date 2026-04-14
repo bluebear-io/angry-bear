@@ -202,10 +202,21 @@ func runHook(cmd *cobra.Command, args []string) error {
 	var invokedSkills map[string]bool
 	if _, err := os.Stat(stateDir); err == nil {
 		mgr := state.NewStateManager(stateDir)
+		// Get all skills first (for expiry detection), then fresh only
+		allSkills, _ := mgr.GetInvokedSkills(hookInput.SessionID)
 		invokedSkills, err = mgr.GetFreshSkills(hookInput.SessionID, skillTTL)
 		if err != nil {
 			logger.Warn("failed to read session state, treating as empty", "error", err)
 			invokedSkills = make(map[string]bool)
+		}
+		// Log expired skills
+		if skillTTL > 0 {
+			for skill := range allSkills {
+				if !invokedSkills[skill] {
+					logSkillEvent(projectRoot, hookInput, skill, "expired")
+					logger.Debug("skill expired", "skill", skill, "ttl_minutes", globalCfg.SkillTTLMinutes)
+				}
+			}
 		}
 	} else {
 		invokedSkills = make(map[string]bool)
@@ -318,12 +329,20 @@ func logSkillEvent(projectRoot string, input *adapter.HookInput, skillName, meth
 	if repo := engine.ResolveRepoIdentity(projectRoot); repo != nil {
 		projectName = repo.Slug
 	}
-	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | SKILL-LOAD | %-40s | LOAD  | %s\n",
+	action := "LOAD"
+	toolCol := "SKILL-LOAD"
+	if method == "expired" {
+		action = "EXPIR"
+		toolCol = "SKILL-TTL"
+	}
+	line := fmt.Sprintf("%s | %-12s | %-6s | %-5s | %-10s | %-40s | %-5s | %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		projectName,
 		input.Agent,
 		truncateSessionID(input.SessionID),
+		toolCol,
 		"",
+		action,
 		skillName,
 	)
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)

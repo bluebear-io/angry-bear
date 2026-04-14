@@ -681,82 +681,45 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
 	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
-	// Compute max path width from actual data (min 4 for "PATH" header).
-	pathW := 4
+	// Build table rows from rules.
+	tbl := Table{
+		Columns: []TableColumn{
+			{Name: "TOOL"},
+			{Name: "PATH", MaxWidth: 30},
+			{Name: "AGENT"},
+			{Name: "SOURCE"},
+		},
+		HeaderStyle:   d.styles.RuleHeader,
+		SelectedStyle: d.styles.Selected,
+		Scroll:        &d.ruleScroll,
+	}
+
 	for _, ir := range rules {
-		if len(ir.rule.Path) > pathW {
-			pathW = len(ir.rule.Path)
+		srcStyle := machineStyle
+		srcText := "machine"
+		if ir.source == engine.SourceRepo {
+			srcStyle = repoStyle
+			srcText = " repo"
 		}
-	}
-	if pathW > 30 {
-		pathW = 30
+		tbl.Rows = append(tbl.Rows, TableRow{
+			Cells: []TableCell{
+				{Text: ir.rule.Tool, Style: d.styles.Tool},
+				{Text: ir.rule.Path, Style: d.styles.Path},
+				{Text: ir.rule.Agent, Style: d.styles.Agent},
+				{Text: srcText, Style: srcStyle},
+			},
+		})
 	}
 
-	// Column header
-	header := fmt.Sprintf("  %-8s %-*s %-8s %s", "TOOL", pathW, "PATH", "AGENT", "SOURCE")
-	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
-
-	// Scrolling for rules list
 	visibleRules := height - 7
 	if visibleRules < 3 {
 		visibleRules = 3
 	}
-	ruleStart, ruleEnd := d.ruleScroll.VisibleRange(len(rules), visibleRules)
-
-	for i := ruleStart; i < ruleEnd; i++ {
-		ir := rules[i]
-		focused := i == d.ruleScroll.Cursor && d.focusPanel == 1
-
-		toolStr := ir.rule.Tool
-		pathStr := ir.rule.Path
-		agentStr := ir.rule.Agent
-
-		// If editing this row's path
-		if d.editingPath && focused {
-			// Show path with cursor
-			before := d.pathBuffer[:d.pathCurPos]
-			cursor := "█"
-			after := ""
-			if d.pathCurPos < len(d.pathBuffer) {
-				cursor = string(d.pathBuffer[d.pathCurPos])
-				after = d.pathBuffer[d.pathCurPos+1:]
-			}
-			pathStr = before + d.styles.Selected.Render(cursor) + after
-			if len(pathStr) > pathW {
-				pathStr = pathStr[:pathW]
-			}
-		} else if len(pathStr) > pathW {
-			pathStr = pathStr[:pathW-3] + "..."
-		}
-
-		sourceStr := machineStyle.Render("machine")
-		if ir.source == engine.SourceRepo {
-			sourceStr = repoStyle.Render(" repo")
-		}
-
-		if focused && !d.editingPath {
-			line := fmt.Sprintf("  %-8s %-*s %-8s", toolStr, pathW, pathStr, agentStr)
-			b.WriteString(d.styles.Selected.Render(line) + " " + sourceStr + "\n")
-		} else {
-			tool := d.styles.Tool.Render(fmt.Sprintf("%-8s", toolStr))
-			path := d.styles.Path.Render(fmt.Sprintf("%-*s", pathW, pathStr))
-			agent := d.styles.Agent.Render(fmt.Sprintf("%-8s", agentStr))
-			b.WriteString("  " + tool + " " + path + " " + agent + " " + sourceStr + "\n")
-		}
+	focusRow := -1
+	if d.focusPanel == 1 && !d.editingPath {
+		focusRow = d.ruleScroll.Cursor
 	}
-
-	// Scroll indicator for rules
-	if len(rules) > visibleRules {
-		indicator := d.styles.Description.Render(
-			fmt.Sprintf("  [%d/%d]", d.ruleScroll.Cursor+1, len(rules)))
-		if ruleStart > 0 {
-			indicator += d.styles.Description.Render(" ↑")
-		}
-		if ruleEnd < len(rules) {
-			indicator += d.styles.Description.Render(" ↓")
-		}
-		b.WriteString(indicator + "\n")
-	}
+	b.WriteString(tbl.Render(visibleRules, focusRow, d.focusPanel == 1))
 
 	// Context help for right panel when focused
 	if d.focusPanel == 1 && !d.editingPath {

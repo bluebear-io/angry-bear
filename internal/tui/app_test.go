@@ -86,12 +86,26 @@ func TestDashboardQuit(t *testing.T) {
 func TestDashboardSave(t *testing.T) {
 	tmpFile := t.TempDir() + "/config.json"
 	app := NewApp(testConfig(), nil, tmpFile, "/tmp", testSkills(), nil, nil, "", nil)
+	// Press 's' → dashboard sends saveRequestMsg
 	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if cmd == nil {
 		t.Fatal("expected command from 's'")
 	}
 	reqMsg := cmd()
-	_, cmd = app.Update(reqMsg)
+	// App receives saveRequestMsg → shows save prompt
+	model, _ := app.Update(reqMsg)
+	app = model.(App)
+	if !app.savePrompt {
+		t.Fatal("expected savePrompt to be true")
+	}
+	// Press 'm' for machine save
+	model, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	app = model.(App)
+	if cmd == nil {
+		t.Fatal("expected command from 'm'")
+	}
+	// Execute the saveToMachineMsg
+	model, cmd = app.Update(cmd())
 	if cmd == nil {
 		t.Fatal("expected save command")
 	}

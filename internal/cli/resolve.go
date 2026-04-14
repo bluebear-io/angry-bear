@@ -14,6 +14,20 @@ import (
 	"github.com/Blue-Bear-Security/care-bear/internal/tui"
 )
 
+// ResolveRepoDir returns the repo-keyed config directory for a project.
+// Returns ("", nil) if the repo identity can't be resolved.
+func ResolveRepoDir(projectRoot string) (string, error) {
+	repo := engine.ResolveRepoIdentity(projectRoot)
+	if repo == nil {
+		return "", nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return engine.RepoConfigDir(home, repo), nil
+}
+
 // ResolveConfigForProject determines the config file path for a given project
 // root directory. It checks repo-keyed config dir first (~/.care-bear/repos/{hash}/),
 // then falls back to project-level ({projectRoot}/.care-bear/).

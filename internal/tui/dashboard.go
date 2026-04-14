@@ -118,6 +118,8 @@ func (d Dashboard) Init() tea.Cmd { return nil }
 
 // saveRequestMsg is sent when the user presses 's'.
 type saveRequestMsg struct{}
+type saveToRepoMsg struct{}
+type saveToMachineMsg struct{}
 
 // Update handles key input.
 func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -97,6 +97,7 @@ type App struct {
 	treePicker      TreePicker             // Tree picker child model
 	settings        Settings               // Settings editor child model
 	statusMsg       string                 // Transient status message ("Saved!", "Error: ...")
+	savePrompt      bool                   // True when showing save destination prompt
 	width           int                    // Terminal width
 	height          int                    // Terminal height
 	styles          Styles                 // Style definitions
@@ -301,6 +302,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
+		// Handle save destination prompt.
+		if a.savePrompt {
+			switch msg.String() {
+			case "r":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, func() tea.Msg { return saveToRepoMsg{} }
+			case "m":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, func() tea.Msg { return saveToMachineMsg{} }
+			case "esc":
+				a.savePrompt = false
+				a.statusMsg = ""
+				return a, nil
+			}
+			return a, nil
+		}
 		// Clear status message on any keypress.
 		a.statusMsg = ""
 
@@ -354,7 +373,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case saveRequestMsg:
-		// Save current config to disk.
+		// Show save destination prompt.
+		a.savePrompt = true
+		a.statusMsg = "Save to: [r]epo (shared via git) or [m]achine (local only)?"
+		return a, nil
+
+	case saveToRepoMsg:
+		a.savePrompt = false
+		repoPath := filepath.Join(a.projectRoot, ".care-bear", "skill_enforcement.json")
+		a.dashboard.config = a.config
+		return a, saveConfig(a.config, repoPath)
+
+	case saveToMachineMsg:
+		a.savePrompt = false
 		a.dashboard.config = a.config
 		return a, saveConfig(a.config, a.configPath)
 

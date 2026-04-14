@@ -344,6 +344,21 @@ func (d Dashboard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return d, nil
 
+		case "K":
+			// Clear all logs from view and delete the events.log file
+			if d.focusPanel == 2 {
+				d.eventLines = nil
+				d.logScroll.Cursor = 0
+				d.logFilters = make(map[filterCol]string)
+				d.filterMode = false
+				// Delete the events.log file
+				home, _ := os.UserHomeDir()
+				if home != "" {
+					_ = os.Remove(filepath.Join(home, ".care-bear", "events.log"))
+				}
+			}
+			return d, nil
+
 		case "esc":
 			if d.focusPanel == 2 {
 				d.filterMode = false

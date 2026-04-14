@@ -466,7 +466,7 @@ func (a App) helpBar() string {
 				key("d", "del") + sep + key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		case 2:
 			text = key("↑↓", "scroll") + sep + key("PgUp/Dn", "page") + sep + key("Home/End", "top/bottom") + sep +
-				key("f", "filter") + sep + key("F", "clear filters") + sep + key("enter", "jump") + sep +
+				key("f", "filter") + sep + key("F", "clear filters") + sep + key("K", "clear logs") + sep + key("enter", "jump") + sep +
 				key("c", "settings") + sep + key("s", "save") + sep + key("P", "switch project") + sep + key("q", "quit")
 		}
 	case viewRuleEditor:

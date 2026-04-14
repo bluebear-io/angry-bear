@@ -503,13 +503,19 @@ func (a App) View() string {
 	}
 
 	status := ""
-	if a.statusMsg != "" {
+	if a.statusMsg != "" && !a.savePrompt {
 		status = "\n" + a.styles.Success.Render(a.statusMsg)
 	}
 
 	help := a.helpBar()
+	result := title + "\n" + content + status + "\n" + help
 
-	return title + "\n" + content + status + "\n" + help
+	// Overlay save dialog on top of the screen.
+	if a.savePrompt {
+		result = a.renderSaveDialog(result)
+	}
+
+	return result
 }
 
 // helpBar returns context-sensitive keybinding hints for the current view.
@@ -613,6 +619,50 @@ func saveConfig(cfg engine.Config, path string) tea.Cmd {
 		}
 		return saveResultMsg{err: nil}
 	}
+}
+
+// renderSaveDialog overlays a centered dialog box on top of the existing screen content.
+func (a App) renderSaveDialog(background string) string {
+	lines := strings.Split(background, "\n")
+
+	dialogWidth := 48
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FBBF24")).
+		Padding(1, 2).
+		Width(dialogWidth)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FBBF24"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#D1D5DB"))
+
+	dialogContent := titleStyle.Render("Save rules to:") + "\n\n" +
+		"  " + keyStyle.Render("r") + descStyle.Render("  Repo — shared via git (.care-bear/)") + "\n" +
+		"  " + keyStyle.Render("m") + descStyle.Render("  Machine — local only (~/.care-bear/)") + "\n\n" +
+		"  " + keyStyle.Render("esc") + descStyle.Render("  Cancel")
+
+	box := boxStyle.Render(dialogContent)
+	boxLines := strings.Split(box, "\n")
+
+	// Center the dialog vertically and horizontally
+	startRow := (len(lines) - len(boxLines)) / 2
+	if startRow < 2 {
+		startRow = 2
+	}
+	startCol := (a.width - lipgloss.Width(box)) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	pad := strings.Repeat(" ", startCol)
+	for i, bLine := range boxLines {
+		row := startRow + i
+		if row < len(lines) {
+			lines[row] = pad + bLine
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // renderHookBadges renders colored badges showing hook health per agent.

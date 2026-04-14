@@ -326,3 +326,41 @@ func LoadConfigFromDir(dir string) ([]MatchedRule, error) {
 	configPath := filepath.Join(dir, configFileName)
 	return loadConfigFile(configPath)
 }
+
+// LoadGlobalConfigFromDir reads config.json directly from the given directory.
+// Used for repo-keyed config dirs where config.json is at the root level
+// (not inside a .care-bear/ subdirectory).
+func LoadGlobalConfigFromDir(dir string) (*GlobalConfig, error) {
+	base, err := LoadGlobalDefaults()
+	if err != nil {
+		return nil, err
+	}
+	if dir == "" {
+		return base, nil
+	}
+	configPath := filepath.Join(dir, "config.json")
+	project, err := loadGlobalConfigFile(configPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return base, nil
+	}
+	// Merge
+	if project.SkillTTLMinutes > 0 {
+		base.SkillTTLMinutes = project.SkillTTLMinutes
+	}
+	if project.StateTTLHours > 0 {
+		base.StateTTLHours = project.StateTTLHours
+	}
+	if project.DefaultAgent != "" {
+		base.DefaultAgent = project.DefaultAgent
+	}
+	if len(project.SkillPaths) > 0 {
+		base.SkillPaths = project.SkillPaths
+	}
+	if len(project.IgnorePatterns) > 0 {
+		base.IgnorePatterns = project.IgnorePatterns
+	}
+	return base, nil
+}

@@ -190,7 +190,8 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 7: Load session state with skill TTL.
-	globalCfg, cfgErr := engine.LoadGlobalConfig(projectRoot)
+	// Load config from repo-keyed dir (config.json is directly in repoConfigDir, not in a .care-bear/ subdir)
+	globalCfg, cfgErr := engine.LoadGlobalConfigFromDir(repoConfigDir)
 	if cfgErr != nil {
 		logger.Warn("failed to load global config, using defaults", "error", cfgErr)
 		globalCfg = &engine.GlobalConfig{StateTTLHours: 24}

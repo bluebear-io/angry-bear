@@ -678,11 +678,23 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 		return b.String()
 	}
 
-	// Column header
-	header := fmt.Sprintf("  %-8s %-20s %-8s %s", "TOOL", "PATH", "AGENT", "SOURCE")
-	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
 	repoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F97316"))
 	machineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+
+	// Compute max path width from actual data (min 4 for "PATH" header).
+	pathW := 4
+	for _, ir := range rules {
+		if len(ir.rule.Path) > pathW {
+			pathW = len(ir.rule.Path)
+		}
+	}
+	if pathW > 30 {
+		pathW = 30
+	}
+
+	// Column header
+	header := fmt.Sprintf("  %-8s %-*s %-8s %s", "TOOL", pathW, "PATH", "AGENT", "SOURCE")
+	b.WriteString(d.styles.RuleHeader.Render(header) + "\n")
 
 	// Scrolling for rules list
 	visibleRules := height - 7
@@ -710,11 +722,11 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 				after = d.pathBuffer[d.pathCurPos+1:]
 			}
 			pathStr = before + d.styles.Selected.Render(cursor) + after
-			if len(pathStr) > 20 {
-				pathStr = pathStr[:20]
+			if len(pathStr) > pathW {
+				pathStr = pathStr[:pathW]
 			}
-		} else if len(pathStr) > 20 {
-			pathStr = pathStr[:17] + "..."
+		} else if len(pathStr) > pathW {
+			pathStr = pathStr[:pathW-3] + "..."
 		}
 
 		sourceStr := machineStyle.Render("machine")
@@ -723,11 +735,11 @@ func (d Dashboard) renderRulePanel(width, height int) string {
 		}
 
 		if focused && !d.editingPath {
-			line := fmt.Sprintf("  %-8s %-20s %-8s", toolStr, pathStr, agentStr)
+			line := fmt.Sprintf("  %-8s %-*s %-8s", toolStr, pathW, pathStr, agentStr)
 			b.WriteString(d.styles.Selected.Render(line) + " " + sourceStr + "\n")
 		} else {
 			tool := d.styles.Tool.Render(fmt.Sprintf("%-8s", toolStr))
-			path := d.styles.Path.Render(fmt.Sprintf("%-20s", pathStr))
+			path := d.styles.Path.Render(fmt.Sprintf("%-*s", pathW, pathStr))
 			agent := d.styles.Agent.Render(fmt.Sprintf("%-8s", agentStr))
 			b.WriteString("  " + tool + " " + path + " " + agent + " " + sourceStr + "\n")
 		}

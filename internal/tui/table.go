@@ -60,9 +60,12 @@ func RenderTable(
 		BorderColumn(false).
 		BorderHeader(false).
 		StyleFunc(func(row, col int) lipgloss.Style {
+			// Add right padding for column spacing.
+			pad := lipgloss.NewStyle().PaddingRight(1)
+
 			// Header row.
 			if row == table.HeaderRow {
-				return headerStyle
+				return headerStyle.PaddingRight(1)
 			}
 
 			// Map visible row index back to original data index.
@@ -70,15 +73,15 @@ func RenderTable(
 
 			// Focused row.
 			if dataIdx == focusRow {
-				return selectedStyle
+				return selectedStyle.PaddingRight(1)
 			}
 
 			// Per-cell style from the row data.
 			if dataIdx < len(rows) && col < len(rows[dataIdx].Cells) {
-				return rows[dataIdx].Cells[col].Style
+				return rows[dataIdx].Cells[col].Style.PaddingRight(1)
 			}
 
-			return lipgloss.NewStyle()
+			return pad
 		})
 
 	return t.Render()

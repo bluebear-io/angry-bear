@@ -33,6 +33,7 @@ func NewRootCommand() *cobra.Command {
 			if name == "hook" || name == "completion" || name == "version" || name == "enable" || name == "disable" || name == "doctor" {
 				return nil
 			}
+			InitAgentOptions()
 			result := EnsureHooksInstalled()
 			PrintHookSetup(result)
 			return nil

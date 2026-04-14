@@ -611,22 +611,13 @@ func (d Dashboard) renderSkillList(width, height int) string {
 			var tags []string
 			for _, a := range status.Agents {
 				if a == "unknown" {
-					continue // Skip old sessions without agent info
+					continue
 				}
-				switch a {
-				case "claude":
-					tags = append(tags, lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#1F2937")).
-						Background(lipgloss.Color("#A78BFA")).
-						Padding(0, 1).
-						Render("claude"))
-				case "cursor":
-					tags = append(tags, lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#1F2937")).
-						Background(lipgloss.Color("#22D3EE")).
-						Padding(0, 1).
-						Render("cursor"))
-				}
+				tags = append(tags, lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#1F2937")).
+					Background(lipgloss.Color("#A78BFA")).
+					Padding(0, 1).
+					Render(a))
 			}
 			if len(tags) > 0 {
 				loadedTag = " " + strings.Join(tags, " ")

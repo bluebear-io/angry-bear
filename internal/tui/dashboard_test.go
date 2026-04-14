@@ -326,6 +326,7 @@ func TestNextTool(t *testing.T) {
 }
 
 func TestNextAgent(t *testing.T) {
+	AgentOptions = []string{"claude", "cursor", "*"}
 	tests := []struct {
 		current string
 		want    string

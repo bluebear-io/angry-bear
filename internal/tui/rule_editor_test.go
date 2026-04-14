@@ -118,6 +118,7 @@ func TestBuildSections_PathsHaveWildcardItem(t *testing.T) {
 }
 
 func TestBuildSections_PreselectsExistingRules(t *testing.T) {
+	AgentOptions = []string{"claude", "cursor", "*"}
 	re := &RuleEditor{
 		skillName: "my-skill",
 		existingRules: []engine.Rule{

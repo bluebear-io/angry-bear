@@ -11,6 +11,7 @@ import (
 
 	"github.com/Blue-Bear-Security/care-bear/internal/adapter"
 	"github.com/Blue-Bear-Security/care-bear/internal/engine"
+	"github.com/Blue-Bear-Security/care-bear/internal/tui"
 )
 
 // ResolveConfigForProject determines the config file path for a given project
@@ -116,4 +117,12 @@ func CheckHookHealth() map[string]bool {
 		health[name] = strings.Contains(string(data), "care-bear hook")
 	}
 	return health
+}
+
+// InitAgentOptions sets tui.AgentOptions from the adapter registry.
+// Called at startup so the TUI knows about all registered agents.
+func InitAgentOptions() {
+	registry := adapter.NewRegistry()
+	names := registry.Names()
+	tui.AgentOptions = append(names, "*")
 }

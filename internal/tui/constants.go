@@ -23,4 +23,5 @@ var DefaultIgnoreSet = map[string]bool{
 var ToolOptions = []string{"Edit", "Write", "Bash", "Read", "Glob", "Grep", "Agent", "*"}
 
 // AgentOptions lists the available agent names for rule configuration.
-var AgentOptions = []string{"claude", "cursor", "*"}
+// Initialized by the CLI layer via SetAgentOptions() to avoid hardcoding agent names.
+var AgentOptions = []string{"*"}

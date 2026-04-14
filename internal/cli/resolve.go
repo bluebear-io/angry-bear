@@ -98,3 +98,22 @@ func PrintHookSetup(r HookSetupResult) {
 		fmt.Fprintln(os.Stderr)
 	}
 }
+
+// CheckHookHealth returns a health map for all registered adapters.
+// Uses the adapter registry — new adapters automatically get checked.
+func CheckHookHealth() map[string]bool {
+	health := make(map[string]bool)
+	registry := adapter.NewRegistry()
+	for _, name := range registry.Names() {
+		a, err := registry.Get(name)
+		if err != nil {
+			continue
+		}
+		data, err := os.ReadFile(a.GlobalConfigPath())
+		if err != nil {
+			continue
+		}
+		health[name] = strings.Contains(string(data), "care-bear hook")
+	}
+	return health
+}

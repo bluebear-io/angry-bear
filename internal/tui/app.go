@@ -89,21 +89,29 @@ type App struct {
 	skills          []scanner.Skill               // Discovered skills from the scanner
 	loadedSkills    map[string]*state.SkillStatus // Skills loaded in active sessions, with agent info
 	switchRequested bool
-	hookHealth      map[string]bool // agent name → hook installed                          // True when user pressed P to switch projects
-	view            viewState       // Current active view
-	dashboard       Dashboard       // Dashboard child model
-	ruleEditor      RuleEditor      // Rule editor child model
-	treePicker      TreePicker      // Tree picker child model
-	settings        Settings        // Settings editor child model
-	statusMsg       string          // Transient status message ("Saved!", "Error: ...")
-	width           int             // Terminal width
-	height          int             // Terminal height
-	styles          Styles          // Style definitions
+	hookHealth      map[string]bool        // agent name → hook installed
+	hookHealthFn    func() map[string]bool // provided by CLI layer (uses adapter registry)                          // True when user pressed P to switch projects
+	view            viewState              // Current active view
+	dashboard       Dashboard              // Dashboard child model
+	ruleEditor      RuleEditor             // Rule editor child model
+	treePicker      TreePicker             // Tree picker child model
+	settings        Settings               // Settings editor child model
+	statusMsg       string                 // Transient status message ("Saved!", "Error: ...")
+	width           int                    // Terminal width
+	height          int                    // Terminal height
+	styles          Styles                 // Style definitions
 }
 
 // SwitchRequested returns true if the user requested switching projects.
 func (a App) SwitchRequested() bool {
 	return a.switchRequested
+}
+
+// SetHookHealthFn sets the function used to check hook health.
+// Called by the CLI layer to inject adapter-registry-based health checks.
+func (a *App) SetHookHealthFn(fn func() map[string]bool) {
+	a.hookHealthFn = fn
+	a.hookHealth = fn()
 }
 
 // NewApp creates a new TUI application model with the given config, config path,
@@ -136,7 +144,7 @@ func NewApp(
 		stateDir = filepath.Join(filepath.Dir(configPath), "state")
 	}
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)
-	hookHealth := checkHookHealth()
+	// hookHealthFn is set after creation by the CLI layer
 	return App{
 		config:         cfg,
 		globalConfig:   globalCfg,
@@ -150,7 +158,7 @@ func NewApp(
 		view:           viewDashboard,
 		dashboard:      dashboard,
 		styles:         styles,
-		hookHealth:     hookHealth,
+		hookHealth:     make(map[string]bool),
 	}
 }
 
@@ -165,7 +173,9 @@ func (a *App) LoadEvents(projectRoot string) {
 func (a App) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	// Watch agent config files for hook health changes
-	cmds = append(cmds, watchAgentConfigs())
+	if a.hookHealthFn != nil {
+		cmds = append(cmds, watchAgentConfigs(a.hookHealthFn))
+	}
 	if a.stateDir != "" {
 		cmds = append(cmds, watchStateDir(a.stateDir))
 		// Watch global events.log for real-time updates
@@ -259,7 +269,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case hookHealthUpdatedMsg:
 		a.hookHealth = msg.health
-		return a, watchAgentConfigs()
+		return a, watchAgentConfigs(a.hookHealthFn)
 
 	case eventsUpdatedMsg:
 		// Events log changed — reload, auto-scroll to latest, restart watcher
@@ -559,29 +569,6 @@ func saveConfig(cfg engine.Config, path string) tea.Cmd {
 	}
 }
 
-// checkHookHealth checks if care-bear hooks are installed for each agent.
-func checkHookHealth() map[string]bool {
-	health := make(map[string]bool)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return health
-	}
-
-	// Claude: check ~/.claude/settings.json for "care-bear hook"
-	claudeData, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err == nil {
-		health["claude"] = strings.Contains(string(claudeData), "care-bear hook")
-	}
-
-	// Cursor: check ~/.cursor/hooks.json for "care-bear hook"
-	cursorData, err := os.ReadFile(filepath.Join(home, ".cursor", "hooks.json"))
-	if err == nil {
-		health["cursor"] = strings.Contains(string(cursorData), "care-bear hook")
-	}
-
-	return health
-}
-
 // renderHookBadges renders colored badges showing hook health per agent.
 func (a App) renderHookBadges() string {
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#1F2937")).Background(lipgloss.Color("#34D399")).Padding(0, 1)
@@ -589,7 +576,7 @@ func (a App) renderHookBadges() string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
 	var badges []string
-	for _, agent := range []string{"claude", "cursor"} {
+	for agent := range a.hookHealth {
 		healthy, exists := a.hookHealth[agent]
 		if !exists {
 			continue
@@ -609,7 +596,7 @@ func (a App) renderHookBadges() string {
 
 // watchAgentConfigs watches Claude and Cursor config files for changes
 // and sends hookHealthUpdatedMsg when they're modified.
-func watchAgentConfigs() tea.Cmd {
+func watchAgentConfigs(healthFn func() map[string]bool) tea.Cmd {
 	return func() tea.Msg {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -640,7 +627,7 @@ func watchAgentConfigs() tea.Cmd {
 					base := filepath.Base(event.Name)
 					if base == "settings.json" || base == "hooks.json" {
 						watcher.Close()
-						return hookHealthUpdatedMsg{health: checkHookHealth()}
+						return hookHealthUpdatedMsg{health: healthFn()}
 					}
 				}
 			case _, ok := <-watcher.Errors:

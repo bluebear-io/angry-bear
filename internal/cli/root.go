@@ -232,6 +232,7 @@ loadConfig:
 
 	// 8. Create TUI model and load event log.
 	model := tui.NewApp(cfg, configPath, projectRoot, skills, loadedSkills, globalCfg, repoConfigDir, availablePaths)
+	model.SetHookHealthFn(CheckHookHealth)
 	model.LoadEvents(projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	finalModel, err := p.Run()

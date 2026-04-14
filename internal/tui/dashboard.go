@@ -597,52 +597,24 @@ func (d Dashboard) renderSkillList(width, height int) string {
 			name = name[:width-11] + "..."
 		}
 
-		status := d.loadedSkills[skill.Name]
-		isLoaded := status != nil && len(status.Agents) > 0
-
 		countStr := d.styles.Description.Render(fmt.Sprintf(" (%d)", ruleCount))
 		if ruleCount > 0 {
 			countStr = d.styles.Success.Render(fmt.Sprintf(" (%d)", ruleCount))
 		}
 
-		// Loaded indicator: show agent names as colored tags
-		loadedTag := ""
-		if isLoaded {
-			var tags []string
-			for _, a := range status.Agents {
-				if a == "unknown" {
-					continue
-				}
-				tags = append(tags, lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#1F2937")).
-					Background(lipgloss.Color("#A78BFA")).
-					Padding(0, 1).
-					Render(a))
-			}
-			if len(tags) > 0 {
-				loadedTag = " " + strings.Join(tags, " ")
-			}
-		}
-
 		if focused {
 			suffix := fmt.Sprintf(" (%d)", ruleCount)
-			if loadedTag != "" {
-				suffix += " loaded"
-			}
+
 			line := d.styles.Selected.Render(" ▸ " + name + suffix)
 			b.WriteString(line + "\n")
 		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName
-			if loadedTag != "" {
-				nameStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
-			}
-			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + loadedTag + "\n")
+
+			b.WriteString(" ▸ " + nameStyle.Render(name) + countStr + "\n")
 		} else {
 			nameStyle := lipgloss.NewStyle()
-			if loadedTag != "" {
-				nameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
-			}
-			b.WriteString("   " + nameStyle.Render(name) + countStr + loadedTag + "\n")
+
+			b.WriteString("   " + nameStyle.Render(name) + countStr + "\n")
 		}
 	}
 

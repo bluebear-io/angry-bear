@@ -1073,9 +1073,8 @@ func TestRenderSkillList_WithLoadedSkills(t *testing.T) {
 		t.Error("expected SKILLS header")
 	}
 	// Loaded skill should have agent tag or loaded indicator
-	if !strings.Contains(output, "claude") {
-		t.Error("expected 'claude' tag for loaded skill")
-	}
+	_ = output
+	// Loaded skill badges removed — misleading without session context
 }
 
 func TestRenderSkillList_NoSkills(t *testing.T) {
@@ -1440,9 +1439,8 @@ func TestRenderSkillList_LoadedWithUnknownAgentSkipped(t *testing.T) {
 	output := d.renderSkillList(40, 20)
 	// The "git" skill is not focused, so it renders agent tags (not " loaded" text).
 	// "unknown" agents should be skipped in the rendered output.
-	if !strings.Contains(output, "claude") {
-		t.Error("expected 'claude' agent tag in loaded skill")
-	}
+	_ = output
+	// Loaded skill badges removed
 }
 
 func TestRenderSkillList_CursorOnNonFocusedPanel(t *testing.T) {
@@ -1465,9 +1463,8 @@ func TestRenderSkillList_CursorOnNonFocusedPanel(t *testing.T) {
 		t.Error("expected skill names rendered even when panel not focused")
 	}
 	// Loaded skill "cursor" tag should appear
-	if !strings.Contains(output, "cursor") {
-		t.Error("expected cursor agent tag on loaded skill")
-	}
+	_ = output
+	// Loaded skill badges removed
 }
 
 // --- renderEventLog with LOAD events ---

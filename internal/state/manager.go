@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -85,6 +86,9 @@ func (m *StateManager) RecordSkillWithAgent(sessionID, skillName, agent string) 
 
 	// Always update the timestamp for this skill (refreshes TTL on reload).
 	state.SkillTimestamps[skillName] = time.Now().UTC().Format(time.RFC3339)
+
+	// Clear expired flag on reload — skill is fresh again.
+	delete(state.ExpiredSkills, skillName)
 
 	// Check if skill is already recorded (idempotent for the list).
 	for _, s := range state.InvokedSkills {
@@ -203,6 +207,62 @@ func (m *StateManager) GetFreshSkills(sessionID string, ttl time.Duration) (map[
 		}
 	}
 	return result, nil
+}
+
+// MarkSkillExpired records that a skill's expiry has been logged for a session.
+// This prevents duplicate EXPIR events in the event log. The flag is cleared
+// when the skill is reloaded via RecordSkill.
+func (m *StateManager) MarkSkillExpired(sessionID, skillName string) error {
+	err := ValidateSessionID(sessionID)
+	if err != nil {
+		return err
+	}
+
+	lock := NewFileLock(m.lockPath(sessionID))
+	err = lock.TryLock()
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+
+	stPath := m.statePath(sessionID)
+	st, err := readStateFile(stPath)
+	if err != nil {
+		return fmt.Errorf("reading state for mark expired: %w", err)
+	}
+	if st == nil {
+		return nil
+	}
+
+	if st.ExpiredSkills == nil {
+		st.ExpiredSkills = make(map[string]bool)
+	}
+	st.ExpiredSkills[skillName] = true
+
+	return writeStateFile(stPath, st)
+}
+
+// IsSkillExpired checks if a skill has already been marked as expired for a session.
+// Returns false if the session or state file doesn't exist.
+func (m *StateManager) IsSkillExpired(sessionID, skillName string) bool {
+	err := ValidateSessionID(sessionID)
+	if err != nil {
+		return false
+	}
+
+	lock := NewFileLock(m.lockPath(sessionID))
+	err = lock.TryRLock()
+	if err != nil {
+		return false
+	}
+	defer lock.Unlock()
+
+	st, err := readStateFile(m.statePath(sessionID))
+	if err != nil || st == nil {
+		return false
+	}
+
+	return st.ExpiredSkills[skillName]
 }
 
 // Clean removes the state file and lock file for a specific session.

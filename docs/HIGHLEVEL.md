@@ -110,6 +110,16 @@ When checking loaded skills, `GetFreshSkills(sessionID, ttl)`:
 - Otherwise: compare each skill's timestamp against TTL, exclude expired ones
 - Skills without timestamps (old state files) treated as fresh (backward compat)
 
+**Expiry lifecycle**: LOAD → ALLOW (skill fresh) → EXPIR (TTL exceeded) → BLOCK (skill must be reloaded)
+
+**EXPIR deduplication**: When a skill expires, the hook logs a single EXPIR event and marks it in
+`expired_skills` on the session state. Subsequent hook calls skip re-logging the same expiry.
+Reloading the skill clears the expired flag via `RecordSkill()`.
+
+Session state fields for TTL:
+- `skill_timestamps` — maps skill name → RFC3339 load time (refreshed on reload)
+- `expired_skills` — maps skill name → `true` when expiry has been logged (prevents duplicate EXPIR events)
+
 ### Concurrency Safety
 
 Multiple agent sessions may run simultaneously:
@@ -130,13 +140,17 @@ Runs automatically during hook invocations (throttled to once per hour):
 `~/.care-bear/events.log` — append-only, one line per event:
 
 ```
-2024-01-01T10:30:00Z | Blue-Bear-Security/blueden | claude | abc12 | Edit | services/bff/handler.py | BLOCK | backend-python-standards
+2024-01-01T10:30:00Z | blueden | claude | abc12 | Edit       | services/bff/handler.py | BLOCK | backend-python-standards
+2024-01-01T10:30:00Z | blueden | claude | abc12 | SKILL-LOAD |                         | LOAD  | linear
+2024-01-01T10:31:05Z | blueden | claude | abc12 | SKILL-TTL  |                         | EXPIR | linear
 ```
 
 Columns: `timestamp | project | agent | session(5ch) | tool | path | action | skills`
 
+Actions: `BLOCK`, `ALLOW`, `LOAD` (skill loaded), `EXPIR` (skill TTL expired)
+
 ### Written by
-- Hook: on every BLOCK or ALLOW that matched rules, and every SKILL-LOAD
+- Hook: on every BLOCK or ALLOW that matched rules, every SKILL-LOAD, and once per expired skill per session (EXPIR)
 - Format: `logEvent()` and `logSkillEvent()` in `internal/cli/hook.go`
 
 ### Read by

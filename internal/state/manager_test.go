@@ -816,3 +816,72 @@ func TestGetFreshSkills_InvalidSessionID(t *testing.T) {
 		t.Error("expected error for path traversal session ID")
 	}
 }
+
+func TestMarkSkillExpired_PreventsRelogging(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+	sid := "test-expire-dedup"
+
+	err := mgr.RecordSkill(sid, "linear")
+	if err != nil {
+		t.Fatalf("RecordSkill: %v", err)
+	}
+
+	if mgr.IsSkillExpired(sid, "linear") {
+		t.Error("expected linear to NOT be expired before marking")
+	}
+
+	err = mgr.MarkSkillExpired(sid, "linear")
+	if err != nil {
+		t.Fatalf("MarkSkillExpired: %v", err)
+	}
+
+	if !mgr.IsSkillExpired(sid, "linear") {
+		t.Error("expected linear to be expired after marking")
+	}
+
+	// Idempotent — marking again is a no-op.
+	err = mgr.MarkSkillExpired(sid, "linear")
+	if err != nil {
+		t.Fatalf("MarkSkillExpired (second call): %v", err)
+	}
+}
+
+func TestIsSkillExpired_MissingSession(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+
+	if mgr.IsSkillExpired("nonexistent", "linear") {
+		t.Error("expected false for nonexistent session")
+	}
+}
+
+func TestMarkSkillExpired_ClearedOnReload(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mgr := NewStateManager(dir)
+	sid := "test-expire-reload"
+
+	err := mgr.RecordSkill(sid, "linear")
+	if err != nil {
+		t.Fatalf("RecordSkill: %v", err)
+	}
+	err = mgr.MarkSkillExpired(sid, "linear")
+	if err != nil {
+		t.Fatalf("MarkSkillExpired: %v", err)
+	}
+
+	// Reload clears the expired flag.
+	err = mgr.RecordSkill(sid, "linear")
+	if err != nil {
+		t.Fatalf("RecordSkill (reload): %v", err)
+	}
+	if mgr.IsSkillExpired(sid, "linear") {
+		t.Error("expected linear to NOT be expired after reload")
+	}
+}

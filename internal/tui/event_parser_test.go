@@ -118,6 +118,39 @@ func TestParseEventLine_SkillLoad(t *testing.T) {
 	}
 }
 
+func TestParseEventLine_SkillTTLExpire(t *testing.T) {
+	line := "2026-04-14T09:28:17Z | Blue-Bear-Security/blueden | claude | real- | SKILL-TTL | | EXPIR | linear"
+	ev, ok := parseEventLine(line, 3)
+
+	if !ok {
+		t.Fatal("expected parse to succeed for SKILL-TTL line")
+	}
+	if ev.Action != "EXPIR" {
+		t.Errorf("Action = %q, want %q", ev.Action, "EXPIR")
+	}
+	if !ev.IsExpire {
+		t.Error("IsExpire should be true for SKILL-TTL line")
+	}
+	if ev.IsBlock {
+		t.Error("IsBlock should be false for EXPIR line")
+	}
+	if ev.IsLoad {
+		t.Error("IsLoad should be false for EXPIR line")
+	}
+	if ev.Tool != "SKILL-TTL" {
+		t.Errorf("Tool = %q, want %q for EXPIR events", ev.Tool, "SKILL-TTL")
+	}
+	if ev.Path != "" {
+		t.Errorf("Path = %q, want empty for EXPIR events", ev.Path)
+	}
+	if ev.Skill != "linear" {
+		t.Errorf("Skill = %q, want %q", ev.Skill, "linear")
+	}
+	if ev.Time != "09:28" {
+		t.Errorf("Time = %q, want %q", ev.Time, "09:28")
+	}
+}
+
 func TestParseEventLine_TooFewColumns(t *testing.T) {
 	tests := []struct {
 		name string

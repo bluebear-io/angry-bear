@@ -9,4 +9,5 @@ type SessionState struct {
 	CreatedAt       string            `json:"created_at"`
 	InvokedSkills   []string          `json:"invoked_skills"`
 	SkillTimestamps map[string]string `json:"skill_timestamps,omitempty"`
+	ExpiredSkills   map[string]bool   `json:"expired_skills,omitempty"`
 }

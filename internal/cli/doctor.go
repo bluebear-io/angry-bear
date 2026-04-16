@@ -284,12 +284,14 @@ func checkAgentHook(projectRoot, agentName string, hookAdapter adapter.HookAdapt
 	}
 }
 
-// checkStateDirectory verifies that .angry-bear/state/ exists and is writable.
+// checkStateDirectory verifies that the state directory exists and is writable.
+// State lives at ~/.angry-bear/repos/{hash}/state/ for repos with a remote,
+// or {project}/.angry-bear/state/ as a fallback.
 // A missing state directory is not a failure because it is created lazily on
 // first hook invocation. It is reported as PASS with an informational note.
 func checkStateDirectory(projectRoot string) checkResult {
-	name := "State directory: .angry-bear/state/"
-	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+	stateDir := engine.ResolveStateDir(projectRoot)
+	name := "State directory: " + stateDir
 
 	info, err := os.Stat(stateDir)
 	if err != nil {

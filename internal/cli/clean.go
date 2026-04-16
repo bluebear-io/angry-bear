@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,7 +54,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 	projectRoot := engine.ResolveProjectRoot(cwd)
 
 	// Check if state directory exists.
-	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+	stateDir := engine.ResolveStateDir(projectRoot)
 	if _, err := os.Stat(stateDir); os.IsNotExist(err) {
 		fmt.Fprintln(out, "No state directory found. No sessions found.")
 		return nil

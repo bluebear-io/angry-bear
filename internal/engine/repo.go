@@ -7,6 +7,7 @@ package engine
 import (
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -97,6 +98,27 @@ func NormalizeRemoteURL(url string) string {
 func ShortHash(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", h[:4])
+}
+
+// RepoStateDir returns the path to a repo's session state directory.
+// State is stored at ~/.angry-bear/repos/{hash}-{slug}/state/
+// Returns empty string if repo identity cannot be resolved.
+func RepoStateDir(homeDir string, repo *RepoIdentity) string {
+	return filepath.Join(RepoConfigDir(homeDir, repo), "state")
+}
+
+// ResolveStateDir resolves the state directory for a project.
+// Uses ~/.angry-bear/repos/{hash}/state/ when the project has a git remote,
+// falls back to {projectRoot}/.angry-bear/state/ for repos without a remote.
+func ResolveStateDir(projectRoot string) string {
+	repo := ResolveRepoIdentity(projectRoot)
+	if repo != nil {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return RepoStateDir(home, repo)
+		}
+	}
+	return filepath.Join(projectRoot, ".angry-bear", "state")
 }
 
 // RepoConfigDir returns the path to a repo's angry-bear config directory.

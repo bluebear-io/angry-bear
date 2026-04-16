@@ -215,7 +215,7 @@ loadConfig:
 	}
 
 	// 6. Collect loaded skills from all active sessions.
-	loadedSkills := state.CollectLoadedSkills(filepath.Join(projectRoot, ".angry-bear", "state"))
+	loadedSkills := state.CollectLoadedSkills(engine.ResolveStateDir(projectRoot))
 
 	// 7. Build available local paths list for the TUI settings view.
 	var availablePaths []string

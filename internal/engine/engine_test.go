@@ -1460,6 +1460,98 @@ func TestLoadMergedConfig_BluebearBackwardCompat(t *testing.T) {
 	}
 }
 
+func TestMigrateBluebearRules(t *testing.T) {
+	t.Parallel()
+
+	t.Run("migrates rules from .bluebear to .angry-bear", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		bluebearDir := filepath.Join(dir, ".bluebear")
+		mustMkdirAll(t, bluebearDir)
+		content := `{"tools": [{"tool": "Edit", "path": "**/*.go", "skill": "go-skill", "agent": "claude"}]}`
+		if err := os.WriteFile(filepath.Join(bluebearDir, "skill_enforcement.json"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		migrated := MigrateBluebearRules(dir)
+		if !migrated {
+			t.Fatal("expected migration to occur")
+		}
+
+		angryPath := filepath.Join(dir, ".angry-bear", "skill_enforcement.json")
+		data, err := os.ReadFile(angryPath)
+		if err != nil {
+			t.Fatalf("failed to read migrated config: %v", err)
+		}
+		var cfg Config
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			t.Fatalf("failed to parse migrated config: %v", err)
+		}
+		if cfg.Version != 1 {
+			t.Errorf("expected version 1, got %d", cfg.Version)
+		}
+		if len(cfg.Tools) != 1 || cfg.Tools[0].Skill != "go-skill" {
+			t.Errorf("unexpected rules: %+v", cfg.Tools)
+		}
+		if _, err := os.Stat(filepath.Join(bluebearDir, "skill_enforcement.json")); err != nil {
+			t.Error("expected .bluebear config to still exist")
+		}
+	})
+
+	t.Run("skips when .angry-bear already exists", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		mustMkdirAll(t, filepath.Join(dir, ".bluebear"))
+		if err := os.WriteFile(filepath.Join(dir, ".bluebear", "skill_enforcement.json"), []byte(`{"tools":[]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		mustMkdirAll(t, filepath.Join(dir, ".angry-bear"))
+		if err := os.WriteFile(filepath.Join(dir, ".angry-bear", "skill_enforcement.json"), []byte(`{"version":1,"tools":[]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		if MigrateBluebearRules(dir) {
+			t.Error("expected no migration when .angry-bear already exists")
+		}
+	})
+
+	t.Run("skips when .bluebear does not exist", func(t *testing.T) {
+		t.Parallel()
+		if MigrateBluebearRules(t.TempDir()) {
+			t.Error("expected no migration without .bluebear")
+		}
+	})
+}
+
+func TestLoadMergedConfig_MigratesBluebearOnFirstLoad(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	mustMkdirAll(t, filepath.Join(dir, ".bluebear"))
+	content := `{"tools": [{"tool": "Write", "path": "**", "skill": "linear", "agent": "claude"},{"tool": "Edit", "path": "**/*.py", "skill": "python-standards", "agent": "*"}]}`
+	if err := os.WriteFile(filepath.Join(dir, ".bluebear", "skill_enforcement.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := LoadMergedConfig(dir, "")
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 rules after migration, got %d", len(rules))
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".angry-bear", "skill_enforcement.json")); err != nil {
+		t.Error("expected .angry-bear config to be created by migration")
+	}
+	for _, r := range rules {
+		if r.Source != SourceRepo {
+			t.Errorf("expected source %s, got %s", SourceRepo, r.Source)
+		}
+	}
+}
+
 func TestLoadConfigFromDir_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	rules, err := LoadConfigFromDir(dir)

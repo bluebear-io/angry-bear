@@ -387,13 +387,20 @@ func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) 
 	}
 	allRules = append(allRules, repoRules...)
 
-	// Also check .bluebear/ for backward compatibility (pre-rename config dir).
-	bluebearPath := filepath.Join(projectRoot, ".bluebear", configFileName)
-	bluebearRules, err := loadLegacyConfigFile(bluebearPath, SourceRepo)
-	if err != nil {
-		slog.Warn("failed to load .bluebear config", "path", bluebearPath, "error", err)
-	} else {
-		allRules = append(allRules, bluebearRules...)
+	// One-time migration: if .bluebear/skill_enforcement.json exists but
+	// .angry-bear/skill_enforcement.json does not, copy the rules over.
+	// The .bluebear file belongs to the BlueBear handler and stays untouched.
+	if len(repoRules) == 0 {
+		migrated := MigrateBluebearRules(projectRoot)
+		if migrated {
+			// Re-load the newly created .angry-bear config.
+			repoRules, err = loadConfigFileWithSource(repoPath, SourceRepo)
+			if err != nil {
+				slog.Warn("failed to load migrated config", "path", repoPath, "error", err)
+			} else {
+				allRules = append(allRules, repoRules...)
+			}
+		}
 	}
 
 	// Load machine-level rules, skipping any that already exist from repo sources.
@@ -454,4 +461,57 @@ func LoadGlobalConfigFromDir(dir string) (*GlobalConfig, error) {
 		base.IgnorePatterns = project.IgnorePatterns
 	}
 	return base, nil
+}
+
+// MigrateBluebearRules copies rules from .bluebear/skill_enforcement.json to
+// .angry-bear/skill_enforcement.json if the source exists and the target does not.
+// This is a one-time migration — the .bluebear file belongs to the BlueBear handler
+// product and is left untouched. Returns true if migration occurred.
+func MigrateBluebearRules(projectRoot string) bool {
+	bluebearPath := filepath.Join(projectRoot, ".bluebear", configFileName)
+	angryBearPath := filepath.Join(projectRoot, configDirName, configFileName)
+
+	// Skip if .bluebear config doesn't exist.
+	if _, err := os.Stat(bluebearPath); err != nil {
+		return false
+	}
+
+	// Skip if .angry-bear config already exists (already migrated).
+	if _, err := os.Stat(angryBearPath); err == nil {
+		return false
+	}
+
+	// Read the .bluebear config (may be version 0 or 1).
+	data, err := os.ReadFile(bluebearPath)
+	if err != nil {
+		slog.Warn("failed to read .bluebear config for migration", "path", bluebearPath, "error", err)
+		return false
+	}
+
+	var legacyCfg Config
+	if err := json.Unmarshal(data, &legacyCfg); err != nil {
+		slog.Warn("failed to parse .bluebear config for migration", "path", bluebearPath, "error", err)
+		return false
+	}
+
+	// Write as angry-bear format with version 1.
+	legacyCfg.Version = 1
+	outData, err := json.MarshalIndent(legacyCfg, "", "  ")
+	if err != nil {
+		slog.Warn("failed to marshal migrated config", "error", err)
+		return false
+	}
+
+	if err := os.MkdirAll(filepath.Join(projectRoot, configDirName), 0o755); err != nil {
+		slog.Warn("failed to create .angry-bear directory", "error", err)
+		return false
+	}
+
+	if err := os.WriteFile(angryBearPath, outData, 0o644); err != nil {
+		slog.Warn("failed to write migrated config", "path", angryBearPath, "error", err)
+		return false
+	}
+
+	slog.Info("migrated rules from .bluebear to .angry-bear", "count", len(legacyCfg.Tools))
+	return true
 }

@@ -128,12 +128,15 @@ func runHook(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Resolve state directory — always under ~/.angry-bear/repos/{hash}/state/.
+	stateBaseDir := engine.ResolveStateDir(projectRoot)
+
 	// Step 5: Check for skill invocation (short-circuit).
 	skillName, isSkill := hookAdapter.DetectSkillInvocation(hookInput)
 	if isSkill {
 		logger.Debug("skill invocation detected", "skill", skillName)
 		logSkillEvent(projectRoot, hookInput, skillName, "invoke")
-		stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+		stateDir := stateBaseDir
 		if err := os.MkdirAll(stateDir, 0o755); err != nil {
 			logger.Warn("failed to create state directory", "error", err)
 			// Fail open: allow the skill invocation even if we can't record it.
@@ -153,7 +156,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 		if skillName := detectSkillFromPath(hookInput.FilePath); skillName != "" {
 			logger.Debug("skill file read detected", "skill", skillName, "path", hookInput.FilePath)
 			logSkillEvent(projectRoot, hookInput, skillName, "read")
-			stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+			stateDir := stateBaseDir
 			if err := os.MkdirAll(stateDir, 0o755); err == nil {
 				mgr := state.NewStateManager(stateDir)
 				if err := mgr.RecordSkillWithAgent(hookInput.SessionID, skillName, hookInput.Agent); err != nil {
@@ -186,7 +189,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 	}
 	skillTTL := time.Duration(globalCfg.SkillTTLMinutes) * time.Minute
 
-	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+	stateDir := stateBaseDir
 	var invokedSkills map[string]bool
 	if _, err := os.Stat(stateDir); err == nil {
 		mgr := state.NewStateManager(stateDir)

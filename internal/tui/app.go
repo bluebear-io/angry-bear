@@ -142,7 +142,9 @@ func NewApp(
 		}
 	}
 	stateDir := ""
-	if configPath != "" {
+	if repoConfigDir != "" {
+		stateDir = filepath.Join(repoConfigDir, "state")
+	} else if configPath != "" {
 		stateDir = filepath.Join(filepath.Dir(configPath), "state")
 	}
 	dashboard := NewDashboard(skills, cfg, styles, loadedSkills)

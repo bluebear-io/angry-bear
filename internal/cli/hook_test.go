@@ -44,6 +44,27 @@ func writeEnforcementConfig(t *testing.T, dir string, rules []engine.Rule) {
 	}
 }
 
+// writeStateFileInDir writes a {sessionID}.json file directly into the given
+// state directory. Used when the state dir is pre-resolved (e.g. repo-keyed).
+func writeStateFileInDir(t *testing.T, stateDir string, sessionID string, skills []string) {
+	t.Helper()
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("failed to create state directory: %v", err)
+	}
+	ss := state.SessionState{
+		SessionID:     sessionID,
+		CreatedAt:     "2024-01-01T00:00:00Z",
+		InvokedSkills: skills,
+	}
+	data, err := json.Marshal(ss)
+	if err != nil {
+		t.Fatalf("failed to marshal state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, sessionID+".json"), data, 0o600); err != nil {
+		t.Fatalf("failed to write state: %v", err)
+	}
+}
+
 // writeStateFile writes a .angry-bear/state/{sessionID}.json file with the
 // given invoked skills into the specified directory.
 func writeStateFile(t *testing.T, dir string, sessionID string, skills []string) {
@@ -1791,8 +1812,12 @@ func TestHook_GitRepoProjectSkillInvocation(t *testing.T) {
 		t.Fatalf("hook command returned error: %v", execErr)
 	}
 
-	// Verify skill was recorded.
-	stateDir := filepath.Join(projectDir, ".angry-bear", "state")
+	// Verify skill was recorded in ~/.angry-bear/repos/{hash}/state/.
+	repo := engine.ResolveRepoIdentity(projectDir)
+	if repo == nil {
+		t.Fatal("expected repo identity to resolve")
+	}
+	stateDir := engine.RepoStateDir(dir, repo)
 	mgr := state.NewStateManager(stateDir)
 	skills, err := mgr.GetInvokedSkills("sess-git-skill")
 	if err != nil {
@@ -1821,7 +1846,13 @@ func TestHook_GitRepoRepoConfigDirFallback(t *testing.T) {
 	writeEnforcementConfig(t, projectDir, []engine.Rule{
 		{Tool: "Edit", Path: "**/*.go", Skill: "go-standards", Agent: "*"},
 	})
-	writeStateFile(t, projectDir, "sess-fallback", []string{"go-standards"})
+	// Write state to repo-keyed dir (where the hook reads from).
+	repo := engine.ResolveRepoIdentity(projectDir)
+	if repo == nil {
+		t.Fatal("expected repo identity to resolve")
+	}
+	repoStateDir := engine.RepoStateDir(dir, repo)
+	writeStateFileInDir(t, repoStateDir, "sess-fallback", []string{"go-standards"})
 
 	stdin := claudeStdin("sess-fallback", "Edit", filepath.Join(projectDir, "main.go"), projectDir)
 

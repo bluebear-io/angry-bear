@@ -53,8 +53,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Load and display enforcement rules.
 	printEnforcementRules(out, projectRoot)
 
-	// List active sessions from .angry-bear/state/.
-	stateDir := filepath.Join(projectRoot, ".angry-bear", "state")
+	// List active sessions from ~/.angry-bear/repos/{hash}/state/.
+	stateDir := engine.ResolveStateDir(projectRoot)
 	printActiveSessions(out, stateDir, sessionFilter)
 
 	// Discover and display skills from configured paths.

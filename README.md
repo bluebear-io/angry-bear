@@ -5,7 +5,7 @@
 </p>
 
 [![CI](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)](https://github.com/Blue-Bear-Security/angry-bear)
+[![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)](https://github.com/Blue-Bear-Security/angry-bear)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 **Enforce skill-loading requirements for AI coding agents.**
@@ -63,20 +63,24 @@ angry-bear add <skill> [flags]    # One-liner — cartesian product of tools × 
 | `--tool` | `*` | Comma-separated: `Edit`, `Write`, `Bash`, `Read`, `Glob`, `Grep`, `Agent`, `*` |
 | `--path` | `**` | Comma-separated glob patterns |
 | `--agent` | `*` | `claude`, `cursor`, `*` (all) |
+| `--repo` | `false` | Save to `{project}/.angry-bear/` (shared via git) instead of machine config |
 
 ```bash
 angry-bear add sst-architect --tool Edit,Write --path "stacks/**"
 angry-bear add linear                                            # all tools, all paths
 angry-bear add testing --path "**/*_test.go,**/test_*.py"        # multiple patterns
+angry-bear add go-standards --tool Edit --path "**/*.go" --repo  # shared with team via git
 ```
 
 ### `angry-bear rules` — List rules
 
 ```bash
-angry-bear rules                    # table format
+angry-bear rules                    # table format with [repo]/[machine] source labels
 angry-bear rules --skill linear     # filter by skill
 angry-bear rules --json             # JSON for scripting
 ```
+
+Rules from both repo-level (`{project}/.angry-bear/`) and machine-level (`~/.angry-bear/repos/`) sources are merged and displayed with their origin.
 
 ### `angry-bear rm` — Remove rules
 
@@ -84,6 +88,7 @@ angry-bear rules --json             # JSON for scripting
 angry-bear rm <skill>                           # all rules for a skill
 angry-bear rm go-standards --tool Bash           # specific matches only
 angry-bear rm testing --path "**/*_test.go"
+angry-bear rm go-standards --repo               # remove from repo config (shared via git)
 ```
 
 ### `angry-bear enable` / `disable` — Hook management
@@ -115,7 +120,7 @@ angry-bear clean --session <id>     # remove specific session
 
 ```bash
 angry-bear version
-# angry-bear version v0.6.0 (commit: c9e9b85, built: 2026-04-13T16:29:05Z)
+# angry-bear version v0.9.0 (commit: 7b7af12, built: 2026-04-16T10:38:11Z)
 ```
 
 ### `angry-bear completion` — Shell completions
@@ -210,19 +215,31 @@ angry-bear hook
     +-- Blocked → "Load skill by running: /skill-name"
 ```
 
+### Rule Sources: Repo vs Machine
+
+Rules can live in two places:
+
+| Source | Location | Shared? |
+|--------|----------|---------|
+| **Repo** | `{project}/.angry-bear/skill_enforcement.json` | Yes — committed to git, shared with team |
+| **Machine** | `~/.angry-bear/repos/{hash}/skill_enforcement.json` | No — local to this machine |
+
+Use `--repo` with `add` and `rm` to manage repo-level rules. Repo rules take precedence when both sources define the same rule.
+
 ### Data Storage
 
-All data under `~/.angry-bear/`. Nothing in project directories.
-
 ```
-~/.angry-bear/
-  config.json                      # global defaults
-  events.log                       # enforcement log
-  repos/{hash}-{slug}/             # per-repo
-    skill_enforcement.json         #   rules
-    config.json                    #   config overrides
-    state/{session}.json           #   loaded skills
-    preferences.json               #   preferred checkout
+{project}/.angry-bear/                # repo-level (committed to git)
+  skill_enforcement.json              #   shared enforcement rules
+
+~/.angry-bear/                        # machine-level (local only)
+  config.json                         # global defaults
+  events.log                          # enforcement log
+  repos/{hash}-{slug}/                # per-repo
+    skill_enforcement.json            #   machine-only rules
+    config.json                       #   config overrides
+    state/{session}.json              #   loaded skills
+    preferences.json                  #   preferred checkout
 ```
 
 See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture.

@@ -30,3 +30,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Mirror assets to public tap repo
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Create release on tap repo and upload all archives + checksums
+          gh release create "$TAG" \
+            --repo Blue-Bear-Security/homebrew-angry-bear \
+            --title "angry-bear ${TAG}" \
+            --notes "Release binaries for angry-bear ${TAG}" \
+            dist/*.tar.gz dist/*.zip dist/checksums.txt

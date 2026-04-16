@@ -66,6 +66,7 @@ brews:
       name: homebrew-angry-bear
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
+    url_template: "https://github.com/Blue-Bear-Security/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     homepage: https://github.com/Blue-Bear-Security/angry-bear
     description: "Enforce skill-loading requirements for AI coding agents"
     license: "Apache-2.0"

@@ -176,6 +176,45 @@ func loadConfigFileWithSource(path, source string) ([]MatchedRule, error) {
 	return rules, nil
 }
 
+// loadLegacyConfigFile reads a config file from a pre-rename directory (e.g. .bluebear/).
+// It accepts version 0 (missing version field) as valid, treating it as version 1.
+// This allows configs created before the version field was introduced to still load.
+func loadLegacyConfigFile(path, source string) ([]MatchedRule, error) {
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("malformed JSON in %s: %w", path, err)
+	}
+
+	// Accept version 0 (missing) or 1 for legacy configs.
+	if cfg.Version != 0 && cfg.Version != 1 {
+		return nil, fmt.Errorf("unsupported config version %d in %s", cfg.Version, path)
+	}
+
+	rules := make([]MatchedRule, 0, len(cfg.Tools))
+	for _, rule := range cfg.Tools {
+		rule.Path = NormalizeGlob(rule.Path)
+		rules = append(rules, MatchedRule{
+			Rule:   rule,
+			Source: source,
+		})
+	}
+
+	return rules, nil
+}
+
 // RepoPreferences holds per-repo user preferences such as the preferred
 // local checkout path. Stored at ~/.angry-bear/repos/{hash}-{slug}/preferences.json.
 type RepoPreferences struct {
@@ -348,9 +387,9 @@ func LoadMergedConfig(projectRoot, repoConfigDir string) ([]MatchedRule, error) 
 	}
 	allRules = append(allRules, repoRules...)
 
-	// Also check .bluebear/ for backward compatibility
+	// Also check .bluebear/ for backward compatibility (pre-rename config dir).
 	bluebearPath := filepath.Join(projectRoot, ".bluebear", configFileName)
-	bluebearRules, err := loadConfigFileWithSource(bluebearPath, SourceRepo)
+	bluebearRules, err := loadLegacyConfigFile(bluebearPath, SourceRepo)
 	if err != nil {
 		slog.Warn("failed to load .bluebear config", "path", bluebearPath, "error", err)
 	} else {

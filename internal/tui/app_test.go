@@ -105,7 +105,7 @@ func TestDashboardSave(t *testing.T) {
 		t.Fatal("expected command from 'm'")
 	}
 	// Execute the saveToMachineMsg
-	model, cmd = app.Update(cmd())
+	_, cmd = app.Update(cmd())
 	if cmd == nil {
 		t.Fatal("expected save command")
 	}

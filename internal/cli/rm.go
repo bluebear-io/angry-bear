@@ -33,6 +33,7 @@ Examples:
 
 	cmd.Flags().String("tool", "", "Only remove rules matching this tool (comma-separated)")
 	cmd.Flags().String("path", "", "Only remove rules matching this path (comma-separated)")
+	cmd.Flags().Bool("repo", false, "Remove from repo .angry-bear/ directory (shared via git) instead of machine config")
 
 	// Register completions for flag values.
 	_ = cmd.RegisterFlagCompletionFunc("tool", completeToolNames)

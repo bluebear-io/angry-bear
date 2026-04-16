@@ -42,9 +42,9 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 			continue
 		}
 
-		// Path match: empty or "*" matches all files. If filePath is empty
+		// Path match: empty, "*", or "**" matches all files. If filePath is empty
 		// and rule has a non-wildcard path, skip (no file to match against).
-		if rule.Path != "" && rule.Path != "*" {
+		if rule.Path != "" && rule.Path != "*" && rule.Path != "**" {
 			if filePath == "" {
 				// Rule requires a specific path but no file path provided -- skip.
 				continue
@@ -118,7 +118,7 @@ func MatchedSkills(rules []MatchedRule, toolName, filePath, agent string) []stri
 		if rule.Agent != "" && rule.Agent != "*" && rule.Agent != agent {
 			continue
 		}
-		if rule.Path != "" && rule.Path != "*" {
+		if rule.Path != "" && rule.Path != "*" && rule.Path != "**" {
 			if filePath == "" {
 				continue
 			}

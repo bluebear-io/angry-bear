@@ -85,6 +85,31 @@ func TestStatus_DisplaysConfiguredRules(t *testing.T) {
 	}
 }
 
+// TestStatus_DisplaysRepoAndMachineRules verifies that status shows rules from
+// both repo-level (.angry-bear/ in project) and machine-level config, matching
+// the merged view used by the hook and TUI.
+func TestStatus_DisplaysRepoAndMachineRules(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write repo-level config (in project directory).
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Edit", Path: "**/*.go", Skill: "go-standards", Agent: "*"},
+	})
+
+	output, err := runStatusInDir(t, dir)
+	if err != nil {
+		t.Fatalf("status command returned error: %v", err)
+	}
+
+	// Repo rules should appear in status output.
+	if !strings.Contains(output, "Skill: go-standards") {
+		t.Errorf("expected repo-level rule in status output, got: %s", output)
+	}
+	if !strings.Contains(output, "repo") {
+		t.Errorf("expected 'repo' source label in status output, got: %s", output)
+	}
+}
+
 // TestStatus_DisplaysActiveSessions verifies that status shows active sessions
 // with their invoked skills.
 func TestStatus_DisplaysActiveSessions(t *testing.T) {

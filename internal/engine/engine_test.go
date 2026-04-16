@@ -807,6 +807,18 @@ func TestShouldBlock(t *testing.T) {
 			wantBlocked:   false,
 		},
 		{
+			name: "doublestar path matches when filePath is empty",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Path: "**", Skill: "bash-skill"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			filePath:      "",
+			agent:         "",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"bash-skill"},
+		},
+		{
 			name: "deduplicates matched rules by skill name",
 			rules: []MatchedRule{
 				{Rule: Rule{Tool: "Edit", Skill: "same-skill"}, Source: "src1"},
@@ -1270,10 +1282,22 @@ func TestMatchedSkills_EmptyFilePath(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Path: "**/*.go", Skill: "go-skill", Agent: "*"}, Source: "test"},
 	}
 
-	// When filePath is empty but rule requires a path, it should not match.
+	// When filePath is empty but rule requires a specific path, it should not match.
 	matched := MatchedSkills(rules, "Edit", "", "*")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches with empty filePath, got %v", matched)
+	}
+}
+
+func TestMatchedSkills_DoublestarMatchesEmptyFilePath(t *testing.T) {
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Bash", Path: "**", Skill: "bash-skill", Agent: "*"}, Source: "test"},
+	}
+
+	// ** means "all files" so it should match even when filePath is empty (e.g. Bash tool).
+	matched := MatchedSkills(rules, "Bash", "", "*")
+	if len(matched) != 1 || matched[0] != "bash-skill" {
+		t.Errorf("expected [bash-skill] with ** path and empty filePath, got %v", matched)
 	}
 }
 
@@ -1331,6 +1355,108 @@ func TestLoadConfigFromDir_LoadsRules(t *testing.T) {
 	}
 	if rules[0].Rule.Skill != "go-coding" {
 		t.Errorf("expected skill go-coding, got %s", rules[0].Rule.Skill)
+	}
+}
+
+func TestLoadLegacyConfigFile_VersionZero(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	// Legacy config without version field (version defaults to 0).
+	content := `{"tools": [{"tool": "Edit", "path": "**/*.go", "skill": "go-skill", "agent": "claude"}]}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := loadLegacyConfigFile(configPath, SourceRepo)
+	if err != nil {
+		t.Fatalf("expected no error for version 0 legacy config, got: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+	if rules[0].Rule.Skill != "go-skill" {
+		t.Errorf("expected skill go-skill, got %s", rules[0].Rule.Skill)
+	}
+	if rules[0].Source != SourceRepo {
+		t.Errorf("expected source %s, got %s", SourceRepo, rules[0].Source)
+	}
+}
+
+func TestLoadLegacyConfigFile_VersionOne(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	content := `{"version": 1, "tools": [{"tool": "Write", "path": "**", "skill": "test-skill", "agent": "*"}]}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := loadLegacyConfigFile(configPath, SourceMachine)
+	if err != nil {
+		t.Fatalf("expected no error for version 1 legacy config, got: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+}
+
+func TestLoadLegacyConfigFile_UnsupportedVersion(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "skill_enforcement.json")
+
+	content := `{"version": 99, "tools": []}`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadLegacyConfigFile(configPath, SourceRepo)
+	if err == nil {
+		t.Fatal("expected error for version 99, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported config version") {
+		t.Errorf("error = %q, want to contain 'unsupported config version'", err.Error())
+	}
+}
+
+func TestLoadLegacyConfigFile_Missing(t *testing.T) {
+	t.Parallel()
+	rules, err := loadLegacyConfigFile("/nonexistent/path/config.json", SourceRepo)
+	if err != nil {
+		t.Fatalf("expected nil error for missing file, got: %v", err)
+	}
+	if rules != nil {
+		t.Errorf("expected nil rules for missing file, got %d", len(rules))
+	}
+}
+
+func TestLoadMergedConfig_BluebearBackwardCompat(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Create .bluebear config WITHOUT version field (legacy format).
+	bluebearDir := filepath.Join(dir, ".bluebear")
+	mustMkdirAll(t, bluebearDir)
+	content := `{"tools": [{"tool": "Edit", "path": "**/*.py", "skill": "python-standards", "agent": "claude"}]}`
+	if err := os.WriteFile(filepath.Join(bluebearDir, "skill_enforcement.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rules, err := LoadMergedConfig(dir, "")
+	if err != nil {
+		t.Fatalf("LoadMergedConfig failed: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule from .bluebear, got %d", len(rules))
+	}
+	if rules[0].Rule.Skill != "python-standards" {
+		t.Errorf("expected skill python-standards, got %s", rules[0].Rule.Skill)
+	}
+	if rules[0].Source != SourceRepo {
+		t.Errorf("expected source %s, got %s", SourceRepo, rules[0].Source)
 	}
 }
 

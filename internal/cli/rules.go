@@ -110,31 +110,6 @@ func printRulesJSON(out io.Writer, rules []engine.Rule, configPath string) error
 	return nil
 }
 
-// printRulesTable outputs rules in a human-readable table format.
-func printRulesTable(out io.Writer, rules []engine.Rule, configPath, skillFilter string) error {
-	if len(rules) == 0 {
-		if skillFilter != "" {
-			fmt.Fprintf(out, "No rules found for skill %q\n", skillFilter)
-		} else {
-			fmt.Fprintln(out, "No enforcement rules configured.")
-		}
-		fmt.Fprintf(out, "Config: %s\n", configPath)
-		return nil
-	}
-
-	fmt.Fprintln(out, "Enforcement Rules")
-	fmt.Fprintln(out, "=================")
-
-	for i, r := range rules {
-		fmt.Fprintf(out, "  [%d] Skill: %s | Tool: %s | Path: %s | Agent: %s\n",
-			i+1, r.Skill, r.Tool, r.Path, r.Agent)
-	}
-
-	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%d rules from %s\n", len(rules), configPath)
-	return nil
-}
-
 // printMatchedRulesTable outputs rules with source indicators (repo/machine).
 func printMatchedRulesTable(out io.Writer, rules []engine.MatchedRule, configPath, skillFilter string) error {
 	if len(rules) == 0 {

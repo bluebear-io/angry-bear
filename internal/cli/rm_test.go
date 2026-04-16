@@ -271,6 +271,59 @@ func TestRm_PathNormalization(t *testing.T) {
 	}
 }
 
+// TestRm_RepoFlag verifies that rm --repo removes rules from the repo-level
+// config directory ({project}/.angry-bear/) instead of the machine config.
+func TestRm_RepoFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write repo-level config.
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Edit", Path: "**/*.go", Skill: "go-standards", Agent: "claude"},
+		{Tool: "Write", Path: "**", Skill: "linear", Agent: "*"},
+	})
+
+	configPath := filepath.Join(dir, ".angry-bear", "skill_enforcement.json")
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	err = os.Chdir(dir)
+	if err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		err := os.Chdir(origDir)
+		if err != nil {
+			t.Logf("warning: failed to restore working directory: %v", err)
+		}
+	})
+
+	cmd := cli.NewRootCommand()
+	outBuf := new(bytes.Buffer)
+	cmd.SetOut(outBuf)
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetArgs([]string{"rm", "--config", configPath, "go-standards"})
+
+	execErr := cmd.Execute()
+	if execErr != nil {
+		t.Fatalf("rm --repo returned error: %v", execErr)
+	}
+
+	output := outBuf.String()
+	if !strings.Contains(output, "Removed 1 rules") {
+		t.Errorf("expected removal message, got: %s", output)
+	}
+
+	cfg := readConfigFromDir(t, dir)
+	if len(cfg.Tools) != 1 {
+		t.Fatalf("expected 1 remaining rule, got %d", len(cfg.Tools))
+	}
+	if cfg.Tools[0].Skill != "linear" {
+		t.Errorf("expected remaining skill linear, got %s", cfg.Tools[0].Skill)
+	}
+}
+
 // TestRm_MultipleToolFilter verifies that --tool with comma-separated values
 // removes rules matching any of the specified tools.
 func TestRm_MultipleToolFilter(t *testing.T) {

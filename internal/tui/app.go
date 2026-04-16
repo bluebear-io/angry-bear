@@ -615,18 +615,6 @@ func savePreferredPath(repoConfigDir string, path string) tea.Cmd {
 	}
 }
 
-// removeMachineConfig deletes the machine-level skill_enforcement.json so
-// repo rules are the single source of truth. Silently ignores missing files.
-func removeMachineConfig(path string) tea.Cmd {
-	return func() tea.Msg {
-		err := os.Remove(path)
-		if err != nil && !os.IsNotExist(err) {
-			return saveResultMsg{err: fmt.Errorf("removing machine config: %w", err)}
-		}
-		return nil
-	}
-}
-
 // saveConfig writes the current config to disk as indented JSON.
 // Deduplicates rules before writing to prevent duplicate entries.
 func saveConfig(cfg engine.Config, path string) tea.Cmd {

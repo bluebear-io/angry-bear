@@ -622,7 +622,7 @@ func (d Dashboard) renderSkillList(width, height int) string {
 		if focused {
 			suffix := fmt.Sprintf(" (%d)", ruleCount)
 
-			line := d.styles.Selected.Render(" ▸ " + name + suffix) + repoTag
+			line := d.styles.Selected.Render(" ▸ "+name+suffix) + repoTag
 			b.WriteString(line + "\n")
 		} else if i == d.skillScroll.Cursor {
 			nameStyle := d.styles.SkillName

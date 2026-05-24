@@ -1,4 +1,4 @@
-# init.tape -- Demonstrates care-bare init
+# init.tape -- Demonstrates angry-bear init
 Output docs/assets/init.gif
 Set FontSize 14
 Set Width 900
@@ -13,11 +13,11 @@ Type "mkdir .claude"
 Enter
 Sleep 500ms
 
-Type "care-bare init"
+Type "angry-bear init"
 Enter
 Sleep 3s
 
-Type "cat .care-bare/skill_enforcement.json"
+Type "cat .angry-bear/skill_enforcement.json"
 Enter
 Sleep 2s
 

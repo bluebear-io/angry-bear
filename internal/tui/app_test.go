@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -932,7 +933,7 @@ func TestApp_EventsUpdatedMsg(t *testing.T) {
 	eventsDir := tmpHome + "/.angry-bear"
 	_ = os.MkdirAll(eventsDir, 0o755)
 	_ = os.WriteFile(eventsDir+"/events.log",
-		[]byte("2026-04-13T00:00:00Z | proj | claude | abc12 | Edit | test.go | BLOCK | git\n"),
+		[]byte(time.Now().UTC().Format(time.RFC3339)+" | proj | claude | abc12 | Edit | test.go | BLOCK | git\n"),
 		0o644)
 
 	app := NewApp(testConfig(), nil, "/tmp/test.json", "/tmp", testSkills(), nil, nil, "", nil)

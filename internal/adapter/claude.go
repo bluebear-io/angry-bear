@@ -13,11 +13,11 @@ import (
 	"strings"
 )
 
-// resolveCareBareCommand returns the path to the angry-bear binary for use
+// resolveAngryBearCommand returns the path to the angry-bear binary for use
 // in hook configurations. Uses binaryPath if non-empty, otherwise resolves the
 // absolute path to the running binary. This ensures hooks work regardless
 // of whether angry-bear is on PATH.
-func resolveCareBareCommand(binaryPath string) string {
+func resolveAngryBearCommand(binaryPath string) string {
 	if binaryPath != "" {
 		return binaryPath
 	}
@@ -164,13 +164,13 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 	}
 
 	// Check if angry-bear hook already exists (idempotency check)
-	if careBareHookExists(preToolUse) {
+	if angryBearHookExists(preToolUse) {
 		return nil
 	}
 
 	// Append the angry-bear hook entry using the absolute binary path
-	binPath := resolveCareBareCommand(a.BinaryPath)
-	careBareEntry := map[string]any{
+	binPath := resolveAngryBearCommand(a.BinaryPath)
+	angryBearEntry := map[string]any{
 		"matcher": "*",
 		"hooks": []any{
 			map[string]any{
@@ -179,7 +179,7 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 			},
 		},
 	}
-	preToolUse = append(preToolUse, careBareEntry)
+	preToolUse = append(preToolUse, angryBearEntry)
 	hooks["PreToolUse"] = preToolUse
 
 	// Write back with 2-space indent for readability
@@ -197,9 +197,9 @@ func (a *ClaudeAdapter) InstallHook(projectDir string) error {
 	return nil
 }
 
-// careBareHookExists checks if any hook entry in the PreToolUse array already
+// angryBearHookExists checks if any hook entry in the PreToolUse array already
 // contains the angry-bear hook command. Used for idempotency.
-func careBareHookExists(preToolUse []any) bool {
+func angryBearHookExists(preToolUse []any) bool {
 	for _, entry := range preToolUse {
 		entryMap, ok := entry.(map[string]any)
 		if !ok {
@@ -263,18 +263,18 @@ func (a *ClaudeAdapter) UninstallHook() error {
 			filtered = append(filtered, entry)
 			continue
 		}
-		hasCareBare := false
+		hasAngryBear := false
 		for _, hook := range hooksList {
 			hookMap, ok := hook.(map[string]any)
 			if !ok {
 				continue
 			}
 			if cmd, ok := hookMap["command"].(string); ok && strings.Contains(cmd, "angry-bear hook") {
-				hasCareBare = true
+				hasAngryBear = true
 				break
 			}
 		}
-		if !hasCareBare {
+		if !hasAngryBear {
 			filtered = append(filtered, entry)
 		}
 	}

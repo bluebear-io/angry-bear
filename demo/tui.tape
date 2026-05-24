@@ -1,11 +1,11 @@
-# tui.tape -- Demonstrates the care-bare TUI dashboard
+# tui.tape -- Demonstrates the angry-bear TUI dashboard
 Output docs/assets/tui.gif
 Set FontSize 14
 Set Width 1000
 Set Height 600
 Set Theme "Catppuccin Mocha"
 
-Type "care-bare"
+Type "angry-bear"
 Enter
 Sleep 2s
 

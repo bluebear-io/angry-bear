@@ -52,8 +52,8 @@ func setupHealthyProject(t *testing.T, dir string) {
 	t.Helper()
 
 	// Create .angry-bear/ with valid skill_enforcement.json.
-	careBareDir := filepath.Join(dir, ".angry-bear")
-	err := os.MkdirAll(careBareDir, 0o755)
+	angryBearDir := filepath.Join(dir, ".angry-bear")
+	err := os.MkdirAll(angryBearDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create .angry-bear directory: %v", err)
 	}
@@ -67,7 +67,7 @@ func setupHealthyProject(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatalf("failed to marshal enforcement config: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(careBareDir, "skill_enforcement.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(angryBearDir, "skill_enforcement.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write enforcement config: %v", err)
 	}
@@ -82,13 +82,13 @@ func setupHealthyProject(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatalf("failed to marshal global config: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(careBareDir, "config.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(angryBearDir, "config.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write global config: %v", err)
 	}
 
 	// Create .angry-bear/state/ directory.
-	err = os.MkdirAll(filepath.Join(careBareDir, "state"), 0o755)
+	err = os.MkdirAll(filepath.Join(angryBearDir, "state"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create state directory: %v", err)
 	}

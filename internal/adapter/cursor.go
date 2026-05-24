@@ -194,7 +194,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 	}
 
 	// Check if angry-bear hook already exists in any hook type (idempotency check)
-	if cursorCareBareHookExists(hooks) {
+	if cursorAngryBearHookExists(hooks) {
 		return nil
 	}
 
@@ -206,7 +206,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 
 	// Cursor requires relative binary name (not absolute path) for hook execution.
 	binPath := "angry-bear"
-	careBareEntry := map[string]any{
+	angryBearEntry := map[string]any{
 		"command": binPath + " hook cursor",
 	}
 
@@ -217,7 +217,7 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 			existing = arr
 		}
 		// Prepend angry-bear entry so it runs before other hooks
-		hooks[hookType] = append([]any{careBareEntry}, existing...)
+		hooks[hookType] = append([]any{angryBearEntry}, existing...)
 	}
 
 	// Write back with 2-space indent for readability
@@ -235,9 +235,9 @@ func (a *CursorAdapter) InstallHook(projectDir string) error {
 	return nil
 }
 
-// cursorCareBareHookExists checks if any hook array in the hooks map already
+// cursorAngryBearHookExists checks if any hook array in the hooks map already
 // contains a angry-bear hook command. Used for idempotency.
-func cursorCareBareHookExists(hooks map[string]any) bool {
+func cursorAngryBearHookExists(hooks map[string]any) bool {
 	for _, hookList := range hooks {
 		arr, ok := hookList.([]any)
 		if !ok {

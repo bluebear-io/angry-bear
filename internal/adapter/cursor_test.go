@@ -468,7 +468,7 @@ func TestCursorInstallHook_CreatesCursorDir(t *testing.T) {
 	}
 }
 
-func TestCursorInstallHook_CareBareIsPrepended(t *testing.T) {
+func TestCursorInstallHook_AngryBearIsPrepended(t *testing.T) {
 	tmpDir := t.TempDir()
 	cursorDir := filepath.Join(tmpDir, ".cursor")
 	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
@@ -821,16 +821,16 @@ func TestCursorFormatAllow_NoExtraFields(t *testing.T) {
 	}
 }
 
-// --- cursorCareBareHookExists tests ---
+// --- cursorAngryBearHookExists tests ---
 
-func TestCursorCareBareHookExists_EmptyHooksMap(t *testing.T) {
+func TestCursorAngryBearHookExists_EmptyHooksMap(t *testing.T) {
 	t.Parallel()
-	if cursorCareBareHookExists(map[string]any{}) {
+	if cursorAngryBearHookExists(map[string]any{}) {
 		t.Error("expected false for empty hooks map")
 	}
 }
 
-func TestCursorCareBareHookExists_MalformedEntries(t *testing.T) {
+func TestCursorAngryBearHookExists_MalformedEntries(t *testing.T) {
 	t.Parallel()
 	hooks := map[string]any{
 		"preToolUse": "not an array",
@@ -842,12 +842,12 @@ func TestCursorCareBareHookExists_MalformedEntries(t *testing.T) {
 			},
 		},
 	}
-	if cursorCareBareHookExists(hooks) {
+	if cursorAngryBearHookExists(hooks) {
 		t.Error("expected false for malformed entries")
 	}
 }
 
-func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
+func TestCursorAngryBearHookExists_FindsExisting(t *testing.T) {
 	t.Parallel()
 	hooks := map[string]any{
 		"preToolUse": []any{
@@ -859,7 +859,7 @@ func TestCursorCareBareHookExists_FindsExisting(t *testing.T) {
 			},
 		},
 	}
-	if !cursorCareBareHookExists(hooks) {
+	if !cursorAngryBearHookExists(hooks) {
 		t.Error("expected true when angry-bear hook exists in any hook type")
 	}
 }
@@ -1145,7 +1145,7 @@ func TestCursorExitCodeForDeny_ReturnsTwo(t *testing.T) {
 
 // --- UninstallHook tests ---
 
-func TestCursorUninstallHook_RemovesCareBareEntry(t *testing.T) {
+func TestCursorUninstallHook_RemovesAngryBearEntry(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cursorDir := filepath.Join(tmpDir, ".cursor")

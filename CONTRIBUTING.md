@@ -134,7 +134,7 @@ func (a *MyAgentAdapter) InstallHook(projectDir string) error {
     ExitCodeForDeny() int
     GlobalConfigPath() string
     // Add angry-bear hook to the agent's GLOBAL config file
-    // Use resolveCareBareCommand() for the absolute binary path
+    // Use resolveAngryBearCommand() for the absolute binary path
     // Preserve existing hooks — prepend, don't replace
     // Must be idempotent (safe to call twice)
 }

@@ -444,12 +444,12 @@ func TestStatus_MalformedConfigShowsError(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create .angry-bear with malformed enforcement config.
-	careBareDir := filepath.Join(dir, ".angry-bear")
-	err := os.MkdirAll(careBareDir, 0o755)
+	angryBearDir := filepath.Join(dir, ".angry-bear")
+	err := os.MkdirAll(angryBearDir, 0o755)
 	if err != nil {
 		t.Fatalf("failed to create .angry-bear: %v", err)
 	}
-	err = os.WriteFile(filepath.Join(careBareDir, "skill_enforcement.json"), []byte("{bad json"), 0o644)
+	err = os.WriteFile(filepath.Join(angryBearDir, "skill_enforcement.json"), []byte("{bad json"), 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -471,8 +471,8 @@ func TestStatus_DiscoveredSkillsWithConfigError(t *testing.T) {
 
 	// Create .angry-bear with valid enforcement config but malformed config.json.
 	writeEnforcementConfig(t, dir, []engine.Rule{})
-	careBareDir := filepath.Join(dir, ".angry-bear")
-	err := os.WriteFile(filepath.Join(careBareDir, "config.json"), []byte("{bad json"), 0o644)
+	angryBearDir := filepath.Join(dir, ".angry-bear")
+	err := os.WriteFile(filepath.Join(angryBearDir, "config.json"), []byte("{bad json"), 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config.json: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestStatus_SkillScanError(t *testing.T) {
 	writeEnforcementConfig(t, dir, []engine.Rule{})
 
 	// Write config.json pointing to a skill path that exists but is unreadable.
-	careBareDir := filepath.Join(dir, ".angry-bear")
+	angryBearDir := filepath.Join(dir, ".angry-bear")
 	skillPath := filepath.Join(dir, ".claude", "skills")
 	err := os.MkdirAll(skillPath, 0o755)
 	if err != nil {
@@ -549,7 +549,7 @@ func TestStatus_SkillScanError(t *testing.T) {
 		DefaultAgent:  "*",
 	}
 	data, _ := json.MarshalIndent(cfg, "", "  ")
-	err = os.WriteFile(filepath.Join(careBareDir, "config.json"), data, 0o644)
+	err = os.WriteFile(filepath.Join(angryBearDir, "config.json"), data, 0o644)
 	if err != nil {
 		t.Fatalf("failed to write config.json: %v", err)
 	}

@@ -559,7 +559,7 @@ func TestClaudeExitCodeForDeny_ReturnsZero(t *testing.T) {
 
 // --- UninstallHook tests ---
 
-func TestClaudeUninstallHook_RemovesCareBareEntry(t *testing.T) {
+func TestClaudeUninstallHook_RemovesAngryBearEntry(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	claudeDir := filepath.Join(tmpDir, ".claude")
@@ -1046,26 +1046,26 @@ func TestClaudeParseInput_EmptyJSON(t *testing.T) {
 	}
 }
 
-// --- resolveCareBareCommand tests ---
+// --- resolveAngryBearCommand tests ---
 
-func TestResolveCareBareCommand_WithExplicitPath(t *testing.T) {
+func TestResolveAngryBearCommand_WithExplicitPath(t *testing.T) {
 	t.Parallel()
-	result := resolveCareBareCommand("/explicit/path/angry-bear")
+	result := resolveAngryBearCommand("/explicit/path/angry-bear")
 	if result != "/explicit/path/angry-bear" {
-		t.Errorf("resolveCareBareCommand = %q, want %q", result, "/explicit/path/angry-bear")
+		t.Errorf("resolveAngryBearCommand = %q, want %q", result, "/explicit/path/angry-bear")
 	}
 }
 
-func TestResolveCareBareCommand_EmptyFallsBackToExecutable(t *testing.T) {
+func TestResolveAngryBearCommand_EmptyFallsBackToExecutable(t *testing.T) {
 	t.Parallel()
 	// When empty string is passed, it should resolve to os.Executable or "angry-bear"
-	result := resolveCareBareCommand("")
+	result := resolveAngryBearCommand("")
 	if result == "" {
-		t.Error("resolveCareBareCommand returned empty string")
+		t.Error("resolveAngryBearCommand returned empty string")
 	}
 	// Should return either an absolute path or "angry-bear" fallback
 	if result != "angry-bear" && !filepath.IsAbs(result) {
-		t.Errorf("resolveCareBareCommand = %q, expected absolute path or 'angry-bear'", result)
+		t.Errorf("resolveAngryBearCommand = %q, expected absolute path or 'angry-bear'", result)
 	}
 }
 
@@ -1152,19 +1152,19 @@ func TestReadProjectPathFromIndex_MultipleEntries_ReturnsFirst(t *testing.T) {
 	}
 }
 
-// --- careBareHookExists tests ---
+// --- angryBearHookExists tests ---
 
-func TestCareBareHookExists_EmptyArray(t *testing.T) {
+func TestAngryBearHookExists_EmptyArray(t *testing.T) {
 	t.Parallel()
-	if careBareHookExists(nil) {
+	if angryBearHookExists(nil) {
 		t.Error("expected false for nil array")
 	}
-	if careBareHookExists([]any{}) {
+	if angryBearHookExists([]any{}) {
 		t.Error("expected false for empty array")
 	}
 }
 
-func TestCareBareHookExists_MalformedEntries(t *testing.T) {
+func TestAngryBearHookExists_MalformedEntries(t *testing.T) {
 	t.Parallel()
 	// Array with non-map entries -- should not panic
 	entries := []any{
@@ -1172,12 +1172,12 @@ func TestCareBareHookExists_MalformedEntries(t *testing.T) {
 		42,
 		nil,
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false for array with non-map entries")
 	}
 }
 
-func TestCareBareHookExists_EntryWithoutHooksList(t *testing.T) {
+func TestAngryBearHookExists_EntryWithoutHooksList(t *testing.T) {
 	t.Parallel()
 	entries := []any{
 		map[string]any{
@@ -1185,12 +1185,12 @@ func TestCareBareHookExists_EntryWithoutHooksList(t *testing.T) {
 			// "hooks" key missing
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when entry has no hooks list")
 	}
 }
 
-func TestCareBareHookExists_HooksListWithNonMapEntries(t *testing.T) {
+func TestAngryBearHookExists_HooksListWithNonMapEntries(t *testing.T) {
 	t.Parallel()
 	entries := []any{
 		map[string]any{
@@ -1198,12 +1198,12 @@ func TestCareBareHookExists_HooksListWithNonMapEntries(t *testing.T) {
 			"hooks":   []any{"not a map", 42},
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when hooks contain non-map entries")
 	}
 }
 
-func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
+func TestAngryBearHookExists_FindsExistingHook(t *testing.T) {
 	t.Parallel()
 	entries := []any{
 		map[string]any{
@@ -1216,12 +1216,12 @@ func TestCareBareHookExists_FindsExistingHook(t *testing.T) {
 			},
 		},
 	}
-	if !careBareHookExists(entries) {
+	if !angryBearHookExists(entries) {
 		t.Error("expected true when angry-bear hook exists")
 	}
 }
 
-func TestCareBareHookExists_IgnoresUnrelatedHooks(t *testing.T) {
+func TestAngryBearHookExists_IgnoresUnrelatedHooks(t *testing.T) {
 	t.Parallel()
 	entries := []any{
 		map[string]any{
@@ -1234,7 +1234,7 @@ func TestCareBareHookExists_IgnoresUnrelatedHooks(t *testing.T) {
 			},
 		},
 	}
-	if careBareHookExists(entries) {
+	if angryBearHookExists(entries) {
 		t.Error("expected false when no angry-bear hook is present")
 	}
 }

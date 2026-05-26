@@ -1,6 +1,6 @@
 # Contributing to angry-bear
 
-Thank you for your interest in contributing to angry-bear! This project is open source under the Apache 2.0 license, and we welcome contributions of all kinds.
+Thank you for your interest in contributing to angry-bear! This project is open source under the MIT license, and we welcome contributions of all kinds.
 
 ## Reporting Bugs
 
@@ -224,4 +224,4 @@ No other code needs to change. The engine, TUI, CLI commands, state manager, and
 
 ## License
 
-By contributing, you agree your work is licensed under [Apache License 2.0](LICENSE).
+By contributing, you agree your work is licensed under the [MIT License](LICENSE).

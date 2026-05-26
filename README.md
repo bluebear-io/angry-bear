@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)](https://github.com/Blue-Bear-Security/angry-bear)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Enforce skill-loading requirements for AI coding agents.**
 
@@ -308,4 +308,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). All CI checks must pass, 80% minimum cov
 
 ## License
 
-Apache 2.0 — Copyright (c) Blue Bear Security. See [LICENSE](LICENSE).
+MIT — Copyright (c) Blue Bear Security. See [LICENSE](LICENSE).

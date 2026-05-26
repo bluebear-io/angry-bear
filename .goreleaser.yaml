@@ -69,7 +69,7 @@ brews:
     url_template: "https://github.com/Blue-Bear-Security/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     homepage: https://github.com/Blue-Bear-Security/angry-bear
     description: "Enforce skill-loading requirements for AI coding agents"
-    license: "Apache-2.0"
+    license: "MIT"
     install: |
       bin.install "angry-bear"
     test: |

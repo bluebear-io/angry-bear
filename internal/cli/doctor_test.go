@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/cli"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 )
 
 // runDoctorInDir executes the doctor command with the working directory set

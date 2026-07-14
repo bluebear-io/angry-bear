@@ -4,7 +4,7 @@ Thank you for your interest in contributing to angry-bear! This project is open 
 
 ## Reporting Bugs
 
-Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues). Please include:
+Use [GitHub Issues](https://github.com/bluebear-io/angry-bear/issues). Please include:
 
 - **Go version:** `go version`
 - **OS:** macOS, Linux, or Windows with version
@@ -14,7 +14,7 @@ Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues). Pl
 
 ## Suggesting Features
 
-Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues) with the `enhancement` label. Describe the **use case**, not just the solution.
+Use [GitHub Issues](https://github.com/bluebear-io/angry-bear/issues) with the `enhancement` label. Describe the **use case**, not just the solution.
 
 ## Development Setup
 
@@ -27,7 +27,7 @@ Use [GitHub Issues](https://github.com/Blue-Bear-Security/angry-bear/issues) wit
 ### Build & Test
 
 ```bash
-git clone https://github.com/Blue-Bear-Security/angry-bear.git
+git clone https://github.com/bluebear-io/angry-bear.git
 cd angry-bear
 make build    # Build binary to bin/angry-bear
 make test     # Run all tests with race detection

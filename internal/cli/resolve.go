@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/tui"
 )
 
 // ResolveRepoDir returns the repo-keyed config directory for a project.

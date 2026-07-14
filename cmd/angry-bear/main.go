@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/cli"
 )
 
 // Version information injected at build time via ldflags.

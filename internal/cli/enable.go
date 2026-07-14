@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
 	"github.com/spf13/cobra"
 )
 

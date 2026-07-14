@@ -93,7 +93,7 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 		"Blocked by angry-bear skill enforcement. Required skills not loaded: %s. "+
 			"Load them by running: %s",
 		strings.Join(quotedSkills, ", "),
-		strings.Join(loadInstructions, "  "),
+		strings.Join(loadInstructions, " "),
 	)
 
 	return BlockResult{

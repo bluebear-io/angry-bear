@@ -59,21 +59,25 @@ changelog:
       - "^ci:"
       - "^test:"
 
-brews:
+homebrew_casks:
   - name: angry-bear
     repository:
       owner: bluebear-io
       name: homebrew-angry-bear
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    url_template: "https://github.com/bluebear-io/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
+    url:
+      template: "https://github.com/bluebear-io/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
     homepage: https://github.com/bluebear-io/angry-bear
     description: "Enforce skill-loading requirements for AI coding agents"
-    license: "MIT"
-    install: |
-      bin.install "angry-bear"
-    test: |
-      system "#{bin}/angry-bear", "version"
+    binaries: [angry-bear]
+    # angry-bear ships unsigned binaries; strip the quarantine flag Homebrew
+    # sets on cask downloads so macOS Gatekeeper doesn't block execution.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/angry-bear"]
+          end
 
 release:
   github:

@@ -717,8 +717,6 @@ func TestHook_CursorDenyReturnsExitError(t *testing.T) {
 	stdin := cursorStdin("conv1", "edit_file", filepath.Join(dir, "main.go"), dir)
 
 	cmd := cli.NewRootCommand()
-	// Silence usage output so stdout contains only the deny JSON.
-	cmd.SilenceUsage = true
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	cmd.SetOut(outBuf)
@@ -738,6 +736,13 @@ func TestHook_CursorDenyReturnsExitError(t *testing.T) {
 	}
 	if exitErr.Code != 2 {
 		t.Errorf("expected exit code 2, got %d", exitErr.Code)
+	}
+
+	// The hook command must silence cobra's usage/error text itself so the
+	// agent never sees it (regression: the exit-2 deny used to dump the
+	// command usage and "Error: exit code 2" to stderr).
+	if strings.Contains(errBuf.String(), "Usage:") || strings.Contains(errBuf.String(), "Error:") {
+		t.Errorf("cursor deny leaked cobra usage/error text to stderr: %q", errBuf.String())
 	}
 
 	// Verify deny JSON was written to stdout in Cursor format.

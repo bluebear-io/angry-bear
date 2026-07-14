@@ -3,6 +3,10 @@ name: Release Drafter
 on:
   push:
     branches: [main]
+  # Needed so the autolabeler can label PRs from their title. On PRs the
+  # releaser is disabled (drafting only makes sense on main).
+  pull_request:
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
@@ -16,5 +20,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: release-drafter/release-drafter@v7
+        with:
+          disable-releaser: ${{ github.ref_name != 'main' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

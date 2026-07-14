@@ -1,4 +1,4 @@
-module github.com/Blue-Bear-Security/angry-bear
+module github.com/bluebear-io/angry-bear
 
 go 1.24.0
 

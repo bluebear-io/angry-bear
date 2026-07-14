@@ -13,11 +13,11 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/angry-bear/internal/state"
-	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/scanner"
+	"github.com/bluebear-io/angry-bear/internal/state"
+	"github.com/bluebear-io/angry-bear/internal/tui"
 )
 
 // NewRootCommand builds and returns the root command with all subcommands.

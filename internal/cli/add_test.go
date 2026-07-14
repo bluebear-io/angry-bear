@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/cli"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 )
 
 // runAddInDir executes the add command with the working directory set to dir

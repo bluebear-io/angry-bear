@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
 )
 
 // TestRunEnable_InstallsHooksForDetectedAgents verifies that the enable command

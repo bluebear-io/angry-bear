@@ -14,10 +14,10 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/angry-bear/internal/tui"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/scanner"
+	"github.com/bluebear-io/angry-bear/internal/tui"
 )
 
 // validToolNames lists the recognized tool names for flag validation and completion.

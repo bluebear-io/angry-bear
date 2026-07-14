@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/scanner"
-	"github.com/Blue-Bear-Security/angry-bear/internal/state"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/scanner"
+	"github.com/bluebear-io/angry-bear/internal/state"
 )
 
 // filterCol identifies a filterable column in the event log.

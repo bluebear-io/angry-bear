@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 	"github.com/spf13/cobra"
 )
 

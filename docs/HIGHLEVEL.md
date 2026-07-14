@@ -34,7 +34,7 @@ ALL angry-bear data lives under `~/.angry-bear/`. Nothing is stored in project d
 ├── events.log                                     # Global enforcement event log (append-only)
 │
 └── repos/
-    ├── 5ce4353d-Blue-Bear-Security-blueden/        # Per-repo directory
+    ├── 5ce4353d-bluebear-io-blueden/        # Per-repo directory
     │   ├── skill_enforcement.json                  #   Enforcement rules
     │   ├── config.json                             #   Per-repo config overrides
     │   ├── preferences.json                        #   Preferred checkout path
@@ -43,7 +43,7 @@ ALL angry-bear data lives under `~/.angry-bear/`. Nothing is stored in project d
     │       ├── {session-id}.lock                   #     Advisory lock file
     │       └── .last-prune                         #     Timestamp of last prune run
     │
-    └── bb1bf16d-Blue-Bear-Security-angry-bear/      # Another repo
+    └── bb1bf16d-bluebear-io-angry-bear/      # Another repo
         └── ...
 ```
 

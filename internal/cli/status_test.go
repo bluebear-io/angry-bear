@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/state"
+	"github.com/bluebear-io/angry-bear/internal/cli"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/state"
 )
 
 // runStatusInDir executes the status command with the working directory set

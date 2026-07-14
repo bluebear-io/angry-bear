@@ -1196,6 +1196,27 @@ func TestShouldBlock_ReasonContainsLoadInstructions(t *testing.T) {
 	}
 }
 
+func TestShouldBlock_MultiSkillReasonSingleSpaced(t *testing.T) {
+	t.Parallel()
+	rules := []MatchedRule{
+		{Rule: Rule{Tool: "Edit", Skill: "alpha"}, Source: "src"},
+		{Rule: Rule{Tool: "Edit", Skill: "beta"}, Source: "src"},
+	}
+
+	got := ShouldBlock(rules, "Edit", "", "", nil)
+	if !got.Blocked {
+		t.Fatal("expected Blocked=true")
+	}
+	// Both skills must appear, joined by a single space (regression: the load
+	// instructions used to be joined with a double space).
+	if !strings.Contains(got.Reason, "/alpha") || !strings.Contains(got.Reason, "/beta") {
+		t.Errorf("Reason %q missing one of the skill instructions", got.Reason)
+	}
+	if strings.Contains(got.Reason, "  ") {
+		t.Errorf("Reason %q contains a double space; want single-spaced instructions", got.Reason)
+	}
+}
+
 func TestShouldBlock_GlobPatternError(t *testing.T) {
 	t.Parallel()
 	// A pattern with an unclosed bracket is invalid for doublestar.

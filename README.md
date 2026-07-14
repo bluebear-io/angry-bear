@@ -17,6 +17,7 @@ angry-bear prevents AI coding agents (Claude Code, Cursor, and more) from modify
 ```bash
 # Homebrew (recommended)
 brew tap bluebear-io/angry-bear
+brew trust bluebear-io/angry-bear   # Homebrew 6.0+ requires trusting third-party taps (one-time)
 brew install angry-bear
 
 # Go (requires $GOPATH/bin on your PATH)

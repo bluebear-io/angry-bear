@@ -45,6 +45,11 @@ func NewHookCommand() *cobra.Command {
 		Use:   "hook",
 		Short: "Run as a PreToolUse hook for AI agents",
 		RunE:  runHook,
+		// The hook is machine-facing: its stdout/stderr are consumed by the
+		// agent (e.g. Cursor reads a deny as exit code 2). Cobra must not print
+		// usage or the returned error, or that text leaks into the agent's view.
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	cmd.Flags().String("agent", "", "Agent adapter to use (claude, cursor)")
 	return cmd

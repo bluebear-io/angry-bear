@@ -46,3 +46,20 @@ template: |
   $CHANGES
 
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+# One category label per PR, derived from the conventional-commit prefix in
+# the PR title. Replaces the old file-path labeler, whose overlapping rules
+# tagged a single PR with feature+fix+docs+chore and listed it under every
+# changelog category.
+autolabeler:
+  - label: 'feature'
+    title:
+      - '/^feat(\(.+\))?!?:/i'
+  - label: 'fix'
+    title:
+      - '/^fix(\(.+\))?!?:/i'
+  - label: 'documentation'
+    title:
+      - '/^docs(\(.+\))?!?:/i'
+  - label: 'chore'
+    title:
+      - '/^(chore|ci|refactor|perf|test|build|style)(\(.+\))?!?:/i'

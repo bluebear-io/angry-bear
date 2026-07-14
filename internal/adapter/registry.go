@@ -9,7 +9,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 )
 
 // registryDefaultHomeDir and registryDefaultBinaryPath are applied to
@@ -107,7 +107,7 @@ func (r *AdapterRegistry) Names() []string {
 type MergedProject struct {
 	Name       string   // Human-readable name (repo slug or last path component)
 	Path       string   // Primary absolute path (first discovered)
-	RepoSlug   string   // Git repo identity (e.g., "Blue-Bear-Security/blueden")
+	RepoSlug   string   // Git repo identity (e.g., "bluebear-io/blueden")
 	LocalPaths []string // All local directories that are clones of this repo
 	Agents     []string // Which agents use this repo
 }

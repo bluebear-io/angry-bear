@@ -62,12 +62,12 @@ changelog:
 brews:
   - name: angry-bear
     repository:
-      owner: Blue-Bear-Security
+      owner: bluebear-io
       name: homebrew-angry-bear
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    url_template: "https://github.com/Blue-Bear-Security/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
-    homepage: https://github.com/Blue-Bear-Security/angry-bear
+    url_template: "https://github.com/bluebear-io/homebrew-angry-bear/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
+    homepage: https://github.com/bluebear-io/angry-bear
     description: "Enforce skill-loading requirements for AI coding agents"
     license: "MIT"
     install: |
@@ -77,7 +77,7 @@ brews:
 
 release:
   github:
-    owner: Blue-Bear-Security
+    owner: bluebear-io
     name: angry-bear
   draft: false
   prerelease: auto

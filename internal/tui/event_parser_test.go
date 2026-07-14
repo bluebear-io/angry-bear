@@ -119,7 +119,7 @@ func TestParseEventLine_SkillLoad(t *testing.T) {
 }
 
 func TestParseEventLine_SkillTTLExpire(t *testing.T) {
-	line := "2026-04-14T09:28:17Z | Blue-Bear-Security/blueden | claude | real- | SKILL-TTL | | EXPIR | linear"
+	line := "2026-04-14T09:28:17Z | bluebear-io/blueden | claude | real- | SKILL-TTL | | EXPIR | linear"
 	ev, ok := parseEventLine(line, 3)
 
 	if !ok {
@@ -262,7 +262,7 @@ func TestParseEventLine_ExtractsTime(t *testing.T) {
 	}{
 		{
 			name:     "standard RFC3339 timestamp",
-			line:     "2026-04-14T07:43:33Z | Blue-Bear-Security/blueden | claude | abc12 | Edit | test.go | BLOCK | linear",
+			line:     "2026-04-14T07:43:33Z | bluebear-io/blueden | claude | abc12 | Edit | test.go | BLOCK | linear",
 			wantTime: "07:43",
 		},
 		{

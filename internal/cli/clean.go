@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/state"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/state"
 	"github.com/spf13/cobra"
 )
 

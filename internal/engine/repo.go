@@ -24,7 +24,7 @@ var (
 
 // RepoIdentity represents a normalized Git repository.
 type RepoIdentity struct {
-	// Slug is the normalized org/repo identifier (e.g., "Blue-Bear-Security/blueden").
+	// Slug is the normalized org/repo identifier (e.g., "bluebear-io/blueden").
 	Slug string
 	// Hash is a short hash of the slug for filesystem-safe directory names.
 	Hash string
@@ -66,10 +66,10 @@ func ResolveRepoIdentity(dir string) *RepoIdentity {
 // Handles: https://, git@, ssh://, and URLs with tokens or custom hostnames.
 //
 // Examples:
-//   - https://github.com/Blue-Bear-Security/blueden.git → Blue-Bear-Security/blueden
-//   - git@github.com:Blue-Bear-Security/blueden.git → Blue-Bear-Security/blueden
-//   - git@github.com-bluebear:Blue-Bear-Security/blueden.git → Blue-Bear-Security/blueden
-//   - https://x-access-token:TOKEN@github.com/Blue-Bear-Security/blueden.git → Blue-Bear-Security/blueden
+//   - https://github.com/bluebear-io/blueden.git → bluebear-io/blueden
+//   - git@github.com:bluebear-io/blueden.git → bluebear-io/blueden
+//   - git@github.com-bluebear:bluebear-io/blueden.git → bluebear-io/blueden
+//   - https://x-access-token:TOKEN@github.com/bluebear-io/blueden.git → bluebear-io/blueden
 func NormalizeRemoteURL(url string) string {
 	// Remove .git suffix
 	url = strings.TrimSuffix(url, ".git")

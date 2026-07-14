@@ -10,7 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 )
 
 // --- selectedFrom tests ---

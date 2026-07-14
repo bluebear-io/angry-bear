@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/cli"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
-	"github.com/Blue-Bear-Security/angry-bear/internal/state"
+	"github.com/bluebear-io/angry-bear/internal/cli"
+	"github.com/bluebear-io/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/state"
 )
 
 // runCleanInDir executes the clean command with the working directory set

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Blue-Bear-Security/angry-bear/internal/adapter"
-	"github.com/Blue-Bear-Security/angry-bear/internal/engine"
+	"github.com/bluebear-io/angry-bear/internal/adapter"
+	"github.com/bluebear-io/angry-bear/internal/engine"
 )
 
 // TestResolveCheckoutPath_NilProject verifies that resolveCheckoutPath returns

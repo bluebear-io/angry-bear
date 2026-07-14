@@ -4,8 +4,8 @@
   <img src="assets/logo.png" alt="angry-bear" width="400">
 </p>
 
-[![CI](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/Blue-Bear-Security/angry-bear/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)](https://github.com/Blue-Bear-Security/angry-bear)
+[![CI](https://github.com/bluebear-io/angry-bear/actions/workflows/ci.yml/badge.svg)](https://github.com/bluebear-io/angry-bear/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-80%25-brightgreen)](https://github.com/bluebear-io/angry-bear)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Enforce skill-loading requirements for AI coding agents.**
@@ -16,14 +16,14 @@ angry-bear prevents AI coding agents (Claude Code, Cursor, and more) from modify
 
 ```bash
 # Homebrew (recommended)
-brew tap Blue-Bear-Security/angry-bear
+brew tap bluebear-io/angry-bear
 brew install angry-bear
 
 # Go (requires $GOPATH/bin on your PATH)
-go install github.com/Blue-Bear-Security/angry-bear/cmd/angry-bear@latest
+go install github.com/bluebear-io/angry-bear/cmd/angry-bear@latest
 
 # From source
-git clone https://github.com/Blue-Bear-Security/angry-bear.git
+git clone https://github.com/bluebear-io/angry-bear.git
 cd angry-bear && make install
 # Binary installed to $GOPATH/bin — ensure it's on your PATH:
 # export PATH="$HOME/go/bin:$PATH"  # add to ~/.zshrc or ~/.bashrc

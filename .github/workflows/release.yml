@@ -38,7 +38,7 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           # Create release on tap repo and upload all archives + checksums
           gh release create "$TAG" \
-            --repo Blue-Bear-Security/homebrew-angry-bear \
+            --repo bluebear-io/homebrew-angry-bear \
             --title "angry-bear ${TAG}" \
             --notes "Release binaries for angry-bear ${TAG}" \
             dist/*.tar.gz dist/*.zip dist/checksums.txt

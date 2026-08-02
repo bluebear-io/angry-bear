@@ -3,11 +3,17 @@
 package engine
 
 // Rule represents a single enforcement rule from the config file.
+//
+// A rule matches a tool invocation when ALL of its non-wildcard conditions
+// hold (Tool, Path, Command, Agent are AND-ed together). Command matches
+// against the shell command string of command-running tools (e.g. Bash), so a
+// rule can require a skill before an agent runs `git`, `aws`, `terraform`, etc.
 type Rule struct {
-	Tool  string `json:"tool"`
-	Path  string `json:"path"`
-	Skill string `json:"skill"`
-	Agent string `json:"agent"`
+	Tool    string `json:"tool"`
+	Path    string `json:"path"`
+	Command string `json:"command,omitempty"`
+	Skill   string `json:"skill"`
+	Agent   string `json:"agent"`
 }
 
 // Config represents the enforcement configuration file.

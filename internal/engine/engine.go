@@ -13,14 +13,18 @@ import (
 // based on enforcement rules and invoked skills.
 //
 // Algorithm:
-//  1. Filter matching rules by checking tool, agent, and path (AND conditions).
+//  1. Filter matching rules by checking tool, agent, path, and command
+//     (AND conditions).
 //  2. Deduplicate by skill name (first match per skill wins).
 //  3. Check which matched skills have NOT been invoked.
 //  4. Build a BlockResult with missing skill names and a human-readable reason.
 //
+// command is the shell command string for command-running tools (e.g. Bash);
+// it is empty for tools that don't run commands.
+//
 // Returns BlockResult with Blocked=false when no enforcement is needed,
 // or Blocked=true with Missing skills and a descriptive Reason.
-func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedSkills map[string]bool) BlockResult {
+func ShouldBlock(rules []MatchedRule, toolName, filePath, command, agent string, invokedSkills map[string]bool) BlockResult {
 	if len(rules) == 0 {
 		return BlockResult{Blocked: false}
 	}
@@ -57,6 +61,13 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 			if !match {
 				continue
 			}
+		}
+
+		// Command match: empty, "*", or "**" matches all commands. If command is
+		// empty and the rule has a non-wildcard command, skip (no command to
+		// match against, e.g. an Edit that carries no shell command).
+		if !commandRuleMatches(rule.Command, command) {
+			continue
 		}
 
 		// Deduplicate by skill name.
@@ -103,10 +114,29 @@ func ShouldBlock(rules []MatchedRule, toolName, filePath, agent string, invokedS
 	}
 }
 
+// commandRuleMatches reports whether a rule's command pattern matches the given
+// command string. Empty, "*", and "**" patterns match any command. When the
+// rule requires a specific command but none was provided (e.g. a non-command
+// tool), or the command doesn't match, it returns false. A malformed glob
+// pattern is treated as non-matching (consistent with path matching).
+func commandRuleMatches(pattern, command string) bool {
+	if pattern == "" || pattern == "*" || pattern == "**" {
+		return true
+	}
+	if command == "" {
+		return false
+	}
+	match, err := MatchCommand(pattern, command)
+	if err != nil {
+		return false
+	}
+	return match
+}
+
 // MatchedSkills returns the list of skill names that have matching rules for
-// the given tool/path/agent combination. Used to determine if an event is
-// enforcement-relevant (has rules that apply) even when the skills are loaded.
-func MatchedSkills(rules []MatchedRule, toolName, filePath, agent string) []string {
+// the given tool/path/command/agent combination. Used to determine if an event
+// is enforcement-relevant (has rules that apply) even when the skills are loaded.
+func MatchedSkills(rules []MatchedRule, toolName, filePath, command, agent string) []string {
 	seenSkills := make(map[string]bool)
 	var matched []string
 
@@ -126,6 +156,9 @@ func MatchedSkills(rules []MatchedRule, toolName, filePath, agent string) []stri
 			if err != nil || !match {
 				continue
 			}
+		}
+		if !commandRuleMatches(rule.Command, command) {
+			continue
 		}
 		if !seenSkills[rule.Skill] {
 			seenSkills[rule.Skill] = true

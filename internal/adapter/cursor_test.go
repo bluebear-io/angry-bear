@@ -131,6 +131,24 @@ func TestCursorParseInput_ShellExecutionCommand(t *testing.T) {
 	if !ok || cmd != "go test ./..." {
 		t.Errorf("RawInput[command] = %q, want %q", cmd, "go test ./...")
 	}
+	// It is also extracted into the normalized Command field for enforcement.
+	if input.Command != "go test ./..." {
+		t.Errorf("Command = %q, want %q", input.Command, "go test ./...")
+	}
+}
+
+func TestCursorParseInput_CommandFromToolInput(t *testing.T) {
+	// preToolUse format nests the command inside tool_input.
+	jsonStr := `{"hook_event_name":"preToolUse","conversation_id":"x","cursor_version":"0.48.1","tool_input":{"command":"git push"}}`
+	adapter := &CursorAdapter{}
+
+	input, err := adapter.ParseInput(strings.NewReader(jsonStr))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if input.Command != "git push" {
+		t.Errorf("Command = %q, want %q (should extract from tool_input.command)", input.Command, "git push")
+	}
 }
 
 func TestCursorParseInput_PreToolUse(t *testing.T) {

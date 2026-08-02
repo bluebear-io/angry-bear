@@ -62,7 +62,11 @@ const (
 	sectionTools section = iota
 	sectionPaths
 	sectionAgents
+	sectionCommands
 )
+
+// sectionCount is the number of focusable sections in the editor.
+const sectionCount = 4
 
 // RuleEditor has three pinned sections: TOOLS, PATHS, AGENTS.
 // TOOLS and AGENTS always show all items. PATHS scrolls independently.
@@ -74,14 +78,16 @@ type RuleEditor struct {
 	existingRules []engine.Rule
 	projectRoot   string
 
-	toolItems   []listItem
-	pathItems   []listItem
-	agentItems  []listItem
-	focus       section    // which section has keyboard focus
-	toolScroll  ScrollView // cursor within tools
-	pathScroll  ScrollView // cursor + scroll within paths
-	agentScroll ScrollView // cursor within agents
-	height      int
+	toolItems     []listItem
+	pathItems     []listItem
+	agentItems    []listItem
+	commandItems  []listItem
+	focus         section    // which section has keyboard focus
+	toolScroll    ScrollView // cursor within tools
+	pathScroll    ScrollView // cursor + scroll within paths
+	agentScroll   ScrollView // cursor within agents
+	commandScroll ScrollView // cursor within commands
+	height        int
 
 	standalone    bool // When true, s/esc quit the program instead of sending messages
 	addAnother    bool
@@ -124,12 +130,14 @@ func (re *RuleEditor) buildSections() {
 	existingTools := make(map[string]bool)
 	existingPaths := make(map[string]bool)
 	existingAgents := make(map[string]bool)
+	existingCommands := make(map[string]bool)
 	for _, r := range re.existingRules {
 		if r.Skill == re.skillName {
 			existingTools[r.Tool] = true
 			// Strip **/ prefix from NormalizeGlob — tree items use relative paths
 			existingPaths[strings.TrimPrefix(r.Path, "**/")] = true
 			existingAgents[r.Agent] = true
+			existingCommands[r.Command] = true
 		}
 	}
 
@@ -170,6 +178,15 @@ func (re *RuleEditor) buildSections() {
 		re.agentItems = append(re.agentItems, listItem{
 			typ: itemCheckbox, label: label, value: a, section: "agents",
 			selected: existingAgents[a],
+		})
+	}
+
+	// Commands (optional — none selected means the rule matches any command).
+	re.commandItems = nil
+	for _, c := range CommandOptions {
+		re.commandItems = append(re.commandItems, listItem{
+			typ: itemCheckbox, label: c, value: c, section: "commands",
+			selected: existingCommands[c],
 		})
 	}
 }
@@ -296,6 +313,8 @@ func (re *RuleEditor) activeItems() *[]listItem {
 		return &re.pathItems
 	case sectionAgents:
 		return &re.agentItems
+	case sectionCommands:
+		return &re.commandItems
 	}
 	return &re.toolItems
 }
@@ -309,6 +328,8 @@ func (re *RuleEditor) activeScroll() *ScrollView {
 		return &re.pathScroll
 	case sectionAgents:
 		return &re.agentScroll
+	case sectionCommands:
+		return &re.commandScroll
 	}
 	return &re.toolScroll
 }
@@ -346,7 +367,7 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			sv.MoveDown(len(*items), noSkip)
 		} else {
 			// At bottom of section — move to next section
-			if re.focus < sectionAgents {
+			if re.focus < sectionCommands {
 				re.focus++
 				re.activeScroll().Cursor = 0
 			}
@@ -354,11 +375,11 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return re, nil
 
 	case "tab":
-		re.focus = (re.focus + 1) % 3
+		re.focus = (re.focus + 1) % sectionCount
 		return re, nil
 
 	case "shift+tab":
-		re.focus = (re.focus + 2) % 3
+		re.focus = (re.focus + sectionCount - 1) % sectionCount
 		return re, nil
 
 	case " ", "x":
@@ -402,19 +423,7 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return re, nil
 		}
 
-		var rules []engine.Rule
-		for _, tool := range tools {
-			for _, path := range paths {
-				for _, agent := range agents {
-					rules = append(rules, engine.Rule{
-						Tool:  tool,
-						Path:  path,
-						Skill: re.skillName,
-						Agent: agent,
-					})
-				}
-			}
-		}
+		rules := re.buildRules()
 		if re.standalone {
 			return re, tea.Quit
 		}
@@ -423,6 +432,38 @@ func (re RuleEditor) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return re, nil
+}
+
+// buildRules produces the cross product of selected tools, paths, agents, and
+// commands as engine rules. Commands are optional: when none are selected the
+// rule's command is left empty (matches any command), preserving the original
+// tool/path/agent behavior.
+func (re *RuleEditor) buildRules() []engine.Rule {
+	tools := re.selectedFrom(re.toolItems)
+	paths := re.selectedFrom(re.pathItems)
+	agents := re.selectedFrom(re.agentItems)
+	commands := re.selectedFrom(re.commandItems)
+	if len(commands) == 0 {
+		commands = []string{""}
+	}
+
+	var rules []engine.Rule
+	for _, tool := range tools {
+		for _, path := range paths {
+			for _, agent := range agents {
+				for _, command := range commands {
+					rules = append(rules, engine.Rule{
+						Tool:    tool,
+						Path:    path,
+						Command: command,
+						Skill:   re.skillName,
+						Agent:   agent,
+					})
+				}
+			}
+		}
+	}
+	return rules
 }
 
 func (re RuleEditor) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -483,6 +524,9 @@ func (re *RuleEditor) deselectAll() {
 	}
 	for i := range re.agentItems {
 		re.agentItems[i].selected = false
+	}
+	for i := range re.commandItems {
+		re.commandItems[i].selected = false
 	}
 }
 
@@ -631,8 +675,9 @@ func (re *RuleEditor) pathViewportHeight() int {
 	// tools header(1) + tools items + blank
 	// paths header(1)
 	// agents header(1) + agents items
+	// commands header(1) + command items
 	// help(1) + blank(1) = 2
-	fixed := 3 + 1 + len(re.toolItems) + 1 + 1 + 1 + len(re.agentItems) + 2
+	fixed := 3 + 1 + len(re.toolItems) + 1 + 1 + 1 + len(re.agentItems) + 1 + len(re.commandItems) + 2
 	available := re.height - fixed
 	if available < 3 {
 		available = 3
@@ -651,15 +696,20 @@ func (re RuleEditor) View() string {
 	tools := re.selectedFrom(re.toolItems)
 	paths := re.selectedFrom(re.pathItems)
 	agents := re.selectedFrom(re.agentItems)
-	count := len(tools) * len(paths) * len(agents)
+	commands := re.selectedFrom(re.commandItems)
+	commandFactor := len(commands)
+	if commandFactor == 0 {
+		commandFactor = 1 // No command selected → 1 rule with an empty command.
+	}
+	count := len(tools) * len(paths) * len(agents) * commandFactor
 
 	summaryStyle := re.styles.Description
 	if count > 0 {
 		summaryStyle = re.styles.Success
 	}
 	summary := summaryStyle.Render(fmt.Sprintf(
-		"  %d tool(s) × %d path(s) × %d agent(s) = %d rule(s)",
-		len(tools), len(paths), len(agents), count,
+		"  %d tool(s) × %d path(s) × %d agent(s) × %d command(s) = %d rule(s)",
+		len(tools), len(paths), len(agents), commandFactor, count,
 	))
 
 	check := lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399"))
@@ -743,6 +793,17 @@ func (re RuleEditor) View() string {
 		b.WriteString(renderItem(item, focused) + "\n")
 	}
 
+	// ── COMMANDS (always fully visible; optional) ──
+	if re.focus == sectionCommands {
+		b.WriteString("  " + activeSec.Render(" COMMANDS ") + "\n")
+	} else {
+		b.WriteString("  " + sectionStyle.Render("── COMMANDS ──") + "\n")
+	}
+	for i, item := range re.commandItems {
+		focused := re.focus == sectionCommands && i == re.commandScroll.Cursor
+		b.WriteString(renderItem(item, focused) + "\n")
+	}
+
 	helpStyle := re.styles.Help
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA"))
 	help := keyStyle.Render("↑↓") + helpStyle.Render(" navigate") + "  " +
@@ -759,10 +820,7 @@ func (re RuleEditor) View() string {
 func (re RuleEditor) viewConfirm() string {
 	header := re.styles.Header.Render(" Rules for: " + re.skillName + " ")
 
-	tools := re.selectedFrom(re.toolItems)
-	paths := re.selectedFrom(re.pathItems)
-	agents := re.selectedFrom(re.agentItems)
-	count := len(tools) * len(paths) * len(agents)
+	count := len(re.buildRules())
 
 	done := re.styles.Success.Render(fmt.Sprintf("  ✓ %d rule(s) added!", count))
 
@@ -780,21 +838,5 @@ func (re RuleEditor) viewConfirm() string {
 
 // Result returns the currently configured rules (for testing).
 func (re RuleEditor) Result() []engine.Rule {
-	tools := re.selectedFrom(re.toolItems)
-	paths := re.selectedFrom(re.pathItems)
-	agents := re.selectedFrom(re.agentItems)
-	var rules []engine.Rule
-	for _, tool := range tools {
-		for _, path := range paths {
-			for _, agent := range agents {
-				rules = append(rules, engine.Rule{
-					Tool:  tool,
-					Path:  path,
-					Skill: re.skillName,
-					Agent: agent,
-				})
-			}
-		}
-	}
-	return rules
+	return re.buildRules()
 }

@@ -107,10 +107,12 @@ The engine is agent-agnostic. It only knows about rules, paths, and skills.
 
 Pure function with no side effects:
 
-1. For each rule, check: **tool match** AND **agent match** AND **path match**
+1. For each rule, check: **tool match** AND **agent match** AND **path match** AND **command match**
 2. Deduplicate by skill name (first match per skill wins)
 3. Check which matched skills are NOT in the session's invoked skills
 4. Return `BlockResult{Blocked, Reason, Missing}`
+
+Command matching (`MatchCommand` in `command.go`) gates command-running tools (e.g. Bash): a rule's `command` pattern is matched against the shell command string, split on shell separators (`&&`, `||`, `|`, `;`) with leading env assignments and `sudo` stripped. Glob patterns (`terraform*`) and multi-word prefixes (`git push`) are supported. A rule with a specific `command` never fires when there is no command (e.g. an Edit).
 
 The deny message includes load instructions: `/skill-name (or read .claude/skills/skill-name/SKILL.md)`
 

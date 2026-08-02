@@ -10,7 +10,7 @@
 
 **Enforce skill-loading requirements for AI coding agents.**
 
-angry-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifying files until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
+angry-bear prevents AI coding agents (Claude Code, Cursor, and more) from modifying files — or running commands like `git`, `aws`, or `terraform` — until required skills have been loaded in the current session. It works as a pre-tool-use hook that checks enforcement rules and blocks operations when required skills are missing.
 
 ## Install
 
@@ -55,14 +55,15 @@ The agent loads the skill, retries, and succeeds.
 ### `angry-bear add` — Add enforcement rules
 
 ```bash
-angry-bear add                    # Interactive mode — pick skill, tools, paths, agents
-angry-bear add <skill> [flags]    # One-liner — cartesian product of tools × paths × agents
+angry-bear add                    # Interactive mode — pick skill, tools, paths, commands, agents
+angry-bear add <skill> [flags]    # One-liner — cartesian product of tools × paths × commands × agents
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--tool` | `*` | Comma-separated: `Edit`, `Write`, `Bash`, `Read`, `Glob`, `Grep`, `Agent`, `*` |
 | `--path` | `**` | Comma-separated glob patterns |
+| `--command` | _(empty)_ | Comma-separated command patterns to gate (e.g. `git`, `aws`, `terraform*`); empty matches any command |
 | `--agent` | `*` | `claude`, `cursor`, `*` (all) |
 | `--repo` | `false` | Save to `{project}/.angry-bear/` (shared via git) instead of machine config |
 
@@ -70,8 +71,12 @@ angry-bear add <skill> [flags]    # One-liner — cartesian product of tools × 
 angry-bear add sst-architect --tool Edit,Write --path "stacks/**"
 angry-bear add linear                                            # all tools, all paths
 angry-bear add testing --path "**/*_test.go,**/test_*.py"        # multiple patterns
+angry-bear add git-workflow --tool Bash --command git            # load git skill before running git
+angry-bear add cloud-ops --tool Bash --command "aws,terraform*"  # gate aws/terraform commands
 angry-bear add go-standards --tool Edit --path "**/*.go" --repo  # shared with team via git
 ```
+
+Command rules enforce skills on the **commands** an agent runs, not just file edits. `--command git` requires the skill before any `git` invocation (including inside compound commands like `git add . && git commit`); glob patterns such as `terraform*` are supported. Leaving `--command` empty keeps the classic file/tool-based behavior.
 
 ### `angry-bear rules` — List rules
 
@@ -210,7 +215,7 @@ angry-bear hook
     +-- Check skill invocation → record in session state
     +-- Load enforcement rules
     +-- Load session state (check loaded skills + TTL)
-    +-- Evaluate: ShouldBlock(rules, tool, path, agent, skills)
+    +-- Evaluate: ShouldBlock(rules, tool, path, command, agent, skills)
     |
     +-- Allowed → agent proceeds
     +-- Blocked → "Load skill by running: /skill-name"
@@ -253,10 +258,13 @@ See [docs/HIGHLEVEL.md](docs/HIGHLEVEL.md) for the complete architecture.
 {
   "version": 1,
   "tools": [
-    { "tool": "Edit", "path": "**/*.go", "skill": "go-standards", "agent": "*" }
+    { "tool": "Edit", "path": "**/*.go", "skill": "go-standards", "agent": "*" },
+    { "tool": "Bash", "command": "git", "skill": "git-workflow", "agent": "*" }
   ]
 }
 ```
+
+Each rule's conditions (`tool`, `path`, `command`, `agent`) are optional and AND-ed together; omit a field or use `*`/`**` to match anything. The `command` field gates command-running tools (e.g. Bash) so a skill can be required before an agent runs `git`, `aws`, `terraform`, etc.
 
 ### `config.json`
 

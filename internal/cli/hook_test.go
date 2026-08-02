@@ -104,6 +104,23 @@ func claudeStdin(sessionID, toolName, filePath, cwd string) string {
 	return string(data)
 }
 
+// claudeBashStdin returns a Claude Code PreToolUse JSON string for a Bash tool
+// invocation with the given session ID and shell command. The cwd field is set
+// to dir so project root resolution finds the temp directory.
+func claudeBashStdin(sessionID, command, cwd string) string {
+	input := map[string]any{
+		"hook_event_name": "PreToolUse",
+		"session_id":      sessionID,
+		"tool_name":       "Bash",
+		"cwd":             cwd,
+		"tool_input": map[string]any{
+			"command": command,
+		},
+	}
+	data, _ := json.Marshal(input)
+	return string(data)
+}
+
 // claudeSkillStdin returns a Claude Code PreToolUse JSON string for a Skill
 // tool invocation with the given session ID and skill name.
 func claudeSkillStdin(sessionID, skillName, cwd string) string {
@@ -201,6 +218,102 @@ func TestHook_AllowsWhenSkillInvoked(t *testing.T) {
 
 	if outBuf.String() != "" {
 		t.Errorf("expected empty stdout (allow), got: %s", outBuf.String())
+	}
+}
+
+// runHookAllow executes the hook command over stdin and returns stdout, failing
+// the test on a command error. Shared by the command-enforcement e2e tests.
+func runHookExec(t *testing.T, stdin string) string {
+	t.Helper()
+	cmd := cli.NewRootCommand()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	cmd.SetOut(outBuf)
+	cmd.SetErr(errBuf)
+	cmd.SetIn(strings.NewReader(stdin))
+	cmd.SetArgs([]string{"hook", "--agent", "claude"})
+	if execErr := cmd.Execute(); execErr != nil {
+		t.Fatalf("hook command returned error: %v (stderr: %s)", execErr, errBuf.String())
+	}
+	return outBuf.String()
+}
+
+// TestHook_BlocksCommandWhenSkillNotInvoked verifies end-to-end that a command
+// rule blocks a matching Bash command when the required skill is not loaded.
+func TestHook_BlocksCommandWhenSkillNotInvoked(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Bash", Command: "git", Skill: "git-workflow", Agent: "*"},
+	})
+
+	output := runHookExec(t, claudeBashStdin("sess1", "git commit -m wip", dir))
+	if output == "" {
+		t.Fatal("expected deny JSON output for git command, got empty stdout")
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("failed to parse deny JSON: %v, output: %s", err, output)
+	}
+	hookOutput, ok := response["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing hookSpecificOutput in response: %s", output)
+	}
+	if hookOutput["permissionDecision"] != "deny" {
+		t.Errorf("expected permissionDecision=deny, got %v", hookOutput["permissionDecision"])
+	}
+	reason, _ := hookOutput["permissionDecisionReason"].(string)
+	if !strings.Contains(reason, "git-workflow") {
+		t.Errorf("expected reason to mention git-workflow, got: %s", reason)
+	}
+}
+
+// TestHook_AllowsCommandWhenSkillInvoked verifies end-to-end that a command rule
+// allows the matching Bash command once the required skill is loaded.
+func TestHook_AllowsCommandWhenSkillInvoked(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Bash", Command: "git", Skill: "git-workflow", Agent: "*"},
+	})
+	writeStateFile(t, dir, "sess1", []string{"git-workflow"})
+
+	if output := runHookExec(t, claudeBashStdin("sess1", "git push", dir)); output != "" {
+		t.Errorf("expected empty stdout (allow), got: %s", output)
+	}
+}
+
+// TestHook_AllowsNonMatchingCommand verifies a command rule does not block a
+// Bash command that does not match its command pattern.
+func TestHook_AllowsNonMatchingCommand(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Bash", Command: "aws", Skill: "aws-ops", Agent: "*"},
+	})
+
+	if output := runHookExec(t, claudeBashStdin("sess1", "npm test", dir)); output != "" {
+		t.Errorf("expected empty stdout (allow) for non-matching command, got: %s", output)
+	}
+}
+
+// TestHook_CommandRuleDoesNotBlockFileEdit verifies a command rule never fires
+// for a tool that carries no command (e.g. an Edit).
+func TestHook_CommandRuleDoesNotBlockFileEdit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeEnforcementConfig(t, dir, []engine.Rule{
+		{Tool: "Bash", Command: "git", Skill: "git-workflow", Agent: "*"},
+	})
+
+	stdin := claudeStdin("sess1", "Edit", filepath.Join(dir, "internal", "foo.go"), dir)
+	if output := runHookExec(t, stdin); output != "" {
+		t.Errorf("expected empty stdout (allow) for file edit, got: %s", output)
 	}
 }
 

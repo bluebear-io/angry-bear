@@ -57,6 +57,7 @@ Examples:
 
 	cmd.Flags().String("tool", "*", "Comma-separated tool names: Edit, Write, Bash, Read, Glob, Grep, Agent, *")
 	cmd.Flags().String("path", "**", "Comma-separated glob patterns")
+	cmd.Flags().String("command", "", "Comma-separated command patterns to gate (e.g. git,aws,terraform*); empty matches any command")
 	cmd.Flags().String("agent", "*", "Comma-separated agent names: claude, cursor, *")
 	cmd.Flags().Bool("repo", false, "Save to repo .angry-bear/ directory (shared via git) instead of machine config")
 
@@ -73,12 +74,13 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	var skillName string
-	var tools, paths, agents []string
+	var newRules []engine.Rule
 
 	if len(args) == 0 {
-		// Interactive mode
+		// Interactive mode — the editor already produces rules (including any
+		// selected command patterns), so use them directly.
 		var err error
-		skillName, tools, paths, agents, err = runAddInteractive(cmd)
+		skillName, newRules, err = runAddInteractive(cmd)
 		if err != nil {
 			return err
 		}
@@ -86,24 +88,33 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		skillName = args[0]
 		toolFlag, _ := cmd.Flags().GetString("tool")
 		pathFlag, _ := cmd.Flags().GetString("path")
+		commandFlag, _ := cmd.Flags().GetString("command")
 		agentFlag, _ := cmd.Flags().GetString("agent")
-		tools = splitCSV(toolFlag)
-		paths = splitCSV(pathFlag)
-		agents = splitCSV(agentFlag)
-	}
+		tools := splitCSV(toolFlag)
+		paths := splitCSV(pathFlag)
+		agents := splitCSV(agentFlag)
+		// Commands are optional: an empty flag yields a single empty command
+		// (the rule matches any command), preserving file/tool-only behavior.
+		commands := splitCSV(commandFlag)
+		if len(commands) == 0 {
+			commands = []string{""}
+		}
 
-	// Generate the cartesian product of tools x paths x agents.
-	var newRules []engine.Rule
-	for _, tool := range tools {
-		for _, path := range paths {
-			normalizedPath := engine.NormalizeGlob(path)
-			for _, agent := range agents {
-				newRules = append(newRules, engine.Rule{
-					Tool:  tool,
-					Path:  normalizedPath,
-					Skill: skillName,
-					Agent: agent,
-				})
+		// Generate the cartesian product of tools x paths x commands x agents.
+		for _, tool := range tools {
+			for _, path := range paths {
+				normalizedPath := engine.NormalizeGlob(path)
+				for _, command := range commands {
+					for _, agent := range agents {
+						newRules = append(newRules, engine.Rule{
+							Tool:    tool,
+							Path:    normalizedPath,
+							Command: command,
+							Skill:   skillName,
+							Agent:   agent,
+						})
+					}
+				}
 			}
 		}
 	}
@@ -239,7 +250,7 @@ func saveConfig(path string, cfg *engine.Config) error {
 
 // ruleKey returns a string key for deduplication of rules.
 func ruleKey(r engine.Rule) string {
-	return r.Tool + "|" + r.Path + "|" + r.Skill + "|" + r.Agent
+	return r.Tool + "|" + r.Path + "|" + r.Command + "|" + r.Skill + "|" + r.Agent
 }
 
 // buildRuleSet creates a set of rule keys for fast lookup.
@@ -319,11 +330,12 @@ func completeAgentNames(cmd *cobra.Command, args []string, toComplete string) ([
 }
 
 // runAddInteractive picks a skill via huh, then launches the TUI rule editor
-// (same component as the dashboard) for tool/path/agent selection.
-func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents []string, err error) {
+// (same component as the dashboard) for tool/path/command/agent selection.
+// It returns the finished rules directly so command patterns are preserved.
+func runAddInteractive(cmd *cobra.Command) (skill string, rules []engine.Rule, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", nil, nil, nil, fmt.Errorf("getting working directory: %w", err)
+		return "", nil, fmt.Errorf("getting working directory: %w", err)
 	}
 	projectRoot := engine.ResolveProjectRoot(cwd)
 	globalCfg, _ := engine.LoadGlobalConfig(projectRoot)
@@ -347,7 +359,7 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	}
 	discoveredSkills, _ := scanner.ScanSkills(skillPathDirs)
 	if len(discoveredSkills) == 0 {
-		return "", nil, nil, nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
+		return "", nil, fmt.Errorf("no skills found in %v — create skills first", globalCfg.SkillPaths)
 	}
 
 	// Step 1: Pick skill via huh select
@@ -376,14 +388,14 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 
 	err = selectForm.Run()
 	if err != nil {
-		return "", nil, nil, nil, err
+		return "", nil, err
 	}
 
 	// Step 2: Launch the TUI rule editor (same component as dashboard)
 	// Load existing config to pre-select items
 	configPath, cfgErr := resolveConfigPath(cmd)
 	if cfgErr != nil {
-		return "", nil, nil, nil, cfgErr
+		return "", nil, cfgErr
 	}
 	existingCfg, _ := loadOrCreateConfig(configPath)
 
@@ -396,34 +408,20 @@ func runAddInteractive(cmd *cobra.Command) (skill string, tools, paths, agents [
 	p := tea.NewProgram(editor, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
-		return "", nil, nil, nil, err
+		return "", nil, err
 	}
 
 	re := finalModel.(tui.RuleEditor)
-	rules := re.Result()
+	rules = re.Result()
 	if len(rules) == 0 {
-		return "", nil, nil, nil, fmt.Errorf("no rules selected")
+		return "", nil, fmt.Errorf("no rules selected")
 	}
 
-	// Extract unique tools, paths, agents from the result
-	toolSet := make(map[string]bool)
-	pathSet := make(map[string]bool)
-	agentSet := make(map[string]bool)
-	for _, r := range rules {
-		toolSet[r.Tool] = true
-		pathSet[r.Path] = true
-		agentSet[r.Agent] = true
+	// Normalize glob patterns so tree-relative paths (e.g. "file.go") match at
+	// any depth, matching the one-liner path handling.
+	for i := range rules {
+		rules[i].Path = engine.NormalizeGlob(rules[i].Path)
 	}
 
-	for t := range toolSet {
-		tools = append(tools, t)
-	}
-	for pa := range pathSet {
-		paths = append(paths, pa)
-	}
-	for a := range agentSet {
-		agents = append(agents, a)
-	}
-
-	return selectedSkill, tools, paths, agents, nil
+	return selectedSkill, rules, nil
 }

@@ -159,6 +159,65 @@ func TestAdd_CartesianProduct(t *testing.T) {
 	}
 }
 
+// TestAdd_CommandFlag verifies that --command produces command-gated rules,
+// one per command pattern, with the command stored on the rule.
+func TestAdd_CommandFlag(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
+		t.Fatalf("failed to create .angry-bear: %v", err)
+	}
+
+	output, err := runAddInDir(t, dir, "cli-skills",
+		"--tool", "Bash",
+		"--command", "git,aws",
+	)
+	if err != nil {
+		t.Fatalf("add command returned error: %v", err)
+	}
+	// 1 tool x 1 path x 2 commands x 1 agent = 2 rules
+	if output != "Added 2 rules for skill \"cli-skills\"\n" {
+		t.Errorf("unexpected output: %s", output)
+	}
+
+	cfg := readConfigFromDir(t, dir)
+	if len(cfg.Tools) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(cfg.Tools))
+	}
+	gotCommands := map[string]bool{}
+	for _, r := range cfg.Tools {
+		if r.Tool != "Bash" || r.Skill != "cli-skills" {
+			t.Errorf("unexpected rule fields: %+v", r)
+		}
+		gotCommands[r.Command] = true
+	}
+	for _, want := range []string{"git", "aws"} {
+		if !gotCommands[want] {
+			t.Errorf("missing rule for command %q; got %v", want, gotCommands)
+		}
+	}
+}
+
+// TestAdd_NoCommandFlagLeavesCommandEmpty verifies backward compatibility:
+// omitting --command yields rules with an empty command (matches any command).
+func TestAdd_NoCommandFlagLeavesCommandEmpty(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".angry-bear"), 0o755); err != nil {
+		t.Fatalf("failed to create .angry-bear: %v", err)
+	}
+
+	if _, err := runAddInDir(t, dir, "go-standards", "--tool", "Edit", "--path", "**/*.go"); err != nil {
+		t.Fatalf("add command returned error: %v", err)
+	}
+
+	cfg := readConfigFromDir(t, dir)
+	if len(cfg.Tools) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(cfg.Tools))
+	}
+	if cfg.Tools[0].Command != "" {
+		t.Errorf("Command = %q, want empty", cfg.Tools[0].Command)
+	}
+}
+
 // TestAdd_NormalizesGlob verifies that relative paths are normalized with
 // the **/ prefix via NormalizeGlob.
 func TestAdd_NormalizesGlob(t *testing.T) {

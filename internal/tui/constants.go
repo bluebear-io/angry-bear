@@ -22,6 +22,12 @@ var DefaultIgnoreSet = map[string]bool{
 // ToolOptions lists the available tool names for rule configuration.
 var ToolOptions = []string{"Edit", "Write", "Bash", "Read", "Glob", "Grep", "Agent", "*"}
 
+// CommandOptions lists common commands that can gate a skill when run through a
+// command-running tool (e.g. Bash). Selecting none leaves a rule's command
+// empty (matches any command). Arbitrary command patterns (e.g. "helm*") can
+// still be set directly in the config JSON.
+var CommandOptions = []string{"git", "aws", "kubectl", "docker", "terraform", "gh", "npm", "make"}
+
 // AgentOptions lists the available agent names for rule configuration.
 // Initialized by the CLI layer via SetAgentOptions() to avoid hardcoding agent names.
 var AgentOptions = []string{"*"}

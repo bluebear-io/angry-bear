@@ -104,6 +104,16 @@ func (a *CursorAdapter) ParseInput(stdin io.Reader) (*HookInput, error) {
 		}
 	}
 
+	// Extract command — Cursor puts it top-level; preToolUse format nests it in
+	// tool_input. Used to enforce skills on command-running tools (e.g. Bash).
+	if cmd, ok := raw["command"].(string); ok {
+		input.Command = cmd
+	} else if toolInput, ok := raw["tool_input"].(map[string]any); ok {
+		if cmd, ok := toolInput["command"].(string); ok {
+			input.Command = cmd
+		}
+	}
+
 	// Extract session_id (preToolUse format uses session_id alongside conversation_id)
 	if input.SessionID == "" {
 		if sid, ok := raw["session_id"].(string); ok {

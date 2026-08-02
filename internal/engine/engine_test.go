@@ -638,6 +638,7 @@ func TestShouldBlock(t *testing.T) {
 		rules         []MatchedRule
 		toolName      string
 		filePath      string
+		command       string
 		agent         string
 		invokedSkills map[string]bool
 		wantBlocked   bool
@@ -886,13 +887,83 @@ func TestShouldBlock(t *testing.T) {
 			wantBlocked:   true,
 			wantMissing:   []string{"user-skill", "project-skill"},
 		},
+		{
+			name: "blocks git command when git skill not loaded",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Command: "git", Skill: "git"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			command:       "git commit -m 'wip'",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"git"},
+		},
+		{
+			name: "allows git command when git skill loaded",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Command: "git", Skill: "git"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			command:       "git push",
+			agent:         "claude",
+			invokedSkills: map[string]bool{"git": true},
+			wantBlocked:   false,
+		},
+		{
+			name: "command rule does not fire for non-matching command",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Command: "aws", Skill: "aws"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			command:       "git status",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   false,
+		},
+		{
+			name: "command rule does not fire for a file edit (no command)",
+			rules: []MatchedRule{
+				{Rule: Rule{Command: "git", Skill: "git"}, Source: "src"},
+			},
+			toolName:      "Edit",
+			filePath:      "main.go",
+			command:       "",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   false,
+		},
+		{
+			name: "glob command rule matches terraform invocation",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Command: "terraform*", Skill: "tf"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			command:       "terraform apply -auto-approve",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"tf"},
+		},
+		{
+			name: "command rule fires on a segment of a compound command",
+			rules: []MatchedRule{
+				{Rule: Rule{Tool: "Bash", Command: "git", Skill: "git"}, Source: "src"},
+			},
+			toolName:      "Bash",
+			command:       "npm run build && git commit -am ci",
+			agent:         "claude",
+			invokedSkills: map[string]bool{},
+			wantBlocked:   true,
+			wantMissing:   []string{"git"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ShouldBlock(tt.rules, tt.toolName, tt.filePath, tt.agent, tt.invokedSkills)
+			got := ShouldBlock(tt.rules, tt.toolName, tt.filePath, tt.command, tt.agent, tt.invokedSkills)
 
 			if got.Blocked != tt.wantBlocked {
 				t.Errorf("Blocked = %v, want %v", got.Blocked, tt.wantBlocked)
@@ -1167,7 +1238,7 @@ func TestShouldBlock_NilInvokedSkills(t *testing.T) {
 	}
 
 	// nil invokedSkills should still trigger block.
-	got := ShouldBlock(rules, "Edit", "", "", nil)
+	got := ShouldBlock(rules, "Edit", "", "", "", nil)
 	if !got.Blocked {
 		t.Error("expected Blocked=true with nil invokedSkills")
 	}
@@ -1182,7 +1253,7 @@ func TestShouldBlock_ReasonContainsLoadInstructions(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Skill: "my-skill"}, Source: "src"},
 	}
 
-	got := ShouldBlock(rules, "Edit", "", "", nil)
+	got := ShouldBlock(rules, "Edit", "", "", "", nil)
 	if !got.Blocked {
 		t.Fatal("expected Blocked=true")
 	}
@@ -1203,7 +1274,7 @@ func TestShouldBlock_MultiSkillReasonSingleSpaced(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Skill: "beta"}, Source: "src"},
 	}
 
-	got := ShouldBlock(rules, "Edit", "", "", nil)
+	got := ShouldBlock(rules, "Edit", "", "", "", nil)
 	if !got.Blocked {
 		t.Fatal("expected Blocked=true")
 	}
@@ -1224,7 +1295,7 @@ func TestShouldBlock_GlobPatternError(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Path: "[unclosed", Skill: "bad-pattern-skill"}, Source: "src"},
 	}
 
-	got := ShouldBlock(rules, "Edit", "somefile.go", "", nil)
+	got := ShouldBlock(rules, "Edit", "somefile.go", "", "", nil)
 	// The rule should be skipped (not crash), so result should be not blocked.
 	if got.Blocked {
 		t.Error("expected Blocked=false when glob pattern is invalid (rule skipped)")
@@ -1239,7 +1310,7 @@ func TestMatchedSkills_FindsMatching(t *testing.T) {
 		{Rule: Rule{Tool: "Write", Path: "**/*.go", Skill: "go-coding", Agent: "claude"}, Source: "test"},
 	}
 
-	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "*")
+	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "", "*")
 	if len(matched) != 1 || matched[0] != "sst-architect" {
 		t.Errorf("expected [sst-architect], got %v", matched)
 	}
@@ -1250,7 +1321,7 @@ func TestMatchedSkills_NoMatch(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Path: "**/stacks/**", Skill: "sst-architect", Agent: "*"}, Source: "test"},
 	}
 
-	matched := MatchedSkills(rules, "Edit", "handler/main.go", "*")
+	matched := MatchedSkills(rules, "Edit", "handler/main.go", "", "*")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches, got %v", matched)
 	}
@@ -1262,7 +1333,7 @@ func TestMatchedSkills_MultipleSkills(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Path: "**/stacks/**", Skill: "sst-architect", Agent: "*"}, Source: "test"},
 	}
 
-	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "*")
+	matched := MatchedSkills(rules, "Edit", "stacks/api.ts", "", "*")
 	if len(matched) != 2 {
 		t.Errorf("expected 2 matches, got %v", matched)
 	}
@@ -1274,13 +1345,13 @@ func TestMatchedSkills_AgentFilter(t *testing.T) {
 	}
 
 	// Claude should not match cursor-only rules
-	matched := MatchedSkills(rules, "Edit", "test.go", "claude")
+	matched := MatchedSkills(rules, "Edit", "test.go", "", "claude")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches for claude, got %v", matched)
 	}
 
 	// Cursor should match
-	matched = MatchedSkills(rules, "Edit", "test.go", "cursor")
+	matched = MatchedSkills(rules, "Edit", "test.go", "", "cursor")
 	if len(matched) != 1 {
 		t.Errorf("expected 1 match for cursor, got %v", matched)
 	}
@@ -1292,7 +1363,7 @@ func TestMatchedSkills_Deduplicates(t *testing.T) {
 		{Rule: Rule{Tool: "Write", Path: "**", Skill: "linear", Agent: "*"}, Source: "b"},
 	}
 
-	matched := MatchedSkills(rules, "Edit", "test.go", "*")
+	matched := MatchedSkills(rules, "Edit", "test.go", "", "*")
 	if len(matched) != 1 {
 		t.Errorf("expected 1 deduplicated match, got %v", matched)
 	}
@@ -1304,7 +1375,7 @@ func TestMatchedSkills_EmptyFilePath(t *testing.T) {
 	}
 
 	// When filePath is empty but rule requires a specific path, it should not match.
-	matched := MatchedSkills(rules, "Edit", "", "*")
+	matched := MatchedSkills(rules, "Edit", "", "", "*")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches with empty filePath, got %v", matched)
 	}
@@ -1316,7 +1387,7 @@ func TestMatchedSkills_DoublestarMatchesEmptyFilePath(t *testing.T) {
 	}
 
 	// ** means "all files" so it should match even when filePath is empty (e.g. Bash tool).
-	matched := MatchedSkills(rules, "Bash", "", "*")
+	matched := MatchedSkills(rules, "Bash", "", "", "*")
 	if len(matched) != 1 || matched[0] != "bash-skill" {
 		t.Errorf("expected [bash-skill] with ** path and empty filePath, got %v", matched)
 	}
@@ -1328,19 +1399,19 @@ func TestMatchedSkills_GlobPatternError(t *testing.T) {
 	}
 
 	// Invalid glob pattern should cause the rule to be skipped (not crash).
-	matched := MatchedSkills(rules, "Edit", "file.go", "*")
+	matched := MatchedSkills(rules, "Edit", "file.go", "", "*")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches with invalid glob, got %v", matched)
 	}
 }
 
 func TestMatchedSkills_EmptyRules(t *testing.T) {
-	matched := MatchedSkills(nil, "Edit", "file.go", "claude")
+	matched := MatchedSkills(nil, "Edit", "file.go", "", "claude")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches with nil rules, got %v", matched)
 	}
 
-	matched = MatchedSkills([]MatchedRule{}, "Edit", "file.go", "claude")
+	matched = MatchedSkills([]MatchedRule{}, "Edit", "file.go", "", "claude")
 	if len(matched) != 0 {
 		t.Errorf("expected no matches with empty rules, got %v", matched)
 	}
@@ -1352,7 +1423,7 @@ func TestMatchedSkills_WildcardPathAndEmptyPath(t *testing.T) {
 		{Rule: Rule{Tool: "Edit", Path: "", Skill: "empty-skill", Agent: "*"}, Source: "test"},
 	}
 
-	matched := MatchedSkills(rules, "Edit", "any-file.go", "*")
+	matched := MatchedSkills(rules, "Edit", "any-file.go", "", "*")
 	if len(matched) != 2 {
 		t.Errorf("expected 2 matches, got %v", matched)
 	}

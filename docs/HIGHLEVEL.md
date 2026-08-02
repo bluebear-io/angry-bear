@@ -16,7 +16,7 @@ angry-bear hook (PreToolUse)
     +-- 2. Detect skill invocations → record in session state
     +-- 3. Load enforcement rules from config
     +-- 4. Load session state (which skills are loaded, check TTL)
-    +-- 5. Evaluate: ShouldBlock(rules, tool, path, agent, skills)
+    +-- 5. Evaluate: ShouldBlock(rules, tool, path, command, agent, skills)
     |
     +-- ALLOW → agent proceeds normally
     +-- BLOCK → "Load skill by running: /skill-name"
@@ -70,12 +70,22 @@ Rules in `skill_enforcement.json`:
 {
   "version": 1,
   "tools": [
-    {"tool": "Edit", "path": "**/*.go", "skill": "go-standards", "agent": "*"}
+    {"tool": "Edit", "path": "**/*.go", "skill": "go-standards", "agent": "*"},
+    {"tool": "Bash", "command": "git", "skill": "git-workflow", "agent": "*"}
   ]
 }
 ```
 
-Each rule: "Before using `tool` on files matching `path` for `agent`, skill `skill` must be loaded."
+Each rule: "Before using `tool` on files matching `path` while running `command` for `agent`, skill `skill` must be loaded." Every present condition is optional and AND-ed; omitted or `*`/`**` fields match anything.
+
+The `command` field enforces skills on **commands**, not just file changes. It matches the shell command string of command-running tools (e.g. Bash), so an agent can be required to load a skill before it runs `git`, `aws`, `terraform`, etc.
+
+Command matching (`MatchCommand()` in `internal/engine/command.go`):
+
+- The command is split on shell separators (`&&`, `||`, `|`, `;`, newline) so a rule fires on any segment of a compound command (`git add . && git commit` matches `git`).
+- Each segment is stripped of leading env assignments (`FOO=bar`) and a leading `sudo`, so `sudo FOO=bar git push` still matches `git`.
+- A pattern with glob metacharacters (`*`, `?`, `[`) is glob-matched against the leading token and the whole segment (`terraform*`, `aws s3*`).
+- A plain pattern matches when the segment's leading tokens equal the pattern's tokens: `git` matches `git commit`; `git push` matches `git push -f` but not `git commit`.
 
 ### Rule Matching (pure function, no I/O)
 
@@ -84,8 +94,9 @@ Each rule: "Before using `tool` on files matching `path` for `agent`, skill `ski
 1. For each rule, check `tool` matches (exact or `*` wildcard)
 2. Check `path` matches the file (doublestar glob)
 3. Check `agent` matches (`claude`, `cursor`, or `*`)
-4. If all match, check `skill` in session's loaded skills
-5. Any matched rule's skill NOT loaded → **BLOCK**
+4. Check `command` matches (see command matching above); a rule with a specific `command` never fires when there is no command (e.g. an Edit)
+5. If all match, check `skill` in session's loaded skills
+6. Any matched rule's skill NOT loaded → **BLOCK**
 
 ## Session State Lifecycle
 

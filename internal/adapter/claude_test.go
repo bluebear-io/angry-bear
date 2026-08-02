@@ -85,6 +85,10 @@ func TestClaudeParseInput_BashNoFilePath(t *testing.T) {
 	if input.FilePath != "" {
 		t.Errorf("FilePath = %q, want empty string for Bash tool", input.FilePath)
 	}
+	// The Bash command is extracted into the normalized Command field.
+	if input.Command != "go test ./..." {
+		t.Errorf("Command = %q, want %q", input.Command, "go test ./...")
+	}
 	// Verify command is preserved in RawInput
 	toolInput, ok := input.RawInput["tool_input"].(map[string]any)
 	if !ok {

@@ -78,13 +78,17 @@ func (a *ClaudeAdapter) ParseInput(stdin io.Reader) (*HookInput, error) {
 		input.Cwd = cwd
 	}
 
-	// Extract file path from tool_input. Different tools use different field names:
-	// Edit/Write/Read use "file_path", Grep/Glob use "path".
+	// Extract file path and command from tool_input. Different tools use
+	// different field names: Edit/Write/Read use "file_path", Grep/Glob use
+	// "path", Bash uses "command".
 	if toolInput, ok := raw["tool_input"].(map[string]any); ok {
 		if fp, ok := toolInput["file_path"].(string); ok {
 			input.FilePath = fp
 		} else if p, ok := toolInput["path"].(string); ok {
 			input.FilePath = p
+		}
+		if cmd, ok := toolInput["command"].(string); ok {
+			input.Command = cmd
 		}
 	}
 

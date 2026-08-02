@@ -111,6 +111,7 @@ func runHook(cmd *cobra.Command, args []string) error {
 		"session_id", hookInput.SessionID,
 		"tool_name", hookInput.ToolName,
 		"file_path", hookInput.FilePath,
+		"command", hookInput.Command,
 		"cwd", hookInput.Cwd,
 	)
 
@@ -227,13 +228,13 @@ func runHook(cmd *cobra.Command, args []string) error {
 	logger.Debug("normalized file path", "original", hookInput.FilePath, "normalized", normalizedPath)
 
 	// Step 9: Evaluate enforcement.
-	blockResult := engine.ShouldBlock(rules, hookInput.ToolName, normalizedPath, hookInput.Agent, invokedSkills)
+	blockResult := engine.ShouldBlock(rules, hookInput.ToolName, normalizedPath, hookInput.Command, hookInput.Agent, invokedSkills)
 	logger.Debug("enforcement decision", "blocked", blockResult.Blocked, "missing", blockResult.Missing)
 
 	// Step 10: Log only enforcement-relevant events (BLOCK or ALLOW with matched rules).
 	// Only log enforcement-relevant events — skip actions with no matching rules.
-	matched := engine.MatchedSkills(rules, hookInput.ToolName, normalizedPath, hookInput.Agent)
-	logger.Debug("matched skills for logging", "matched", matched, "tool", hookInput.ToolName, "path", normalizedPath)
+	matched := engine.MatchedSkills(rules, hookInput.ToolName, normalizedPath, hookInput.Command, hookInput.Agent)
+	logger.Debug("matched skills for logging", "matched", matched, "tool", hookInput.ToolName, "path", normalizedPath, "command", hookInput.Command)
 	if len(matched) > 0 {
 		// For BLOCK events, the relevant skills come from blockResult.Missing.
 		// For ALLOW events, the relevant skills come from the matched parameter.

@@ -244,14 +244,86 @@ func TestAutoExpandSelectedPaths_ExpandsParentDirs(t *testing.T) {
 	}
 }
 
+// --- Command rules ---
+
+func TestRuleEditor_BuildRulesWithoutCommandLeavesCommandEmpty(t *testing.T) {
+	re := RuleEditor{
+		skillName:    "go-standards",
+		toolItems:    []listItem{{typ: itemCheckbox, value: "Edit", selected: true}},
+		pathItems:    []listItem{{typ: itemCheckbox, value: "**", selected: true}},
+		agentItems:   []listItem{{typ: itemCheckbox, value: "*", selected: true}},
+		commandItems: []listItem{{typ: itemCheckbox, value: "git"}}, // none selected
+	}
+
+	rules := re.Result()
+	if len(rules) != 1 {
+		t.Fatalf("got %d rules, want 1", len(rules))
+	}
+	if rules[0].Command != "" {
+		t.Errorf("Command = %q, want empty when no command selected", rules[0].Command)
+	}
+}
+
+func TestRuleEditor_BuildRulesWithSelectedCommands(t *testing.T) {
+	re := RuleEditor{
+		skillName:  "cli-skills",
+		toolItems:  []listItem{{typ: itemCheckbox, value: "Bash", selected: true}},
+		pathItems:  []listItem{{typ: itemCheckbox, value: "**", selected: true}},
+		agentItems: []listItem{{typ: itemCheckbox, value: "*", selected: true}},
+		commandItems: []listItem{
+			{typ: itemCheckbox, value: "git", selected: true},
+			{typ: itemCheckbox, value: "aws", selected: true},
+		},
+	}
+
+	rules := re.Result()
+	if len(rules) != 2 {
+		t.Fatalf("got %d rules, want 2 (one per selected command)", len(rules))
+	}
+	gotCommands := map[string]bool{}
+	for _, r := range rules {
+		if r.Tool != "Bash" || r.Path != "**" || r.Skill != "cli-skills" || r.Agent != "*" {
+			t.Errorf("unexpected rule fields: %+v", r)
+		}
+		gotCommands[r.Command] = true
+	}
+	for _, want := range []string{"git", "aws"} {
+		if !gotCommands[want] {
+			t.Errorf("missing rule for command %q; got %v", want, gotCommands)
+		}
+	}
+}
+
+func TestRuleEditor_PreselectsExistingCommand(t *testing.T) {
+	re := NewRuleEditor("cli-skills", nil, -1, Styles{})
+	re.SetExistingRules([]engine.Rule{
+		{Tool: "Bash", Path: "**", Command: "git", Skill: "cli-skills", Agent: "*"},
+	})
+	re.buildSections()
+
+	found := false
+	for _, item := range re.commandItems {
+		if item.value == "git" {
+			found = true
+			if !item.selected {
+				t.Errorf("command item %q should be pre-selected from existing rule", item.value)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("git command option not present")
+	}
+}
+
 // --- Navigation between sections ---
 
 func TestRuleEditor_TabCyclesSections(t *testing.T) {
 	re := RuleEditor{
-		focus:      sectionTools,
-		toolItems:  []listItem{{typ: itemCheckbox, value: "Edit"}},
-		pathItems:  []listItem{{typ: itemCheckbox, value: "**"}},
-		agentItems: []listItem{{typ: itemCheckbox, value: "claude"}},
+		focus:        sectionTools,
+		toolItems:    []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems:    []listItem{{typ: itemCheckbox, value: "**"}},
+		agentItems:   []listItem{{typ: itemCheckbox, value: "claude"}},
+		commandItems: []listItem{{typ: itemCheckbox, value: "git"}},
 	}
 
 	// Tab: tools -> paths
@@ -268,7 +340,14 @@ func TestRuleEditor_TabCyclesSections(t *testing.T) {
 		t.Errorf("focus = %d, want %d (agents)", re.focus, sectionAgents)
 	}
 
-	// Tab: agents -> tools (wrap)
+	// Tab: agents -> commands
+	m, _ = re.Update(tea.KeyMsg{Type: tea.KeyTab})
+	re = m.(RuleEditor)
+	if re.focus != sectionCommands {
+		t.Errorf("focus = %d, want %d (commands)", re.focus, sectionCommands)
+	}
+
+	// Tab: commands -> tools (wrap)
 	m, _ = re.Update(tea.KeyMsg{Type: tea.KeyTab})
 	re = m.(RuleEditor)
 	if re.focus != sectionTools {
@@ -278,17 +357,18 @@ func TestRuleEditor_TabCyclesSections(t *testing.T) {
 
 func TestRuleEditor_ShiftTabReverses(t *testing.T) {
 	re := RuleEditor{
-		focus:      sectionTools,
-		toolItems:  []listItem{{typ: itemCheckbox, value: "Edit"}},
-		pathItems:  []listItem{{typ: itemCheckbox, value: "**"}},
-		agentItems: []listItem{{typ: itemCheckbox, value: "claude"}},
+		focus:        sectionTools,
+		toolItems:    []listItem{{typ: itemCheckbox, value: "Edit"}},
+		pathItems:    []listItem{{typ: itemCheckbox, value: "**"}},
+		agentItems:   []listItem{{typ: itemCheckbox, value: "claude"}},
+		commandItems: []listItem{{typ: itemCheckbox, value: "git"}},
 	}
 
-	// Shift+Tab from tools -> agents (wrap backward)
+	// Shift+Tab from tools -> commands (wrap backward)
 	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	re = m.(RuleEditor)
-	if re.focus != sectionAgents {
-		t.Errorf("focus = %d, want %d (agents)", re.focus, sectionAgents)
+	if re.focus != sectionCommands {
+		t.Errorf("focus = %d, want %d (commands)", re.focus, sectionCommands)
 	}
 }
 
@@ -1276,7 +1356,36 @@ func TestRuleEditor_ViewWithTreeDir(t *testing.T) {
 
 // --- RuleEditor: down at bottom of agents stays put ---
 
-func TestRuleEditor_DownAtBottomOfAgentsStays(t *testing.T) {
+func TestRuleEditor_DownAtBottomOfCommandsStays(t *testing.T) {
+	re := RuleEditor{
+		focus: sectionCommands,
+		toolItems: []listItem{
+			{typ: itemCheckbox, value: "Edit"},
+		},
+		pathItems: []listItem{
+			{typ: itemCheckbox, value: "**"},
+		},
+		agentItems: []listItem{
+			{typ: itemCheckbox, value: "claude"},
+		},
+		commandItems: []listItem{
+			{typ: itemCheckbox, value: "git"},
+		},
+	}
+	re.commandScroll.Cursor = 0 // At the last (and only) item
+
+	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyDown})
+	re = m.(RuleEditor)
+	// At bottom of the last section (commands), down does nothing (no wrap)
+	if re.focus != sectionCommands {
+		t.Errorf("focus = %d, want %d (commands, should stay at bottom)", re.focus, sectionCommands)
+	}
+	if re.commandScroll.Cursor != 0 {
+		t.Errorf("commandScroll.Cursor = %d, want 0", re.commandScroll.Cursor)
+	}
+}
+
+func TestRuleEditor_DownAtBottomOfAgentsMovesToCommands(t *testing.T) {
 	re := RuleEditor{
 		focus: sectionAgents,
 		toolItems: []listItem{
@@ -1288,17 +1397,16 @@ func TestRuleEditor_DownAtBottomOfAgentsStays(t *testing.T) {
 		agentItems: []listItem{
 			{typ: itemCheckbox, value: "claude"},
 		},
+		commandItems: []listItem{
+			{typ: itemCheckbox, value: "git"},
+		},
 	}
-	re.agentScroll.Cursor = 0 // At the last (and only) item
+	re.agentScroll.Cursor = 0 // At the last (and only) agent item
 
 	m, _ := re.Update(tea.KeyMsg{Type: tea.KeyDown})
 	re = m.(RuleEditor)
-	// At bottom of the last section, down does nothing (no wrap)
-	if re.focus != sectionAgents {
-		t.Errorf("focus = %d, want %d (agents, should stay at bottom)", re.focus, sectionAgents)
-	}
-	if re.agentScroll.Cursor != 0 {
-		t.Errorf("agentScroll.Cursor = %d, want 0", re.agentScroll.Cursor)
+	if re.focus != sectionCommands {
+		t.Errorf("focus = %d, want %d (commands)", re.focus, sectionCommands)
 	}
 }
 
